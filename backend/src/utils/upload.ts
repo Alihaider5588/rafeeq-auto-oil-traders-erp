@@ -2,8 +2,11 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-// Ensure uploads folder exists in backend
-const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+// Use writable temporary storage on Vercel
+const uploadDir = process.env.VERCEL
+  ? path.join('/tmp', 'rafeeq-uploads')
+  : path.join(__dirname, '..', '..', 'uploads');
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
