@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Environment and Secrets (STRICT BLOCK)
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+
+# SQLite Databases & Backups (STRICT BLOCK)
+*.db
+*.db-*
+*.db.bak*
+*.sqlite
+*.sqlite3
+prisma/*.db
+prisma/*.db-*
+prisma/*.bak*
+
+# File Uploads (Product images, etc.)
+uploads/
+*.jpg
+*.jpeg
+*.png
+*.webp
+!src/
+!prisma/
+
+# Test coverage & Logs
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

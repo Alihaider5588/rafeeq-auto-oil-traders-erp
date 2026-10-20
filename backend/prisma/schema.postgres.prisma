@@ -1,0 +1,832 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-postgres"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NEON_DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  fullName      String
+  phone         String?        @unique
+  passwordHash  String
+  role          String         @default("OPERATOR")
+  permissions   String?        // JSON array of permitted route paths e.g. ["/sales", "/products", "/customers"]
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sales         Sale[]         @relation("SalesmanSales")
+  createdSales  Sale[]         @relation("CreatorSales")
+  purchases     Purchase[]
+  auditLogs     AuditLog[]
+  deliveries    DailyDelivery[]
+  customers     Customer[]     @relation("SalesmanCustomers")
+  cashSummaries CashSummary[]
+
+  @@map("users")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Unit {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  symbol      String    @unique
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  products        Product[] @relation("ProductBaseUnit")
+  primaryProducts Product[] @relation("ProductPrimaryUnit")
+
+  @@map("units")
+}
+
+model Product {
+  id                String           @id @default(uuid())
+  name              String
+  sku               String           @unique
+  categoryId        String
+  category          Category         @relation(fields: [categoryId], references: [id])
+  brand             String
+  unitId            String
+  unit              Unit             @relation("ProductBaseUnit", fields: [unitId], references: [id])
+  primaryUnitId     String?
+  primaryUnit       Unit?            @relation("ProductPrimaryUnit", fields: [primaryUnitId], references: [id])
+  conversionFactor  Decimal          @default(1)
+  purchasePrice     Decimal
+  salePrice         Decimal
+  wholesalePrice    Decimal          @default(0)
+  minimumStockLevel Decimal          @default(5)
+  openingStock      Decimal          @default(0)
+  currentStock      Decimal          @default(0)
+  description       String?
+  specifications    String?
+  imageUrl          String?
+  showOnWebsite     Boolean          @default(false)
+  showInCatalog     Boolean          @default(true)
+  showPublicPrice   Boolean          @default(true)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  purchaseItems       PurchaseItem[]
+  saleItems           SaleItem[]
+  stockMovements      StockMovement[]
+  saleReturnItems     SalesReturnItem[]
+  purchaseReturnItems PurchaseReturnItem[]
+  deliveryItems       DeliveryItem[]
+  customerProductRates CustomerProductRate[]
+  webOrderItems       WebOrderItem[]
+
+  @@index([sku])
+
+  @@index([categoryId])
+  @@index([brand])
+  @@map("products")
+}
+
+model Supplier {
+  id               String           @id @default(uuid())
+  companyName      String           @unique
+  contactPerson    String?
+  phone            String
+  address          String?
+  ntnTaxNumber     String?
+  openingBalance   Decimal          @default(0)
+  currentPayable   Decimal          @default(0)
+  notes            String?
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  purchases        Purchase[]
+  purchaseReturns  PurchaseReturn[]
+  ledgerEntries    SupplierLedger[]
+  payments         Payment[]
+
+  @@map("suppliers")
+}
+
+model Customer {
+  id               String           @id @default(uuid())
+  shopName         String
+  ownerName        String
+  phone            String           @unique
+  address          String?
+  area             String?
+  salesmanId       String?
+  salesman         User?            @relation("SalesmanCustomers", fields: [salesmanId], references: [id])
+  openingBalance   Decimal          @default(0)
+  currentReceivable Decimal         @default(0)
+  creditLimit      Decimal          @default(100000)
+  notes            String?
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  sales            Sale[]
+  salesReturns     SalesReturn[]
+  ledgerEntries    CustomerLedger[]
+  payments         Payment[]
+  customerProductRates CustomerProductRate[]
+
+  @@index([shopName])
+  @@index([phone])
+  @@index([area])
+  @@map("customers")
+}
+
+model Purchase {
+  id               String           @id @default(uuid())
+  invoiceNumber    String           @unique
+  supplierId       String
+  supplier         Supplier         @relation(fields: [supplierId], references: [id])
+  purchaseDate     DateTime         @default(now())
+  totalAmount      Decimal
+  discount         Decimal          @default(0)
+  tax              Decimal          @default(0)
+  netAmount        Decimal
+  paidAmount       Decimal          @default(0)
+  remainingAmount  Decimal          @default(0)
+  paymentMethod    String           @default("CASH")
+  notes            String?
+  createdById      String
+  createdBy        User             @relation(fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  items            PurchaseItem[]
+  purchaseReturns  PurchaseReturn[]
+
+  @@index([invoiceNumber])
+  @@index([purchaseDate])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id           String    @id @default(uuid())
+  purchaseId   String
+  purchase     Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  quantity     Decimal
+  unitType     String    @default("SECONDARY")
+  baseQuantity Decimal   @default(0)
+  unitCost     Decimal
+  totalCost    Decimal
+
+  @@map("purchase_items")
+}
+
+model Sale {
+  id               String         @id @default(uuid())
+  invoiceNumber    String         @unique
+  customerId       String
+  customer         Customer       @relation(fields: [customerId], references: [id])
+  salesmanId       String?
+  salesman         User?          @relation("SalesmanSales", fields: [salesmanId], references: [id])
+  createdById      String
+  createdBy        User           @relation("CreatorSales", fields: [createdById], references: [id])
+  saleDate         DateTime       @default(now())
+  totalAmount      Decimal
+  discount         Decimal        @default(0)
+  netAmount        Decimal
+  receivedAmount   Decimal        @default(0)
+  remainingBalance Decimal        @default(0)
+  totalCost        Decimal        @default(0)
+  grossProfit      Decimal        @default(0)
+  paymentMethod    String         @default("CASH")
+  status           String         @default("COMPLETED")
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  items            SaleItem[]
+  salesReturns     SalesReturn[]
+
+  @@index([invoiceNumber])
+  @@index([saleDate])
+  @@index([status])
+  @@map("sales")
+}
+
+model SaleItem {
+  id           String    @id @default(uuid())
+  saleId       String
+  sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  quantity     Decimal
+  unitType     String    @default("SECONDARY")
+  baseQuantity Decimal   @default(0)
+  unitPrice    Decimal
+  unitCost     Decimal
+  totalPrice   Decimal
+  profit       Decimal
+
+  @@map("sale_items")
+}
+
+model CustomerProductRate {
+  id                String    @id @default(uuid())
+  customerId        String
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lastUnitPrice     Decimal
+  lastUnitType      String    @default("SECONDARY")
+  lastInvoiceNumber String
+  lastSaleDate      DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([customerId, productId])
+  @@index([customerId])
+  @@index([productId])
+  @@map("customer_product_rates")
+}
+
+model Payment {
+  id            String          @id @default(uuid())
+  receiptNumber String          @unique
+  customerId    String?
+  customer      Customer?       @relation(fields: [customerId], references: [id])
+  supplierId    String?
+  supplier      Supplier?       @relation(fields: [supplierId], references: [id])
+  amount        Decimal
+  paymentMethod String          @default("CASH")
+  paymentDate   DateTime        @default(now())
+  reference     String?
+  notes         String?
+  recordedById  String
+  createdAt     DateTime        @default(now())
+
+  @@index([receiptNumber])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+model CustomerLedger {
+  id              String          @id @default(uuid())
+  customerId      String
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  date            DateTime        @default(now())
+  transactionType String
+  referenceId     String?
+  description     String
+  debit           Decimal         @default(0)
+  credit          Decimal         @default(0)
+  runningBalance  Decimal
+  createdAt       DateTime        @default(now())
+
+  @@index([customerId, date])
+  @@map("customer_ledgers")
+}
+
+model SupplierLedger {
+  id              String          @id @default(uuid())
+  supplierId      String
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  date            DateTime        @default(now())
+  transactionType String
+  referenceId     String?
+  description     String
+  debit           Decimal         @default(0)
+  credit          Decimal         @default(0)
+  runningBalance  Decimal
+  createdAt       DateTime        @default(now())
+
+  @@index([supplierId, date])
+  @@map("supplier_ledgers")
+}
+
+model StockMovement {
+  id            String       @id @default(uuid())
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id])
+  movementType  String
+  quantity      Decimal
+  previousStock Decimal
+  newStock      Decimal
+  referenceId   String?
+  description   String?
+  createdAt     DateTime     @default(now())
+
+  @@index([productId, createdAt])
+  @@map("stock_movements")
+}
+
+model SalesReturn {
+  id            String            @id @default(uuid())
+  returnNumber  String            @unique
+  customerId    String
+  customer      Customer          @relation(fields: [customerId], references: [id])
+  saleId        String?
+  sale          Sale?             @relation(fields: [saleId], references: [id])
+  returnDate    DateTime          @default(now())
+  totalRefund   Decimal
+  reason        String?
+  createdAt     DateTime          @default(now())
+
+  items         SalesReturnItem[]
+
+  @@map("sales_returns")
+}
+
+model SalesReturnItem {
+  id            String       @id @default(uuid())
+  salesReturnId String
+  salesReturn   SalesReturn  @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id])
+  quantity      Decimal
+  unitPrice     Decimal
+  totalRefund   Decimal
+
+  @@map("sales_return_items")
+}
+
+model PurchaseReturn {
+  id            String               @id @default(uuid())
+  returnNumber  String               @unique
+  supplierId    String
+  supplier      Supplier             @relation(fields: [supplierId], references: [id])
+  purchaseId    String?
+  purchase      Purchase?            @relation(fields: [purchaseId], references: [id])
+  returnDate    DateTime             @default(now())
+  totalAmount   Decimal
+  reason        String?
+  createdAt     DateTime             @default(now())
+
+  items         PurchaseReturnItem[]
+
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id               String         @id @default(uuid())
+  purchaseReturnId String
+  purchaseReturn   PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product        @relation(fields: [productId], references: [id])
+  quantity         Decimal
+  unitCost         Decimal
+  totalCost        Decimal
+
+  @@map("purchase_return_items")
+}
+
+model Vehicle {
+  id            String          @id @default(uuid())
+  vehicleNumber String          @unique
+  driverName    String
+  driverPhone   String
+  supplyManName String
+  notes         String?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  deliveries     DailyDelivery[]
+  routeSchedules DeliveryRouteSchedule[]
+
+  @@map("vehicles")
+}
+
+model DeliveryRouteSchedule {
+  id          String   @id @default(uuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  dayOfWeek   String   // MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY
+  routeName   String   // e.g. "Okara City Center", "Renala Khurd", "Dipalpur Main Bazar"
+  targetAreas String?  // Details of workshops / stops on this route
+  driverName  String?  // Optional override driver
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([vehicleId, dayOfWeek])
+  @@map("delivery_route_schedules")
+}
+
+model DailyDelivery {
+  id             String         @id @default(uuid())
+  deliveryNumber String         @unique
+  date           DateTime       @default(now())
+  vehicleId      String
+  vehicle        Vehicle        @relation(fields: [vehicleId], references: [id])
+  routeArea      String
+  salesmanId     String?
+  salesman       User?          @relation(fields: [salesmanId], references: [id])
+  totalCustomers Int            @default(0)
+  totalDelivered Decimal        @default(0)
+  paymentReceived Decimal       @default(0)
+  creditAmount   Decimal        @default(0)
+  returnedGoods  Decimal        @default(0)
+  netSales       Decimal        @default(0)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  items          DeliveryItem[]
+
+  @@map("daily_deliveries")
+}
+
+model DeliveryItem {
+  id              String        @id @default(uuid())
+  dailyDeliveryId String
+  dailyDelivery   DailyDelivery @relation(fields: [dailyDeliveryId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Decimal
+  unitPrice       Decimal
+  totalPrice      Decimal
+  isAdditional    Boolean       @default(false) // True if extra stock loaded beyond specific orders
+  notes           String?
+
+  @@map("delivery_items")
+}
+
+model CashSummary {
+  id             String    @id @default(uuid())
+  date           DateTime  @default(now())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  openingCash    Decimal   @default(0)
+  salesCash      Decimal   @default(0)
+  receiptsCash   Decimal   @default(0)
+  disbursements  Decimal   @default(0)
+  closingCash    Decimal   @default(0)
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  @@map("cash_summaries")
+}
+
+model Expense {
+  id            String    @id @default(uuid())
+  category      String    // e.g. Rent, Electricity, Tea/Refreshment, Fuel/Vehicle, Salaries, Maintenance, General
+  amount        Decimal
+  paymentMethod String    @default("CASH")
+  expenseDate   DateTime  @default(now())
+  description   String?
+  recordedById  String
+  createdAt     DateTime  @default(now())
+
+  @@index([expenseDate])
+  @@map("expenses")
+}
+
+model PublicInquiry {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  subject   String?
+  message   String
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+
+  @@map("public_inquiries")
+}
+
+model WebOrder {
+  id             String         @id @default(uuid())
+  orderNumber    String         @unique
+  customerName   String
+  phone          String
+  shopName       String?
+  cityArea       String?
+  deliveryAddress String?
+  totalAmount    Decimal        @default(0)
+  status         String         @default("PENDING") // PENDING, CONFIRMED, REJECTED
+  notes          String?
+  convertedSaleId String?
+  confirmedById  String?
+  confirmedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  items          WebOrderItem[]
+
+  @@index([orderNumber])
+  @@index([status])
+  @@index([createdAt])
+  @@map("web_orders")
+}
+
+model WebOrderItem {
+  id          String    @id @default(uuid())
+  webOrderId  String
+  webOrder    WebOrder  @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Decimal
+  unitType    String    @default("SECONDARY") // PRIMARY (Carton) or SECONDARY (Bottle/Piece)
+  unitPrice   Decimal
+  totalPrice  Decimal
+
+  @@map("web_order_items")
+}
+
+
+model OwnerBrandProduct {
+  id                String                     @id @default(uuid())
+  name              String
+  sku               String                     @unique
+  brandName         String                     @default("OWNER_BRAND")
+  category          String                     @default("Lubricant")
+  unit              String                     @default("Liter")
+  purchaseCost      Decimal                    @default(0)
+  salePrice         Decimal                    @default(0)
+  currentStock      Decimal                    @default(0)
+  minimumStockLevel Decimal                    @default(5)
+  notes             String?
+  isActive          Boolean                    @default(true)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  purchases         OwnerBrandPurchaseItem[]
+  sales             OwnerBrandSaleItem[]
+  stockMovements    OwnerBrandStockMovement[]
+
+  @@index([sku])
+  @@map("owner_brand_products")
+}
+
+model OwnerBrandSupplier {
+  id             String                @id @default(uuid())
+  companyName    String                @unique
+  contactPerson  String?
+  phone          String
+  address        String?
+  currentPayable Decimal               @default(0)
+  notes          String?
+  isActive       Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  purchases      OwnerBrandPurchase[]
+
+  @@map("owner_brand_suppliers")
+}
+
+model OwnerBrandPurchase {
+  id              String                   @id @default(uuid())
+  invoiceNumber   String                   @unique
+  supplierId      String
+  supplier        OwnerBrandSupplier       @relation(fields: [supplierId], references: [id])
+  purchaseDate    DateTime                 @default(now())
+  totalAmount     Decimal
+  paidAmount      Decimal                  @default(0)
+  remainingAmount Decimal                  @default(0)
+  paymentMethod   String                   @default("CASH")
+  notes           String?
+  receiptUrl      String?                  // Auto-scanned receipt image or document
+  receiptData     String?                  // Extracted receipt details, supplier, invoice, line items
+  createdById     String
+  createdAt       DateTime                 @default(now())
+
+  items           OwnerBrandPurchaseItem[]
+
+  @@map("owner_brand_purchases")
+}
+
+model OwnerBrandPurchaseItem {
+  id         String             @id @default(uuid())
+  purchaseId String
+  purchase   OwnerBrandPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    OwnerBrandProduct  @relation(fields: [productId], references: [id])
+  quantity   Decimal
+  unitCost   Decimal
+  totalCost  Decimal
+
+  @@map("owner_brand_purchase_items")
+}
+
+model OwnerBrandSale {
+  id             String               @id @default(uuid())
+  invoiceNumber  String               @unique
+  customerName   String
+  saleDate       DateTime             @default(now())
+  totalAmount    Decimal
+  receivedAmount Decimal              @default(0)
+  totalCost      Decimal              @default(0)
+  grossProfit    Decimal              @default(0)
+  paymentMethod  String               @default("CASH")
+  notes          String?
+  createdById    String
+  createdAt      DateTime             @default(now())
+
+  items          OwnerBrandSaleItem[]
+
+  @@map("owner_brand_sales")
+}
+
+model OwnerBrandSaleItem {
+  id         String            @id @default(uuid())
+  saleId     String
+  sale       OwnerBrandSale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId  String
+  product    OwnerBrandProduct @relation(fields: [productId], references: [id])
+  quantity   Decimal
+  unitPrice  Decimal
+  unitCost   Decimal
+  totalPrice Decimal
+  profit     Decimal
+
+  @@map("owner_brand_sale_items")
+}
+
+model OwnerBrandStockMovement {
+  id            String            @id @default(uuid())
+  productId     String
+  product       OwnerBrandProduct @relation(fields: [productId], references: [id])
+  movementType  String
+  quantity      Decimal
+  previousStock Decimal
+  newStock      Decimal
+  referenceId   String?
+  description   String?
+  createdAt     DateTime          @default(now())
+
+  @@map("owner_brand_stock_movements")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  action      String
+  entityType  String
+  entityId    String?
+  details     String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id                     String   @id @default(uuid())
+  companyName            String   @default("RAFIQ AUTO & OIL TRADERS")
+  address                String   @default("54-Stop Near MCB Bank, Dipalpur Road, Okara")
+  phone                  String   @default("0306-9258573 / 0327-7497457")
+  email                  String?  @default("info@rafiqautooil.com")
+  invoicePrefix          String   @default("RAFIQ-INV-")
+  purchasePrefix         String   @default("RAFIQ-PUR-")
+  currency               String   @default("PKR")
+  taxRatePercent         Decimal  @default(0)
+  allowNegativeStock     Boolean  @default(false)
+  requireOrderApproval   Boolean  @default(false)
+
+  // Vyapaar App Inspired Extended Config
+  // 1. Transaction
+  roundOffTotal          Boolean  @default(true)
+  defaultDueDateDays     Int      @default(15)
+  enableBarcodeScanner   Boolean  @default(true)
+  enableSalesmanTracking Boolean  @default(true)
+
+  // 2. Print
+  printFormat            String   @default("THERMAL_80MM") // THERMAL_80MM, THERMAL_58MM, A4, A5
+  showCompanyLogoOnPrint Boolean  @default(true)
+  showTermsOnInvoice     Boolean  @default(true)
+  invoiceFooterNote      String?  @default("Goods once sold will only be replaced within 3 days with original bill.")
+
+  // 3. Taxes
+  taxEnabled             Boolean  @default(false)
+  taxName                String   @default("GST / PRA")
+  taxNumber              String?  @default("NTN: 829104-1")
+
+  // 4. Transaction Message / SMS / WhatsApp
+  enableSmsWhatsAppAlerts Boolean @default(true)
+  smsTemplateSaleInvoice String?  @default("Dear {CUSTOMER}, your invoice #{INVOICE} of Rs.{AMOUNT} is generated. Balance: Rs.{BALANCE}. Rafiq Auto Okara: 03069258573")
+  smsTemplatePaymentReceipt String? @default("Dear {CUSTOMER}, payment received Rs.{AMOUNT} against receipt #{RECEIPT}. Remaining: Rs.{BALANCE}. Rafiq Auto: 03069258573")
+
+  // 5. Party (Customer/Supplier)
+  enableCreditLimitCheck Boolean  @default(true)
+  enablePartyRateHistory Boolean  @default(true)
+  defaultPaymentTermsDays Int     @default(15)
+
+  // 6. Item / Inventory
+  enableLowStockWarning  Boolean  @default(true)
+  enableDualUnits        Boolean  @default(true) // Primary (Carton) & Secondary (Can/Bottle)
+  defaultUnitName        String   @default("Bottle")
+
+  // 7. Service Reminders
+  oilChangeServiceKm     Int      @default(3000)
+  oilChangeReminderDays  Int      @default(90)
+
+  // 8. Multi Currency
+  secondaryCurrency      String   @default("USD")
+  exchangeRate           Decimal  @default(280.0)
+
+  // 9. Dynamic Public & Business Profile (Editable via Admin Settings)
+  proprietorNames        String   @default("M. Shafiq & Haji Muhammad Rafiq")
+  operationalAreas       String   @default("Okara, Sahiwal, Kasur")
+  whatsappNumber         String   @default("0306-9258573")
+  facebookUrl            String?  @default("")
+  tiktokUrl              String?  @default("")
+  operatingSchedule      String   @default("24/7 Operations (Round the Clock Support)")
+
+  updatedAt              DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model Employee {
+  id              String           @id @default(uuid())
+  employeeCode    String           @unique
+  fullName        String
+  phone           String           @unique
+  designation     String
+  joiningDate     DateTime         @default(now())
+  status          String           @default("ACTIVE") // ACTIVE, INACTIVE, TERMINATED
+  salaryType      String           @default("MONTHLY") // MONTHLY, DAILY
+  basicSalary     Decimal          @default(0) // Basic monthly salary or daily wage rate
+  allowances      Decimal          @default(0) // Fixed allowances
+  workSchedule    String?          @default("6 Days / Week (9am - 8pm)")
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  attendances     Attendance[]
+  payrolls        Payroll[]
+
+  @@map("employees")
+}
+
+model Attendance {
+  id             String    @id @default(uuid())
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date           DateTime
+  status         String    // PRESENT, ABSENT, HALF_DAY, LEAVE, WEEKLY_OFF
+  overtimeHours  Decimal   @default(0)
+  checkInTime    String?
+  checkOutTime   String?
+  notes          String?
+  recordedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@map("attendances")
+}
+
+model Payroll {
+  id             String    @id @default(uuid())
+  payrollNumber  String    @unique
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month          Int       // 1 - 12
+  year           Int       // e.g. 2026
+  basicSalary    Decimal
+  presentDays    Decimal   @default(0)
+  absentDays     Decimal   @default(0)
+  halfDays       Decimal   @default(0)
+  paidLeaveDays  Decimal   @default(0)
+  overtimeAmount Decimal   @default(0)
+  allowances     Decimal   @default(0)
+  bonuses        Decimal   @default(0)
+  deductions     Decimal   @default(0)
+  advanceDeducted Decimal  @default(0)
+  netPayable     Decimal
+  paidAmount     Decimal   @default(0)
+  balanceDue     Decimal   @default(0)
+  status         String    @default("PENDING") // PENDING, PARTIALLY_PAID, PAID
+  paymentMethod  String    @default("CASH")
+  paymentDate    DateTime?
+  notes          String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+  @@index([month, year])
+  @@map("payrolls")
+}
+
