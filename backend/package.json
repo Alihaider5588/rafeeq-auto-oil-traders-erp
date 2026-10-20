@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "postinstall": "prisma generate && prisma generate --schema=prisma/schema.postgres.prisma",
     "build": "prisma generate && prisma generate --schema=prisma/schema.postgres.prisma && tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",

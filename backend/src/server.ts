@@ -145,7 +145,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 export default app;
 
-if (process.env.NODE_ENV !== 'test') {
+// Only start HTTP listener when running as a standalone server (not on Vercel Serverless)
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.listen(Number(port), '0.0.0.0', () => {
     console.log(`=======================================================`);
     console.log(` RAFIQ AUTO & OIL TRADERS API running on port ${port}`);
