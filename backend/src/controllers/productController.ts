@@ -221,6 +221,9 @@ export const updateProduct = async (req: AuthenticatedRequest, res: Response): P
     if (body.salePrice !== undefined) updateData.salePrice = new Prisma.Decimal(body.salePrice);
     if (body.wholesalePrice !== undefined) updateData.wholesalePrice = new Prisma.Decimal(body.wholesalePrice);
     if (body.minimumStockLevel !== undefined) updateData.minimumStockLevel = new Prisma.Decimal(body.minimumStockLevel);
+    if (body.currentStock !== undefined && !isNaN(Number(body.currentStock))) {
+      updateData.currentStock = new Prisma.Decimal(body.currentStock);
+    }
     if (body.description !== undefined) updateData.description = body.description ? body.description.trim() : null;
     if (body.specifications !== undefined) updateData.specifications = body.specifications ? body.specifications.trim() : null;
     if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl ? body.imageUrl.trim() : null;
@@ -259,13 +262,7 @@ export const updateProduct = async (req: AuthenticatedRequest, res: Response): P
 export const adjustProductStock = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { adjustmentQuantity, reason = 'Inventory Adjustment', isAddition = false } = req.body;
-
-    const qty = Math.abs(parseFloat(adjustmentQuantity));
-    if (isNaN(qty) || qty <= 0) {
-      res.status(400).json({ success: false, message: 'Valid positive adjustment quantity is required' });
-      return;
-    }
+    let { adjustmentQuantity, reason = 'Inventory Adjustment', isAddition = false, newStock: directNewStock } = req.body;
 
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) {
@@ -274,7 +271,21 @@ export const adjustProductStock = async (req: AuthenticatedRequest, res: Respons
     }
 
     const currentStock = Number(product.currentStock);
-    const newStock = isAddition ? currentStock + qty : currentStock - qty;
+    let newStock: number;
+    let qty: number;
+
+    if (directNewStock !== undefined && !isNaN(Number(directNewStock))) {
+      newStock = Number(directNewStock);
+      qty = Math.abs(newStock - currentStock);
+      isAddition = newStock >= currentStock;
+    } else {
+      qty = Math.abs(parseFloat(adjustmentQuantity));
+      if (isNaN(qty) || qty <= 0) {
+        res.status(400).json({ success: false, message: 'Valid positive adjustment quantity is required' });
+        return;
+      }
+      newStock = isAddition ? currentStock + qty : currentStock - qty;
+    }
 
     if (newStock < 0) {
       const settings = await prisma.systemSetting.findFirst();

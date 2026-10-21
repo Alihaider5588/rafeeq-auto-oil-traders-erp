@@ -238,6 +238,7 @@ export const ProductsPage: React.FC = () => {
       };
 
       if (isEditing && editingId) {
+        payload.currentStock = parseFloat(formData.openingStock) || 0;
         await api.put(`/products/${editingId}`, payload);
       } else {
         payload.openingStock = parseFloat(formData.openingStock) || 0;
@@ -744,7 +745,7 @@ export const ProductsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Stock Alerts */}
+              {/* Stock Alerts & Available Stock */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="form-label">Minimum Stock Alert</label>
@@ -756,17 +757,23 @@ export const ProductsPage: React.FC = () => {
                   />
                 </div>
 
-                {!isEditing && (
-                  <div>
-                    <label className="form-label">Opening Stock (in Base Units)</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={formData.openingStock}
-                      onChange={(e) => setFormData({ ...formData, openingStock: e.target.value })}
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="form-label" style={{ color: '#0284c7', fontWeight: 700 }}>
+                    {isEditing ? 'Available Physical Stock (Current)' : 'Opening / Available Stock *'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="form-control"
+                    placeholder="e.g. 50"
+                    style={{ borderColor: '#38bdf8', backgroundColor: '#f0f9ff', fontWeight: 700 }}
+                    value={formData.openingStock}
+                    onChange={(e) => setFormData({ ...formData, openingStock: e.target.value })}
+                  />
+                  <small style={{ color: '#64748b', fontSize: '0.75rem' }}>
+                    Current inventory in {units.find(u => u.id === formData.unitId)?.symbol || 'Base Units'}
+                  </small>
+                </div>
               </div>
 
               {/* Specs & Description */}
