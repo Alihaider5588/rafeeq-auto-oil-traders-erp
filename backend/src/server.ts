@@ -81,8 +81,8 @@ app.get('/', (_req, res) => {
     <p>The backend REST API and database engine are running properly. Use the buttons below to open the frontend user interface or test endpoints.</p>
     
     <div class="btn-group">
-      <a href="http://localhost:5173" class="btn btn-primary" target="_blank">Open POS & ERP App (5173) ↗</a>
-      <a href="http://localhost:5173/website" class="btn btn-secondary" target="_blank">Public Website Catalog ↗</a>
+      <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/login" class="btn btn-primary" target="_blank">Open POS & ERP App (5173) ↗</a>
+      <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/website" class="btn btn-secondary" target="_blank">Public Website Catalog ↗</a>
       <a href="/api/public/products" class="btn btn-secondary">Public Products JSON</a>
     </div>
 
