@@ -216,21 +216,52 @@ export const ProductsPage: React.FC = () => {
     setModalError('');
 
     try {
+      const pPrice = parseFloat(formData.purchasePrice);
+      const sPrice = parseFloat(formData.salePrice);
+      const wPrice = formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined;
+      const minStock = parseFloat(formData.minimumStockLevel);
+      const opStock = parseFloat(formData.openingStock);
+
+      if (!formData.name.trim()) {
+        setModalError('Product name is required');
+        return;
+      }
+      if (!formData.sku.trim()) {
+        setModalError('SKU / Code is required');
+        return;
+      }
+      if (!formData.categoryId) {
+        setModalError('Please select a Category');
+        return;
+      }
+      if (!formData.unitId) {
+        setModalError('Please select a Base Unit');
+        return;
+      }
+      if (isNaN(pPrice) || pPrice < 0) {
+        setModalError('Please enter a valid Purchase Price');
+        return;
+      }
+      if (isNaN(sPrice) || sPrice < 0) {
+        setModalError('Please enter a valid Retail Sale Rate');
+        return;
+      }
+
       const payload: any = {
-        name: formData.name,
-        sku: formData.sku,
+        name: formData.name.trim(),
+        sku: formData.sku.trim(),
         categoryId: formData.categoryId,
-        brand: formData.brand,
+        brand: formData.brand.trim(),
         unitId: formData.unitId,
         primaryUnitId: formData.primaryUnitId || undefined,
         conversionFactor: Number(formData.conversionFactor) || 1,
-        purchasePrice: parseFloat(formData.purchasePrice),
-        salePrice: parseFloat(formData.salePrice),
-        wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined,
-        minimumStockLevel: parseFloat(formData.minimumStockLevel) || 5,
-        description: formData.description,
-        specifications: formData.specifications,
-        imageUrl: formData.imageUrl,
+        purchasePrice: pPrice,
+        salePrice: sPrice,
+        wholesalePrice: wPrice !== undefined && !isNaN(wPrice) ? wPrice : undefined,
+        minimumStockLevel: !isNaN(minStock) ? minStock : 5,
+        description: formData.description?.trim() || '',
+        specifications: formData.specifications?.trim() || '',
+        imageUrl: formData.imageUrl?.trim() || '',
         showOnWebsite: formData.showOnWebsite,
         showInCatalog: formData.showInCatalog,
         showPublicPrice: formData.showPublicPrice,
@@ -238,17 +269,25 @@ export const ProductsPage: React.FC = () => {
       };
 
       if (isEditing && editingId) {
-        payload.currentStock = parseFloat(formData.openingStock) || 0;
+        payload.currentStock = !isNaN(opStock) ? opStock : 0;
         await api.put(`/products/${editingId}`, payload);
       } else {
-        payload.openingStock = parseFloat(formData.openingStock) || 0;
+        payload.openingStock = !isNaN(opStock) ? opStock : 0;
         await api.post('/products', payload);
       }
 
       setShowAddEditModal(false);
       loadProducts();
     } catch (err: any) {
-      setModalError(err.response?.data?.message || err.response?.data?.error || 'Failed to save product');
+      const resp = err.response?.data;
+      let msg = resp?.message || resp?.error;
+      if (!msg && resp?.errors?.fieldErrors) {
+        const fieldErrors = resp.errors.fieldErrors;
+        msg = Object.entries(fieldErrors)
+          .map(([f, list]: [string, any]) => `${f}: ${list?.[0]}`)
+          .join(', ');
+      }
+      setModalError(msg || 'Failed to save product');
     }
   };
 

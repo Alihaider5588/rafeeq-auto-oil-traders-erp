@@ -7,8 +7,8 @@ import { MovementType, Role } from '../types/enums';
 import { Prisma } from '@prisma/client';
 
 const productSchema = z.object({
-  name: z.string().min(2, 'Product name is required'),
-  sku: z.string().min(2, 'SKU is required'),
+  name: z.string().min(1, 'Product name is required'),
+  sku: z.string().min(1, 'SKU is required'),
   categoryId: z.string().min(1, 'Category is required'),
   brand: z.string().min(1, 'Brand is required'),
   unitId: z.string().min(1, 'Base unit is required'),
@@ -121,7 +121,12 @@ export const createProduct = async (req: AuthenticatedRequest, res: Response): P
   try {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, errors: parsed.error.flatten() });
+      const flattened = parsed.error.flatten();
+      const firstFieldError = Object.entries(flattened.fieldErrors).map(
+        ([field, msgs]) => `${field}: ${msgs?.[0]}`
+      )[0];
+      const message = firstFieldError || flattened.formErrors[0] || 'Invalid product details provided';
+      res.status(400).json({ success: false, message, errors: flattened });
       return;
     }
 
