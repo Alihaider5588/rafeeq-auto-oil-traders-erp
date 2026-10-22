@@ -2,26 +2,28 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-// Use writable temporary storage on Vercel
-const uploadDir = process.env.VERCEL
-  ? path.join('/tmp', 'rafeeq-uploads')
-  : path.join(__dirname, '..', '..', 'uploads');
+// On serverless platforms like Vercel, use memory storage to store as persistent base64 data URI
+// On local server, use disk storage
+const isVercel = Boolean(process.env.VERCEL);
 
-if (!fs.existsSync(uploadDir)) {
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+if (!isVercel && !fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Storage configuration
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-    cb(null, `prod-${uniqueSuffix}${ext}`);
-  },
-});
+// Storage configuration: memory for serverless (zero file loss), disk for local
+const storage = isVercel
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        cb(null, uploadDir);
+      },
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+        cb(null, `prod-${uniqueSuffix}${ext}`);
+      },
+    });
 
 // File filter (images only: jpeg, jpg, png, webp)
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -39,7 +41,7 @@ const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterC
 export const uploadProductImage = multer({
   storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 4 * 1024 * 1024, // 4MB limit for cloud persistence
   },
   fileFilter,
 });

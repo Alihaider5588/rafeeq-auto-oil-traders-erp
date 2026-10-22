@@ -16,6 +16,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       todaySales,
       todayPurchases,
       todayPayments,
+      todayExpenses,
       monthSales,
       monthPurchases,
       allProducts,
@@ -47,6 +48,14 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         where: {
           paymentDate: { gte: startOfToday, lte: endOfToday },
           customerId: { not: null },
+        },
+        _sum: { amount: true },
+      }),
+
+      // Today Expenses
+      prisma.expense.aggregate({
+        where: {
+          expenseDate: { gte: startOfToday, lte: endOfToday },
         },
         _sum: { amount: true },
       }),
@@ -170,6 +179,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           cashReceived: Number(todaySales._sum.receivedAmount || 0) + Number(todayPayments._sum.amount || 0),
           creditSales: Number(todaySales._sum.remainingBalance || 0),
           grossProfit: Number(todaySales._sum.grossProfit || 0),
+          totalExpenses: Number(todayExpenses._sum.amount || 0),
+          netProfit: Number(todaySales._sum.grossProfit || 0) - Number(todayExpenses._sum.amount || 0),
         },
         monthly: {
           sales: Number(monthSales._sum.netAmount || 0),

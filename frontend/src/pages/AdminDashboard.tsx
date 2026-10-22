@@ -157,7 +157,17 @@ export const AdminDashboard: React.FC = () => {
           <div className="stat-label">Today's Gross Profit</div>
           <div className="stat-value">Rs. {Number(today?.grossProfit || 0).toLocaleString()}</div>
           <div className="stat-sub">
-            <ArrowUpRight size={14} color="#2563eb" /> Real Sale Margin (Revenue - Cost)
+            <ArrowUpRight size={14} color="#2563eb" /> Sale Margin (Revenue - Cost)
+          </div>
+        </div>
+
+        <div className="stat-card emerald" style={{ borderLeft: '4px solid #10b981' }}>
+          <div className="stat-label">Today's Net Profit (خالص منافع)</div>
+          <div className="stat-value" style={{ color: Number(today?.netProfit || 0) >= 0 ? '#059669' : '#dc2626' }}>
+            Rs. {Number(today?.netProfit || 0).toLocaleString()}
+          </div>
+          <div className="stat-sub">
+            After deducting Rs. {Number(today?.totalExpenses || 0).toLocaleString()} expenses
           </div>
         </div>
       </div>
@@ -458,26 +468,39 @@ export const AdminDashboard: React.FC = () => {
           backgroundColor: '#fffbeb',
           border: '1px solid #fde68a',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: '18px 20px',
           marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <AlertTriangle size={24} color="#d97706" />
-            <div>
-              <div style={{ fontWeight: 700, color: '#92400e', fontSize: '0.95rem' }}>
-                Inventory Replenishment Alert
-              </div>
-              <div style={{ fontSize: '0.85rem', color: '#b45309' }}>
-                {alerts?.outOfStockCount} products are completely out of stock; {alerts?.lowStockCount} items have fallen below minimum threshold.
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <AlertTriangle size={24} color="#d97706" />
+              <div>
+                <div style={{ fontWeight: 800, color: '#92400e', fontSize: '1rem' }}>
+                  Critical Stock Replenishment Alert (کم اسٹاک کی فوری اطلاع)
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#b45309' }}>
+                  {alerts?.outOfStockCount} items completely out of stock; {alerts?.lowStockCount} items below minimum safety threshold.
+                </div>
               </div>
             </div>
+            <Link to="/products" className="btn btn-primary btn-sm" style={{ backgroundColor: '#d97706', borderColor: '#b45309' }}>
+              Manage Inventory →
+            </Link>
           </div>
-          <a href="/products" className="btn btn-primary btn-sm">
-            Review Stock
-          </a>
+
+          {/* Quick list of low stock items */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '6px' }}>
+            {(alerts?.outOfStockProducts || []).map((p: any) => (
+              <span key={p.id} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>
+                ⚠️ {p.name}: 0 Left (OUT OF STOCK)
+              </span>
+            ))}
+            {(alerts?.lowStockProducts || []).map((p: any) => (
+              <span key={p.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600 }}>
+                ⚡ {p.name}: {p.currentStock} {p.unit?.symbol || 'Pcs'} (Min: {p.minimumStockLevel})
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

@@ -341,13 +341,26 @@ export const handleImageUpload = (req: AuthenticatedRequest, res: Response): voi
     return;
   }
 
-  // Return public URL path
-  const imageUrl = `/uploads/${req.file.filename}`;
+  let imageUrl: string;
+  let filename: string = req.file.originalname;
+
+  // On Vercel serverless, store as self-contained permanent base64 data URI (persists in DB forever)
+  if (req.file.buffer) {
+    const mime = req.file.mimetype || 'image/png';
+    const base64Data = req.file.buffer.toString('base64');
+    imageUrl = `data:${mime};base64,${base64Data}`;
+    filename = req.file.originalname;
+  } else {
+    // Local development disk storage
+    imageUrl = `/uploads/${req.file.filename}`;
+    filename = req.file.filename;
+  }
+
   res.json({
     success: true,
     message: 'Image uploaded successfully',
     imageUrl,
-    filename: req.file.filename,
+    filename,
   });
 };
 
