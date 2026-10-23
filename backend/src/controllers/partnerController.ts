@@ -271,3 +271,145 @@ export const createCustomer = async (req: AuthenticatedRequest, res: Response): 
     res.status(500).json({ success: false, message: error.message || 'Failed to create customer' });
   }
 };
+
+// DELETE /api/partners/customers/:id (Permanent Delete)
+export const deleteCustomer = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      select: { id: true, shopName: true },
+    });
+
+    if (!customer) {
+      res.status(404).json({ success: false, message: 'Customer not found' });
+      return;
+    }
+
+    const sales = await prisma.sale.findMany({
+      where: { customerId: id },
+      select: { id: true, invoiceNumber: true },
+    });
+    const saleIds = sales.map((s) => s.id);
+    const invoiceNumbers = sales.map((s) => s.invoiceNumber);
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete rate history
+      if ((tx as any).customerProductRate) {
+        await (tx as any).customerProductRate.deleteMany({ where: { customerId: id } });
+      }
+
+      // 2. Delete customer payments & receipts
+      await tx.payment.deleteMany({ where: { customerId: id } });
+      if (invoiceNumbers.length > 0) {
+        await tx.payment.deleteMany({ where: { reference: { in: invoiceNumbers } } });
+      }
+
+      // 3. Delete ledgers
+      await tx.customerLedger.deleteMany({ where: { customerId: id } });
+
+      // 4. Delete sales returns
+      await tx.salesReturnItem.deleteMany({
+        where: { salesReturn: { customerId: id } },
+      });
+      await tx.salesReturn.deleteMany({ where: { customerId: id } });
+
+      // 5. Delete customer sales, stock movements, and items
+      if (saleIds.length > 0) {
+        await tx.stockMovement.deleteMany({ where: { referenceId: { in: saleIds } } });
+        await tx.saleItem.deleteMany({ where: { saleId: { in: saleIds } } });
+        await tx.sale.deleteMany({ where: { id: { in: saleIds } } });
+      }
+
+      // 6. Delete customer record
+      await tx.customer.delete({ where: { id } });
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'CUSTOMER_DELETED',
+      entityType: 'CUSTOMER',
+      entityId: id,
+      details: { shopName: customer.shopName },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Customer "${customer.shopName}" was permanently deleted from database and POS.`,
+    });
+  } catch (error: any) {
+    console.error('deleteCustomer error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete customer' });
+  }
+};
+
+// DELETE /api/partners/suppliers/:id (Permanent Delete)
+export const deleteSupplier = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { id },
+      select: { id: true, companyName: true },
+    });
+
+    if (!supplier) {
+      res.status(404).json({ success: false, message: 'Supplier not found' });
+      return;
+    }
+
+    const purchases = await prisma.purchase.findMany({
+      where: { supplierId: id },
+      select: { id: true, invoiceNumber: true },
+    });
+    const purchaseIds = purchases.map((p) => p.id);
+    const invoiceNumbers = purchases.map((p) => p.invoiceNumber);
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete payments
+      await tx.payment.deleteMany({ where: { supplierId: id } });
+      if (invoiceNumbers.length > 0) {
+        await tx.payment.deleteMany({ where: { reference: { in: invoiceNumbers } } });
+      }
+
+      // 2. Delete ledgers
+      await tx.supplierLedger.deleteMany({ where: { supplierId: id } });
+
+      // 3. Delete returns
+      await tx.purchaseReturnItem.deleteMany({
+        where: { purchaseReturn: { supplierId: id } },
+      });
+      await tx.purchaseReturn.deleteMany({ where: { supplierId: id } });
+
+      // 4. Delete purchases, movements, and items
+      if (purchaseIds.length > 0) {
+        await tx.stockMovement.deleteMany({ where: { referenceId: { in: purchaseIds } } });
+        await tx.purchaseItem.deleteMany({ where: { purchaseId: { in: purchaseIds } } });
+        await tx.purchase.deleteMany({ where: { id: { in: purchaseIds } } });
+      }
+
+      // 5. Delete supplier record
+      await tx.supplier.delete({ where: { id } });
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'SUPPLIER_DELETED',
+      entityType: 'SUPPLIER',
+      entityId: id,
+      details: { companyName: supplier.companyName },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Supplier "${supplier.companyName}" was permanently deleted from database and POS.`,
+    });
+  } catch (error: any) {
+    console.error('deleteSupplier error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete supplier' });
+  }
+};
+

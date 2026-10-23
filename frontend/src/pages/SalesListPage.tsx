@@ -57,6 +57,22 @@ export const SalesListPage: React.FC = () => {
   const [refundCashAmount, setRefundCashAmount] = useState(0);
   const [processingReturn, setProcessingReturn] = useState(false);
 
+  // Top Page Operation Notification Banners
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
+
+  const triggerOperationError = (msg: string) => {
+    setOperationError(msg);
+    setOperationSuccess('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const triggerOperationSuccess = (msg: string) => {
+    setOperationSuccess(msg);
+    setOperationError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   useEffect(() => {
     fetchSales();
   }, []);
@@ -101,13 +117,34 @@ export const SalesListPage: React.FC = () => {
 
     try {
       await api.post(`/sales/${saleId}/cancel`, { reason });
-      alert('Invoice cancelled and reversed successfully! Stock has been returned.');
+      triggerOperationSuccess('Invoice cancelled and reversed successfully! Stock has been returned to inventory.');
       if (selectedSale?.id === saleId) {
         setSelectedSale(null);
       }
       fetchSales();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to cancel invoice');
+      triggerOperationError(err.response?.data?.message || 'Invoice cancel nahi ho saki.');
+    }
+  };
+
+  const handleDeleteSalePermanent = async (saleId: string, invoiceNumber: string) => {
+    const confirmed = window.confirm(
+      `⚠️ KYA AAP IS SALE INVOICE KO DATABASE AUR POS SE PERMANENTLY DELETE KARNA CHAHTE HAIN?\n\nInvoice: #${invoiceNumber}\n\nIs se stock wapis add ho jaye ga aur customer ledger se bhi invoice mukammal khatam ho jaye gi.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const res = await api.delete(`/sales/${saleId}`);
+      triggerOperationSuccess(res.data.message || `Invoice #${invoiceNumber} database aur POS se permanently delete ho gayi!`);
+      if (selectedSale?.id === saleId) {
+        setSelectedSale(null);
+      }
+      fetchSales();
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Invoice delete nahi ho saki. Barah-e-karam dobara koshish karein.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -171,7 +208,7 @@ export const SalesListPage: React.FC = () => {
     e.preventDefault();
     if (!editModalSale) return;
     if (editItems.length === 0) {
-      alert('Please add at least one product item to the invoice.');
+      triggerOperationError('Invoice me kam az kam aik product item add karein.');
       return;
     }
 
@@ -186,11 +223,11 @@ export const SalesListPage: React.FC = () => {
         notes: editNotes,
       });
 
-      alert(`Invoice #${editModalSale.invoiceNumber} has been updated and stock/ledger recalculated.`);
+      triggerOperationSuccess(`Invoice #${editModalSale.invoiceNumber} kamyabi se update ho gayi aur inventory/ledger recalculate ho gaya!`);
       setEditModalSale(null);
       fetchSales();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to update invoice');
+      triggerOperationError(err.response?.data?.message || 'Invoice update nahi ho saki.');
     } finally {
       setSavingEdit(false);
     }
@@ -238,7 +275,7 @@ export const SalesListPage: React.FC = () => {
       }));
 
     if (itemsToReturn.length === 0) {
-      alert('Please enter return quantity greater than 0 for at least one item.');
+      triggerOperationError('Wapsi darj karne ke liye kam az kam aik item ki return quantity 1 ya is se barhi enter karein.');
       return;
     }
 
@@ -255,11 +292,11 @@ export const SalesListPage: React.FC = () => {
         refundAmount: Number(refundCashAmount) || 0,
       });
 
-      alert(`Order Return recorded successfully! Stock returned to warehouse and customer ledger updated.`);
+      triggerOperationSuccess(`Order Return kamyabi se record ho gaya! Stock godown me wapis jama ho gaya aur customer ledger update ho gaya.`);
       setReturnModalSale(null);
       fetchSales();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to process return');
+      triggerOperationError(err.response?.data?.message || 'Return process nahi ho saka.');
     } finally {
       setProcessingReturn(false);
     }
@@ -293,6 +330,69 @@ export const SalesListPage: React.FC = () => {
 
   return (
     <div>
+      {/* Top Operation Failure / Success Banners */}
+      {operationError && (
+        <div style={{
+          backgroundColor: '#fee2e2',
+          border: '2px solid #ef4444',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#991b1b',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: '0.95rem' }}>Operation Nakaam Raha:</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#b91c1c' }}>{operationError}</div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setOperationError('')}
+            style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b', fontWeight: 900 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {operationSuccess && (
+        <div style={{
+          backgroundColor: '#ecfdf5',
+          border: '2px solid #10b981',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#065f46',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>✅</span>
+            <div>
+              <div style={{ fontSize: '0.95rem' }}>Kamyabi (Operation Successful):</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#047857' }}>{operationSuccess}</div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setOperationSuccess('')}
+            style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#065f46', fontWeight: 900 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>Sales Register & POS Billing</h1>
@@ -378,7 +478,12 @@ export const SalesListPage: React.FC = () => {
                   <td className="font-mono" style={{ fontWeight: 700, color: s.status === 'CANCELLED' ? '#94a3b8' : '#d97706' }}>
                     {s.invoiceNumber}
                   </td>
-                  <td>{new Date(s.saleDate).toLocaleDateString()}</td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{new Date(s.saleDate).toLocaleDateString()}</div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      {new Date(s.saleDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </div>
+                  </td>
                   <td style={{ fontWeight: 600 }}>{s.customer?.shopName}</td>
                   <td>{s.salesman?.fullName || 'Direct Counter'}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>
@@ -457,6 +562,27 @@ export const SalesListPage: React.FC = () => {
                           title="Void / Cancel Invoice"
                         >
                           <XCircle size={14} />
+                        </button>
+                      )}
+
+                      {/* Permanent Delete Invoice (Admin only) */}
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteSalePermanent(s.id, s.invoiceNumber)}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #fca5a5',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Permanently Delete Invoice from DB & POS"
+                        >
+                          <Trash2 size={13} /> Delete
                         </button>
                       )}
                     </div>
@@ -553,7 +679,7 @@ export const SalesListPage: React.FC = () => {
               <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px', fontSize: '11px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span><b>INV #:</b> {selectedSale.invoiceNumber}</span>
-                  <span><b>DATE:</b> {new Date(selectedSale.saleDate).toLocaleDateString()}</span>
+                  <span><b>DATE:</b> {new Date(selectedSale.saleDate).toLocaleDateString()} {new Date(selectedSale.saleDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
                   <span><b>CUST:</b> {selectedSale.customer?.shopName || 'Walk-in'}</span>
@@ -617,9 +743,21 @@ export const SalesListPage: React.FC = () => {
                   <span>Rs. {Number(selectedSale.receivedAmount).toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginTop: '3px' }}>
-                  <span>BALANCE DUE:</span>
+                  <span>THIS BILL BALANCE:</span>
                   <span>Rs. {Number(selectedSale.remainingBalance).toLocaleString()}</span>
                 </div>
+                {selectedSale.customer && selectedSale.customer.phone !== '00000000000' && (
+                  <div style={{ borderTop: '1px dashed #000000', marginTop: '6px', paddingTop: '5px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
+                      <span>CUSTOMER KHATA (UDHAR):</span>
+                      <span style={{ color: Number(selectedSale.customer?.currentReceivable || 0) <= 0 ? '#15803d' : '#000000' }}>
+                        {Number(selectedSale.customer?.currentReceivable || 0) <= 0
+                          ? 'CLEAR / EMPTY (0)'
+                          : `Rs. ${Number(selectedSale.customer?.currentReceivable || 0).toLocaleString()}`}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer Barcode / Receipt Message */}

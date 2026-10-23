@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getPurchases, createPurchase } from '../controllers/purchaseController';
+import { getPurchases, createPurchase, deletePurchase } from '../controllers/purchaseController';
 import { authenticate, authorize } from '../middlewares/auth';
 import { Role } from '../types/enums';
 
@@ -9,5 +9,6 @@ router.use(authenticate);
 
 router.get('/', getPurchases);
 router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createPurchase);
+router.delete('/:id', authorize([Role.ADMIN]), deletePurchase);
 
 export default router;

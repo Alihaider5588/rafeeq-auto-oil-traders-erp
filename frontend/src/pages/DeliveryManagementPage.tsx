@@ -30,8 +30,14 @@ const DAYS_OF_WEEK = [
   { key: 'SUNDAY', label: 'Sunday (اتوار)' },
 ] as const;
 
+import { useAuth } from '../context/AuthContext';
+
 export const DeliveryManagementPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [activeTab, setActiveTab] = useState<'DISPATCHES' | 'WEEKLY_SCHEDULES' | 'VEHICLES'>('DISPATCHES');
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
 
   const [deliveries, setDeliveries] = useState<DailyDelivery[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -200,9 +206,10 @@ export const DeliveryManagementPage: React.FC = () => {
       }
 
       setShowVehicleModal(false);
+      setOperationSuccess(editingVehicle ? `Vehicle ${vehicleNumber} updated successfully!` : `Vehicle ${vehicleNumber} registered successfully!`);
       loadVehicles();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save vehicle');
+      setOperationError(err.response?.data?.message || 'Failed to save vehicle');
     }
   };
 
@@ -212,10 +219,11 @@ export const DeliveryManagementPage: React.FC = () => {
     }
     try {
       await api.delete(`/logistics/vehicles/${id}`);
+      setOperationSuccess(`Vehicle ${number} was deleted successfully.`);
       loadVehicles();
       loadSchedules();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to delete vehicle');
+      setOperationError(err.response?.data?.message || 'Failed to delete vehicle');
     }
   };
 
@@ -436,12 +444,53 @@ export const DeliveryManagementPage: React.FC = () => {
             type="button"
             onClick={openNewVehicleModal}
             className="btn btn-outline"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
           >
-            <Truck size={16} /> Add Delivery Van
+            <Truck size={16} /> + Add Delivery Van & Driver
           </button>
         </div>
       </div>
+
+      {/* Operation Feedback Alerts */}
+      {operationError && (
+        <div style={{
+          backgroundColor: '#fee2e2',
+          border: '2px solid #ef4444',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#991b1b',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 800 }}>
+            <AlertCircle size={22} color="#dc2626" />
+            <span>⚠️ Operation Nakaam Raha: {operationError}</span>
+          </div>
+          <button onClick={() => setOperationError('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b' }}>×</button>
+        </div>
+      )}
+
+      {operationSuccess && (
+        <div style={{
+          backgroundColor: '#dcfce7',
+          border: '1.5px solid #86efac',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#15803d',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700 }}>
+            <CheckCircle size={20} color="#16a34a" />
+            <span>✓ {operationSuccess}</span>
+          </div>
+          <button onClick={() => setOperationSuccess('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#15803d' }}>×</button>
+        </div>
+      )}
 
       <div style={{
         display: 'flex',
@@ -823,6 +872,48 @@ export const DeliveryManagementPage: React.FC = () => {
 
       {activeTab === 'VEHICLES' && (
         <div>
+          {/* Vehicles & Drivers Tab Action Banner */}
+          <div style={{
+            backgroundColor: '#f0f9ff',
+            border: '1.5px solid #bae6fd',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div>
+              <div style={{ fontWeight: 800, color: '#0369a1', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Truck size={20} color="#0284c7" /> Register Delivery Van & Driver Fleet
+              </div>
+              <div style={{ fontSize: '0.84rem', color: '#0369a1', marginTop: '2px' }}>
+                Van ka registration number (e.g. OKR-786-LHR), Driver ka naam, phone number, aur helper / supply man add karein.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={openNewVehicleModal}
+              className="btn btn-primary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontWeight: 800,
+                backgroundColor: '#0284c7',
+                borderColor: '#0284c7',
+                padding: '9px 18px',
+                fontSize: '0.9rem',
+                boxShadow: '0 2px 6px rgba(2,132,199,0.3)'
+              }}
+            >
+              <Plus size={18} /> + Add New Delivery Van & Driver
+            </button>
+          </div>
+
           <div className="table-container">
             <table className="data-table">
               <thead>
@@ -839,8 +930,21 @@ export const DeliveryManagementPage: React.FC = () => {
               <tbody>
                 {vehicles.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
-                      No delivery vehicles registered yet.
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                        Abhi koi delivery van ya driver add nahi hua.
+                      </div>
+                      <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0 0 16px 0' }}>
+                        Field billing aur rozana orders deliver karne ke liye nayi van aur driver register karein.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={openNewVehicleModal}
+                        className="btn btn-primary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                      >
+                        <Plus size={16} /> + Register New Delivery Van & Driver
+                      </button>
                     </td>
                   </tr>
                 ) : (
@@ -878,14 +982,16 @@ export const DeliveryManagementPage: React.FC = () => {
                             >
                               <Edit2 size={14} />
                             </button>
-                            <button
-                              onClick={() => handleDeleteVehicle(v.id, v.vehicleNumber)}
-                              className="btn btn-outline btn-sm"
-                              style={{ color: '#ef4444', borderColor: '#fca5a5' }}
-                              title="Delete Vehicle"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteVehicle(v.id, v.vehicleNumber)}
+                                className="btn btn-outline btn-sm"
+                                style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                                title="Delete Vehicle (Admin only)"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

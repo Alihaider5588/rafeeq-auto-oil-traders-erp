@@ -49,7 +49,35 @@ export const SalesmanPortal: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [searchProduct, setSearchProduct] = useState('');
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const renderFieldErrorTag = (fieldName: string) => {
+    if (!fieldErrors[fieldName]) return null;
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        backgroundColor: '#fee2e2',
+        color: '#b91c1c',
+        padding: '3px 8px',
+        borderRadius: '6px',
+        fontSize: '0.74rem',
+        fontWeight: 700,
+        marginTop: '4px',
+        border: '1px solid #fca5a5'
+      }}>
+        <span>⚠️ yaha par mistake ho rai ha:</span> {fieldErrors[fieldName]}
+      </div>
+    );
+  };
 
   useEffect(() => {
     loadData();
@@ -80,6 +108,7 @@ export const SalesmanPortal: React.FC = () => {
   };
 
   const addToCart = async (product: ExtendedProduct) => {
+    if (fieldErrors.cart) setFieldErrors(prev => ({ ...prev, cart: '' }));
     const existingIndex = cart.findIndex((item) => item.product.id === product.id);
     if (existingIndex > -1) {
       const updated = [...cart];
@@ -159,25 +188,52 @@ export const SalesmanPortal: React.FC = () => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
+  const previousDebt = Number(selectedCustomer?.currentReceivable || 0);
+  const customerCreditLimit = Number(selectedCustomer?.creditLimit || 0);
+  const isWalkIn = selectedCustomer?.phone === '00000000000' || selectedCustomer?.shopName?.toLowerCase().includes('walk-in');
+
   const totalBill = cart.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
   );
 
-  const pendingBalance = Math.max(0, totalBill - receivedPayment);
+  const totalPayableWithDebt = totalBill + previousDebt;
+  const netRemainingDebt = totalPayableWithDebt - receivedPayment;
+  const isCreditExceeded = !isWalkIn && customerCreditLimit > 0 && netRemainingDebt > customerCreditLimit;
 
   const handleSubmitOrder = async () => {
+    const errors: Record<string, string> = {};
+
     if (!selectedCustomer) {
-      setErrorMsg('Please select a customer / shop first');
-      return;
+      errors.customer = 'Pehlay Customer / Dukan select karna lazmi hai';
     }
     if (cart.length === 0) {
-      setErrorMsg('Please add at least one item to order');
+      errors.cart = 'Order me kam az kam 1 product add karna lazmi hai';
+    }
+    cart.forEach((it, idx) => {
+      if (it.quantity <= 0 || isNaN(it.quantity)) {
+        errors[`qty_${idx}`] = 'Tadaad (Quantity) kam az kam 1 honi chahiye';
+      }
+      if (it.unitPrice < 0 || isNaN(it.unitPrice)) {
+        errors[`price_${idx}`] = 'Unit rate 0 ya is se barhi raqam honi chahiye';
+      }
+    });
+    if (receivedPayment < 0 || isNaN(receivedPayment)) {
+      errors.receivedPayment = 'Received payment minus me nahi ho sakti';
+    }
+    if (isCreditExceeded) {
+      errors.customer = `⛔ Customer ka udhar credit limit (Rs. ${customerCreditLimit.toLocaleString()}) se barh gaya hai. Bill creation disabled hai!`;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setErrorMsg(isCreditExceeded ? `⛔ Credit Limit Exceeded! Customer ka udhar (Rs. ${netRemainingDebt.toLocaleString()}) credit limit se zyada hai.` : 'POS me entry me mistake ha! Neeche red box check karein.');
       return;
     }
 
     setSubmitting(true);
     setErrorMsg('');
+    setFieldErrors({});
     setSuccessMsg('');
 
     try {
@@ -220,16 +276,20 @@ export const SalesmanPortal: React.FC = () => {
         setSuccessMsg(
           `Invoice ${res.data.sale?.invoiceNumber || ''} created successfully! Customer rate history updated.`
         );
+        setErrorMsg('');
         setCart([]);
         setReceivedPayment(0);
         setNotes('');
         setSelectedCustomer(null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         loadData();
       }
     } catch (err: any) {
       setErrorMsg(
-        err.response?.data?.message || 'Failed to submit order. Please retry.'
+        err.response?.data?.message || 'Order submit nahi ho saka. Barah-e-karam dobara koshish karein.'
       );
+      setSuccessMsg('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setSubmitting(false);
     }
@@ -271,41 +331,83 @@ export const SalesmanPortal: React.FC = () => {
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Sales Portal — Van Delivery & Field Billing</h2>
             <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Real-time customer rate auto-suggestion & unit conversions</div>
           </div>
+        </div>
 
+        <div style={{
+          textAlign: 'right',
+          backgroundColor: '#0f172a',
+          padding: '8px 14px',
+          borderRadius: '10px',
+          border: '1px solid #334155'
+        }}>
+          <div style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+            <Clock size={12} /> POS Date & Time
+          </div>
+          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#f59e0b', marginTop: '2px' }}>
+            {currentDateTime.toLocaleDateString()} {currentDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+          </div>
         </div>
       </div>
-
-      {successMsg && (
-        <div style={{
-          backgroundColor: '#d1fae5',
-          border: '1px solid #a7f3d0',
-          color: '#065f46',
-          padding: '16px',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          <CheckCircle size={22} />
-          <span style={{ fontWeight: 600 }}>{successMsg}</span>
-        </div>
-      )}
 
       {errorMsg && (
         <div style={{
           backgroundColor: '#fee2e2',
-          border: '1px solid #fecaca',
-          color: '#991b1b',
-          padding: '16px',
+          border: '2px solid #ef4444',
           borderRadius: '12px',
+          padding: '16px 20px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px'
+          justifyContent: 'space-between',
+          color: '#991b1b',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
         }}>
-          <AlertCircle size={22} />
-          <span style={{ fontWeight: 600 }}>{errorMsg}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800 }}>Operation Nakaam Raha (Invoice Not Created):</div>
+              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#b91c1c', marginTop: '2px' }}>{errorMsg}</div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#991b1b', fontWeight: 900 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {successMsg && (
+        <div style={{
+          backgroundColor: '#ecfdf5',
+          border: '2px solid #10b981',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#065f46',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.5rem' }}>✅</span>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800 }}>Kamyabi (Invoice Created Successfully):</div>
+              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#047857', marginTop: '2px' }}>{successMsg}</div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setSuccessMsg('')}
+            style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#065f46', fontWeight: 900 }}
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -358,9 +460,14 @@ export const SalesmanPortal: React.FC = () => {
         <div className="form-group" style={{ marginBottom: 0 }}>
           <select
             className="form-control"
-            style={{ fontSize: '1rem', padding: '12px' }}
+            style={{
+              fontSize: '1rem',
+              padding: '12px',
+              ...(fieldErrors.customer ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+            }}
             value={selectedCustomer?.id || ''}
             onChange={(e) => {
+              if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
               const cust = customers.find((c) => c.id === e.target.value);
               setSelectedCustomer(cust || null);
             }}
@@ -372,6 +479,7 @@ export const SalesmanPortal: React.FC = () => {
               </option>
             ))}
           </select>
+          {renderFieldErrorTag('customer')}
         </div>
 
         {selectedCustomer && (
@@ -394,19 +502,33 @@ export const SalesmanPortal: React.FC = () => {
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Previous Udhar / Balance:</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Previous Udhar / Sabqa Baqaya:</div>
               <div style={{ fontSize: '1.05rem', fontWeight: 800, color: Number(selectedCustomer.currentReceivable) > 0 ? '#dc2626' : '#16a34a' }}>
                 Rs. {Number(selectedCustomer.currentReceivable).toLocaleString()}
               </div>
+              {!isWalkIn && customerCreditLimit > 0 && (
+                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                  Credit Limit: <b>Rs. {customerCreditLimit.toLocaleString()}</b>
+                  {previousDebt > customerCreditLimit && (
+                    <span style={{ color: '#dc2626', fontWeight: 700, display: 'block' }}>⚠️ Udhar limit se zyada hai</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
 
       {/* STEP 2: SELECT PRODUCTS */}
-      <div className="card" style={{ marginBottom: '20px' }}>
+      <div className="card" style={{
+        marginBottom: '20px',
+        ...(fieldErrors.cart ? { border: '2px solid #ef4444', backgroundColor: '#fff5f5' } : {})
+      }}>
         <div className="card-header" style={{ marginBottom: '12px' }}>
-          <h3 className="card-title">2. Select Products</h3>
+          <div>
+            <h3 className="card-title">2. Select Products</h3>
+            {renderFieldErrorTag('cart')}
+          </div>
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Tap product to add with auto-pricing</span>
         </div>
 
@@ -663,14 +785,23 @@ export const SalesmanPortal: React.FC = () => {
                         <input
                           type="number"
                           className="form-control"
-                          style={{ fontSize: '0.85rem', padding: '4px 8px', fontWeight: 700 }}
+                          style={{
+                            fontSize: '0.85rem',
+                            padding: '4px 8px',
+                            fontWeight: 700,
+                            ...(fieldErrors[`price_${index}`] ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+                          }}
                           value={item.unitPrice === 0 ? '' : item.unitPrice}
                           placeholder="0"
                           onChange={(e) => {
+                            if (fieldErrors[`price_${index}`]) {
+                              setFieldErrors(prev => ({ ...prev, [`price_${index}`]: '' }));
+                            }
                             const val = e.target.value === '' ? 0 : Number(e.target.value);
                             updatePrice(index, val);
                           }}
                         />
+                        {renderFieldErrorTag(`price_${index}`)}
                       </div>
 
                       {/* Line Total */}
@@ -689,29 +820,112 @@ export const SalesmanPortal: React.FC = () => {
             {/* Calculations Box */}
             <div style={{
               padding: '18px',
-              backgroundColor: '#f1f5f9',
+              backgroundColor: '#f8fafc',
+              border: '1.5px solid #e2e8f0',
               borderRadius: '12px',
               marginBottom: '20px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '1.1rem', fontWeight: 800 }}>
-                <span>Total Order Amount:</span>
-                <span style={{ color: '#0f172a' }}>Rs. {totalBill.toLocaleString()}</span>
+              {/* Order and Udhar Breakdown */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #cbd5e1' }}>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Current Bill (Is Order Ka Total):</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                    Rs. {totalBill.toLocaleString()}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Sabqa Udhar (Previous Debt):</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: previousDebt > 0 ? '#dc2626' : '#16a34a' }}>
+                    Rs. {previousDebt.toLocaleString()}
+                  </div>
+                </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '14px' }}>
+              {/* Total Payable (Bill + Sabqa Udhar) */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', backgroundColor: '#e2e8f0', padding: '10px 14px', borderRadius: '8px' }}>
+                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>
+                  Kul Wajib-ul-Ada (Current Bill + Sabqa Udhar):
+                </span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
+                  Rs. {totalPayableWithDebt.toLocaleString()}
+                </span>
+              </div>
+
+              {/* Quick Pay Helper Buttons */}
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
+                  Quick Payment Shortcuts (Fauri Wasooli Button):
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (fieldErrors.receivedPayment) setFieldErrors(prev => ({ ...prev, receivedPayment: '' }));
+                      setReceivedPayment(totalBill);
+                    }}
+                    style={{
+                      backgroundColor: '#eff6ff',
+                      color: '#1d4ed8',
+                      border: '1px solid #bfdbfe',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Pay Current Bill Only (Rs. {totalBill.toLocaleString()})
+                  </button>
+
+                  {previousDebt > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (fieldErrors.receivedPayment) setFieldErrors(prev => ({ ...prev, receivedPayment: '' }));
+                        setReceivedPayment(totalPayableWithDebt);
+                      }}
+                      style={{
+                        backgroundColor: '#dcfce7',
+                        color: '#15803d',
+                        border: '1px solid #86efac',
+                        padding: '5px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear All (Bill + Sabqa Udhar = Rs. {totalPayableWithDebt.toLocaleString()})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Input Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '10px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Payment Received (Rs.)</label>
+                  <label className="form-label">Payment Received / Wasool (Rs.) *</label>
                   <input
                     type="number"
                     className="form-control"
                     placeholder="0"
                     value={receivedPayment === 0 ? '' : receivedPayment}
                     onChange={(e) => {
+                      if (fieldErrors.receivedPayment) {
+                        setFieldErrors(prev => ({ ...prev, receivedPayment: '' }));
+                      }
                       const val = e.target.value === '' ? 0 : Number(e.target.value);
                       setReceivedPayment(val);
                     }}
-                    style={{ fontSize: '1.1rem', fontWeight: 700, color: '#059669' }}
+                    style={{
+                      fontSize: '1.15rem',
+                      fontWeight: 800,
+                      color: '#059669',
+                      ...(fieldErrors.receivedPayment ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+                    }}
                   />
+                  {renderFieldErrorTag('receivedPayment')}
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -721,27 +935,86 @@ export const SalesmanPortal: React.FC = () => {
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value as any)}
                   >
-                    <option value="CASH">Cash Drawer</option>
+                    <option value="CASH">Cash Drawer / Counter</option>
                     <option value="ONLINE">Bank / Online Transfer</option>
                     <option value="CHEQUE">Cheque</option>
                   </select>
                 </div>
               </div>
 
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginTop: '16px',
-                paddingTop: '12px',
-                borderTop: '1px solid #cbd5e1',
-                fontSize: '1rem',
-                fontWeight: 800
-              }}>
-                <span>Remaining Balance (New Udhar):</span>
-                <span style={{ color: pendingBalance > 0 ? '#dc2626' : '#059669' }}>
-                  Rs. {pendingBalance.toLocaleString()}
-                </span>
-              </div>
+              {/* Net Remaining Debt or Empty Ledger Status Card */}
+              {netRemainingDebt <= 0 ? (
+                <div style={{
+                  marginTop: '16px',
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  backgroundColor: '#dcfce7',
+                  border: '2px solid #22c55e',
+                  color: '#15803d'
+                }}>
+                  <div style={{ fontWeight: 900, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle size={22} color="#16a34a" />
+                    ✓ Net Udhar: Rs. 0 (Khata Mukammal Clear / Empty!)
+                  </div>
+                  <div style={{ fontSize: '0.82rem', marginTop: '4px', color: '#166534' }}>
+                    Customer ne apna current bill aur sabqa udhar mukammal ada kar diya hai. Is invoice ke save hotay hi customer ka ledger 0 ho jaye ga.
+                  </div>
+                  {receivedPayment > totalPayableWithDebt && (
+                    <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed #86efac', fontWeight: 800, fontSize: '0.92rem', color: '#047857' }}>
+                      Baqaya Wapsi (Change Return): Rs. {(receivedPayment - totalPayableWithDebt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{
+                  marginTop: '16px',
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  backgroundColor: isCreditExceeded ? '#fee2e2' : netRemainingDebt > previousDebt ? '#fff7ed' : '#eff6ff',
+                  border: isCreditExceeded ? '2px solid #ef4444' : netRemainingDebt > previousDebt ? '1.5px solid #fdba74' : '1.5px solid #93c5fd',
+                  color: isCreditExceeded ? '#991b1b' : netRemainingDebt > previousDebt ? '#c2410c' : '#1e40af'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 900, fontSize: '1.05rem' }}>
+                    <span>Net Baqaya Udhar (Remaining Debt):</span>
+                    <span style={{ fontSize: '1.2rem', color: isCreditExceeded ? '#dc2626' : netRemainingDebt > previousDebt ? '#ea580c' : '#2563eb' }}>
+                      Rs. {netRemainingDebt.toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>
+                    {netRemainingDebt > previousDebt && (
+                      <span>⚠️ Udhar barh gaya hai: Purana udhar Rs. {previousDebt.toLocaleString()} tha, ab Rs. {(netRemainingDebt - previousDebt).toLocaleString()} mazeed udhar barh gaya hai.</span>
+                    )}
+                    {netRemainingDebt < previousDebt && (
+                      <span>📉 Purana udhar kam ho gaya: Purana Rs. {previousDebt.toLocaleString()} tha, ab Rs. {(previousDebt - netRemainingDebt).toLocaleString()} ada ho kar kam ho gaya hai.</span>
+                    )}
+                    {netRemainingDebt === previousDebt && (
+                      <span>↔️ Current bill cash wasool ho gaya, purana udhar Rs. {previousDebt.toLocaleString()} barabar hai.</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Credit Limit Exceeded Warning Banner */}
+              {isCreditExceeded && (
+                <div style={{
+                  marginTop: '14px',
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  backgroundColor: '#fee2e2',
+                  border: '2px solid #dc2626',
+                  color: '#991b1b'
+                }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertCircle size={22} color="#dc2626" />
+                    ⛔ Credit Limit Exceeded! (Udhar Limit Se Zyada Ho Gaya Hai)
+                  </div>
+                  <div style={{ fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
+                    Is customer ka kul udhar (Rs. {netRemainingDebt.toLocaleString()}) iski manzoor shuda credit limit (Rs. {customerCreditLimit.toLocaleString()}) se barh chuka hai.
+                    <br />
+                    <b>Bill creation disabled hai.</b> Agar invoice banani hai to Customers page se iski credit limit barhayein ya cash wasooli enter karein taake udhar limit ke andar aa jaye.
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -757,12 +1030,23 @@ export const SalesmanPortal: React.FC = () => {
 
             <button
               type="button"
-              disabled={submitting}
+              disabled={submitting || isCreditExceeded}
               onClick={handleSubmitOrder}
               className="btn btn-primary btn-lg"
-              style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '10px' }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px',
+                ...(isCreditExceeded ? { backgroundColor: '#ef4444', borderColor: '#ef4444', opacity: 0.85, cursor: 'not-allowed' } : {})
+              }}
             >
-              {submitting ? 'Submitting Order to Server...' : (
+              {submitting ? 'Submitting Order to Server...' : isCreditExceeded ? (
+                <>
+                  <AlertCircle size={20} /> ⛔ Credit Limit Exceeded — Invoice Disabled (Limit Barhayein Ya Cash Lein)
+                </>
+              ) : (
                 <>
                   <Send size={20} /> Submit & Sync Order Now
                 </>

@@ -291,3 +291,104 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
     res.status(500).json({ success: false, message: error.message || 'Failed to record purchase' });
   }
 };
+
+// DELETE /api/purchases/:id (Permanent Delete from DB and POS)
+export const deletePurchase = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const purchase = await prisma.purchase.findUnique({
+      where: { id },
+      include: {
+        items: true,
+        supplier: true,
+      },
+    });
+
+    if (!purchase) {
+      res.status(404).json({ success: false, message: 'Purchase not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Revert added stock for each item
+      for (const item of purchase.items) {
+        const prod = await tx.product.findUnique({ where: { id: item.productId } });
+        if (prod) {
+          const curStock = Number(prod.currentStock);
+          const baseQty = Number(item.baseQuantity || item.quantity);
+          const revertedStock = curStock - baseQty;
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { currentStock: new Prisma.Decimal(revertedStock) },
+          });
+        }
+      }
+
+      // 2. Revert supplier current payable
+      const curPayable = Number(purchase.supplier.currentPayable || 0);
+      const rem = Number(purchase.remainingAmount || 0);
+      const newPayable = curPayable - rem;
+
+      await tx.supplier.update({
+        where: { id: purchase.supplierId },
+        data: { currentPayable: new Prisma.Decimal(newPayable) },
+      });
+
+      // 3. Delete payments linked to this purchase bill
+      await tx.payment.deleteMany({
+        where: { reference: purchase.invoiceNumber },
+      });
+
+      // 4. Delete supplier ledger entries linked to this purchase
+      await tx.supplierLedger.deleteMany({
+        where: { referenceId: purchase.id },
+      });
+
+      // 5. Delete stock movements linked to this purchase
+      await tx.stockMovement.deleteMany({
+        where: { referenceId: purchase.id },
+      });
+
+      // 6. Delete purchase return items and returns if any
+      await tx.purchaseReturnItem.deleteMany({
+        where: { purchaseReturn: { purchaseId: purchase.id } },
+      });
+      await tx.purchaseReturn.deleteMany({
+        where: { purchaseId: purchase.id },
+      });
+
+      // 7. Delete purchase items
+      await tx.purchaseItem.deleteMany({
+        where: { purchaseId: purchase.id },
+      });
+
+      // 8. Permanently delete the purchase bill
+      await tx.purchase.delete({
+        where: { id: purchase.id },
+      });
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'PURCHASE_DELETED',
+      entityType: 'PURCHASE',
+      entityId: purchase.id,
+      details: {
+        invoiceNumber: purchase.invoiceNumber,
+        supplier: purchase.supplier.companyName,
+        netAmount: purchase.netAmount,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Purchase bill #${purchase.invoiceNumber} permanently deleted. Stock and supplier ledger reverted.`,
+    });
+  } catch (error: any) {
+    console.error('deletePurchase error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete purchase' });
+  }
+};
+

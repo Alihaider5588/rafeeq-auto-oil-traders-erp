@@ -4,6 +4,7 @@ import {
   DollarSign, Plus, Trash2, Calendar, Tag, Filter,
   TrendingDown, FileText, CheckCircle, AlertCircle, RefreshCw, Receipt
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface Expense {
   id: string;
@@ -58,11 +59,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const ExpensesPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
 
   // Form
   const [form, setForm] = useState({
@@ -104,7 +109,7 @@ export const ExpensesPage: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.amount || Number(form.amount) <= 0) {
-      alert('Please enter a valid amount');
+      setOperationError('Expense amount 0 se barhi raqam honi chahiye.');
       return;
     }
 
@@ -126,10 +131,11 @@ export const ExpensesPage: React.FC = () => {
         paymentMethod: 'CASH',
         date: new Date().toISOString().split('T')[0]
       });
+      setOperationSuccess('Expense voucher kamiyabi se darj ho gaya!');
+      setOperationError('');
       fetchExpenses();
-      alert('Expense recorded successfully!');
     } catch (err: any) {
-      alert(err.response?.data?.message || err.response?.data?.error || 'Failed to record expense');
+      setOperationError(err.response?.data?.message || err.response?.data?.error || 'Failed to record expense');
     }
   };
 
@@ -137,9 +143,11 @@ export const ExpensesPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this expense voucher?')) return;
     try {
       await api.delete(`/expenses/${id}`);
+      setOperationSuccess('Expense voucher permanently delete ho gaya.');
+      setOperationError('');
       fetchExpenses();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete expense');
+      setOperationError(err.response?.data?.error || 'Failed to delete expense');
     }
   };
 
@@ -173,6 +181,47 @@ export const ExpensesPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Operation Feedback Alerts */}
+      {operationError && (
+        <div style={{
+          backgroundColor: '#fee2e2',
+          border: '2px solid #ef4444',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#991b1b',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 800 }}>
+            <AlertCircle size={22} color="#dc2626" />
+            <span>⚠️ Operation Nakaam Raha: {operationError}</span>
+          </div>
+          <button onClick={() => setOperationError('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b' }}>×</button>
+        </div>
+      )}
+
+      {operationSuccess && (
+        <div style={{
+          backgroundColor: '#dcfce7',
+          border: '1.5px solid #86efac',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#15803d',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700 }}>
+            <CheckCircle size={20} color="#16a34a" />
+            <span>✓ {operationSuccess}</span>
+          </div>
+          <button onClick={() => setOperationSuccess('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#15803d' }}>×</button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       {summary && (
@@ -278,13 +327,17 @@ export const ExpensesPage: React.FC = () => {
                     Rs. {Number(exp.amount).toLocaleString()}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleDelete(exp.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                      title="Delete Expense"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        onClick={() => handleDelete(exp.id)}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                        title="Delete Expense (Admin only)"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    ) : (
+                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</span>
+                    )}
                   </td>
                 </tr>
               ))

@@ -54,7 +54,7 @@ async function main() {
     update: {},
     create: {
       username: 'admin',
-      fullName: 'M. Shafiq & Talha Sabir (Proprietors)',
+      fullName: 'M. Shafiq (Proprietor)',
       phone: '03069258573',
       passwordHash,
       role: Role.ADMIN,

@@ -16,7 +16,8 @@ import {
   Search,
   Filter,
   RefreshCw,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 
 interface WebOrderItem {
@@ -135,6 +136,22 @@ export const WebOrdersQueuePage: React.FC = () => {
     }
   };
 
+  const handleDeleteOrder = async (order: WebOrder) => {
+    if (!window.confirm(`⚠️ KYA AAP WEB ORDER #${order.orderNumber} KO DATABASE AUR QUEUE SE PERMANENTLY DELETE KARNA CHAHTE HAIN?`)) {
+      return;
+    }
+    setActionLoadingId(order.id);
+    try {
+      await api.delete(`/sales/web-orders/${order.id}`);
+      setFeedback({ type: 'success', message: `Web Order #${order.orderNumber} deleted permanently!` });
+      await fetchOrders();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.response?.data?.message || 'Failed to delete web order' });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const filteredOrders = orders.filter((o) => {
     const matchesFilter = filterStatus === 'ALL' || o.status === filterStatus;
     const term = search.toLowerCase();
@@ -178,6 +195,22 @@ export const WebOrdersQueuePage: React.FC = () => {
           <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
             Review incoming orders from public website visitors. Confirming an order creates a POS invoice and deducts stock.
           </p>
+          <div style={{
+            backgroundColor: '#eff6ff',
+            color: '#1d4ed8',
+            border: '1px solid #bfdbfe',
+            padding: '8px 14px',
+            borderRadius: '8px',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            marginTop: '8px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            <span>💡 Auto-Cleanup Active:</span>
+            Reject shuda web orders 10 din bad automatically POS aur database se remove ho jatay hain, jabkay confirmed orders hamesha records me rehtay hain.
+          </div>
         </div>
 
         <button
@@ -396,6 +429,35 @@ export const WebOrdersQueuePage: React.FC = () => {
                   {isConfirmed && ord.confirmedAt && (
                     <div style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 600 }}>
                       ✓ Confirmed on {new Date(ord.confirmedAt).toLocaleDateString()}
+                    </div>
+                  )}
+
+                  {isRejected && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#dc2626', fontWeight: 600 }}>
+                        ✗ Rejected (10 din bad auto remove ho jaye ga)
+                      </span>
+                      {user?.role === 'ADMIN' && (
+                        <button
+                          onClick={() => handleDeleteOrder(ord)}
+                          style={{
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #fca5a5',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Delete immediately from queue and database (Admin only)"
+                        >
+                          <Trash2 size={13} /> Delete Now
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

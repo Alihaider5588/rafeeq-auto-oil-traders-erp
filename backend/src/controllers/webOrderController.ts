@@ -8,6 +8,30 @@ import { Prisma } from '@prisma/client';
 // GET /api/sales/web-orders
 export const getWebOrdersQueue = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    // 1. Auto-cleanup: Permanently remove REJECTED orders older than 10 days from DB & POS
+    try {
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      const oldRejected = await prisma.webOrder.findMany({
+        where: {
+          status: 'REJECTED',
+          createdAt: { lte: tenDaysAgo },
+        },
+        select: { id: true },
+      });
+
+      if (oldRejected.length > 0) {
+        const ids = oldRejected.map((o) => o.id);
+        await prisma.webOrderItem.deleteMany({
+          where: { webOrderId: { in: ids } },
+        });
+        await prisma.webOrder.deleteMany({
+          where: { id: { in: ids } },
+        });
+      }
+    } catch (cleanupErr) {
+      console.error('Auto-cleanup 10-day rejected web orders error:', cleanupErr);
+    }
+
     const orders = await prisma.webOrder.findMany({
       include: {
         items: {
@@ -249,3 +273,34 @@ export const rejectWebOrder = async (req: AuthenticatedRequest, res: Response): 
     res.status(500).json({ success: false, message: 'Failed to reject web order' });
   }
 };
+
+// DELETE /api/sales/web-orders/:id (Permanent Delete of rejected / cancelled web orders)
+export const deleteWebOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const order = await prisma.webOrder.findUnique({
+      where: { id },
+      select: { id: true, orderNumber: true, status: true },
+    });
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Web order not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.webOrderItem.deleteMany({ where: { webOrderId: id } });
+      await tx.webOrder.delete({ where: { id } });
+    });
+
+    res.json({
+      success: true,
+      message: `Web Order #${order.orderNumber} permanently removed from database and queue.`,
+    });
+  } catch (error: any) {
+    console.error('deleteWebOrder error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete web order' });
+  }
+};
+

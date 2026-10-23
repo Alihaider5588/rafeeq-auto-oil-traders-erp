@@ -69,7 +69,7 @@ echo - Backend API: http://localhost:5000 (Network: http://%LOCAL_IP%:5000)
 echo ===================================================
 echo.
 echo Login Credentials:
-echo Admin (Proprietors): admin    / Admin@123
+echo Admin (Proprietor):  admin    / Admin@123
 echo Operator:            operator / Operator@123
 echo Cashier:             cashier  / Cashier@123
 echo Salesman:            salesman / Salesman@123

@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Supplier, Product } from '../types';
-import { ShoppingBag, Plus, Calendar } from 'lucide-react';
+import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const PurchasesPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [purchases, setPurchases] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -19,6 +22,8 @@ export const PurchasesPage: React.FC = () => {
   const [paidAmount, setPaidAmount] = useState('0');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
 
   useEffect(() => {
     loadPurchases();
@@ -77,7 +82,7 @@ export const PurchasesPage: React.FC = () => {
   const handleCreatePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierId || !invoiceNumber) {
-      alert('Supplier and Invoice Number are required');
+      setOperationError('Supplier aur Invoice Number select karna lazmi hai.');
       return;
     }
 
@@ -101,12 +106,33 @@ export const PurchasesPage: React.FC = () => {
         setInvoiceNumber('');
         setItems([{ productId: '', quantity: 1, unitCost: 0 }]);
         setPaidAmount('0');
+        setOperationSuccess(`Purchase invoice #${invoiceNumber} successfully record ho gayi aur stock barh gaya.`);
+        setOperationError('');
         loadPurchases();
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save purchase');
+      setOperationError(err.response?.data?.message || 'Failed to save purchase');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeletePurchase = async (purchaseId: string, invNumber: string) => {
+    const confirmed = window.confirm(
+      `⚠️ KYA AAP IS PURCHASE INVOICE KO DATABASE AUR POS SE PERMANENTLY DELETE KARNA CHAHTE HAIN?\n\nBill: #${invNumber}\n\nIs se purchase ka stock wapis kam ho jaye ga aur supplier ledger se entry hamesha ke liye delete ho jaye gi.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const res = await api.delete(`/purchases/${purchaseId}`);
+      setOperationSuccess(res.data.message || `Invoice #${invNumber} permanently delete ho gayi aur stock/ledgers restore ho gaye.`);
+      setOperationError('');
+      loadPurchases();
+    } catch (err: any) {
+      setOperationError(err.response?.data?.message || 'Failed to delete purchase');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -124,6 +150,47 @@ export const PurchasesPage: React.FC = () => {
         </button>
       </div>
 
+      {/* Operation Feedback Alerts */}
+      {operationError && (
+        <div style={{
+          backgroundColor: '#fee2e2',
+          border: '2px solid #ef4444',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#991b1b',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 800 }}>
+            <AlertCircle size={22} color="#dc2626" />
+            <span>⚠️ Operation Nakaam Raha: {operationError}</span>
+          </div>
+          <button onClick={() => setOperationError('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b' }}>×</button>
+        </div>
+      )}
+
+      {operationSuccess && (
+        <div style={{
+          backgroundColor: '#dcfce7',
+          border: '1.5px solid #86efac',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#15803d',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700 }}>
+            <CheckCircle size={20} color="#16a34a" />
+            <span>✓ {operationSuccess}</span>
+          </div>
+          <button onClick={() => setOperationSuccess('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#15803d' }}>×</button>
+        </div>
+      )}
+
       <div className="table-container">
         <table className="data-table">
           <thead>
@@ -135,18 +202,19 @@ export const PurchasesPage: React.FC = () => {
               <th style={{ textAlign: 'right' }}>Paid</th>
               <th style={{ textAlign: 'right' }}>Payable Balance</th>
               <th>Recorded By</th>
+              <th style={{ textAlign: 'center' }}>Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   Loading purchases...
                 </td>
               </tr>
             ) : purchases.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                   No purchases recorded yet.
                 </td>
               </tr>
@@ -156,7 +224,12 @@ export const PurchasesPage: React.FC = () => {
                   <td className="font-mono" style={{ fontWeight: 700, color: '#d97706' }}>
                     {p.invoiceNumber}
                   </td>
-                  <td>{new Date(p.purchaseDate).toLocaleDateString()}</td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{new Date(p.purchaseDate).toLocaleDateString()}</div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      {new Date(p.purchaseDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </div>
+                  </td>
                   <td style={{ fontWeight: 600 }}>{p.supplier?.companyName}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>
                     Rs. {Number(p.netAmount).toLocaleString()}
@@ -168,6 +241,29 @@ export const PurchasesPage: React.FC = () => {
                     Rs. {Number(p.remainingAmount).toLocaleString()}
                   </td>
                   <td>{p.createdBy?.fullName}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {isAdmin ? (
+                      <button
+                        onClick={() => handleDeletePurchase(p.id, p.invoiceNumber)}
+                        className="btn btn-sm"
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#fee2e2',
+                          color: '#b91c1c',
+                          border: '1px solid #fca5a5',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Permanently Delete Purchase from DB & POS"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    ) : (
+                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</span>
+                    )}
+                  </td>
                 </tr>
               ))
             )}

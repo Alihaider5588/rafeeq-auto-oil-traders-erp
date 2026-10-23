@@ -337,6 +337,20 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     const remainingBalance = netAmount - data.receivedAmount;
     const totalGrossProfit = netAmount - totalSaleCost;
 
+    // Credit Limit Verification: Block sale if customer exceeds their assigned credit limit
+    const creditLimit = Number(customer.creditLimit || 0);
+    const currentReceivable = Number(customer.currentReceivable || 0);
+    const isWalkIn = customer.phone === '00000000000' || customer.shopName.toLowerCase().includes('walk-in');
+    const projectedReceivable = currentReceivable + remainingBalance;
+
+    if (!isWalkIn && creditLimit > 0 && projectedReceivable > creditLimit) {
+      res.status(400).json({
+        success: false,
+        message: `⛔ Credit Limit Exceeded! Is customer ka kul udhar (Rs. ${projectedReceivable.toLocaleString()}) iski credit limit (Rs. ${creditLimit.toLocaleString()}) se barh gaya hai. Bill creation disabled hai. Agar invoice banani hai to Customers page se iski credit limit barhayein ya cash wasooli karein.`,
+      });
+      return;
+    }
+
     const invoiceNumber = `ROT-INV-${Date.now().toString().slice(-8)}`;
     const orderStatus = requireApproval ? OrderStatus.PENDING_APPROVAL : OrderStatus.COMPLETED;
     const saleDate = data.saleDate ? new Date(data.saleDate) : new Date();
@@ -1242,3 +1256,111 @@ export const createSalesReturn = async (req: AuthenticatedRequest, res: Response
     res.status(500).json({ success: false, message: error.message || 'Failed to process sales return' });
   }
 };
+
+// DELETE /api/sales/:id (Permanent Delete from DB and POS)
+export const deleteSale = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const sale = await prisma.sale.findUnique({
+      where: { id },
+      include: {
+        items: true,
+        customer: true,
+      },
+    });
+
+    if (!sale) {
+      res.status(404).json({ success: false, message: 'Sale invoice not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. If sale was COMPLETED, safely restore product stock and revert customer receivable
+      if (sale.status === OrderStatus.COMPLETED) {
+        for (const item of sale.items) {
+          const prod = await tx.product.findUnique({ where: { id: item.productId } });
+          if (prod) {
+            const curStock = Number(prod.currentStock);
+            const baseQty = Number(item.baseQuantity || item.quantity);
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { currentStock: new Prisma.Decimal(curStock + baseQty) },
+            });
+          }
+        }
+
+        // Revert customer receivable (subtract the remaining balance that was added when invoice was made)
+        const curReceivable = Number(sale.customer.currentReceivable || 0);
+        const rem = Number(sale.remainingBalance || 0);
+        const newReceivable = curReceivable - rem;
+
+        await tx.customer.update({
+          where: { id: sale.customerId },
+          data: { currentReceivable: new Prisma.Decimal(newReceivable) },
+        });
+      }
+
+      // 2. Unlink any converted web orders
+      await tx.webOrder.updateMany({
+        where: { convertedSaleId: sale.id },
+        data: { convertedSaleId: null },
+      });
+
+      // 3. Delete sales return items and sales returns linked to this sale
+      await tx.salesReturnItem.deleteMany({
+        where: { salesReturn: { saleId: sale.id } },
+      });
+      await tx.salesReturn.deleteMany({
+        where: { saleId: sale.id },
+      });
+
+      // 4. Delete payment records for this invoice
+      await tx.payment.deleteMany({
+        where: { reference: sale.invoiceNumber },
+      });
+
+      // 5. Delete customer ledger entries linked to this sale
+      await tx.customerLedger.deleteMany({
+        where: { referenceId: sale.id },
+      });
+
+      // 6. Delete stock movement records linked to this sale
+      await tx.stockMovement.deleteMany({
+        where: { referenceId: sale.id },
+      });
+
+      // 7. Delete sale items
+      await tx.saleItem.deleteMany({
+        where: { saleId: sale.id },
+      });
+
+      // 8. Permanently delete the sale record
+      await tx.sale.delete({
+        where: { id: sale.id },
+      });
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'SALE_DELETED',
+      entityType: 'SALE',
+      entityId: sale.id,
+      details: {
+        invoiceNumber: sale.invoiceNumber,
+        customer: sale.customer.shopName,
+        netAmount: sale.netAmount,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Invoice #${sale.invoiceNumber} was permanently deleted from database and POS. Stock & ledgers restored.`,
+    });
+  } catch (error: any) {
+    console.error('deleteSale error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to permanently delete invoice' });
+  }
+};
+

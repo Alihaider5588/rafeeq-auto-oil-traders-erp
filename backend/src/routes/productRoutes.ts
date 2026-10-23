@@ -11,6 +11,7 @@ import {
   updateCategory,
   getUnits,
   createUnit,
+  deleteProduct,
 } from '../controllers/productController';
 import { authenticate, authorize } from '../middlewares/auth';
 import { Role } from '../types/enums';
@@ -33,6 +34,7 @@ router.get('/', getProducts);
 router.get('/:id', getProductById);
 router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createProduct);
 router.put('/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateProduct);
+router.delete('/:id', authorize([Role.ADMIN]), deleteProduct);
 router.post('/:id/adjust-stock', authorize([Role.ADMIN, Role.OPERATOR]), adjustProductStock);
 
 // Categories

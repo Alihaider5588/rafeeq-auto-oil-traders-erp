@@ -465,3 +465,70 @@ export const createUnit = async (req: AuthenticatedRequest, res: Response): Prom
     res.status(500).json({ success: false, message: 'Failed to create unit' });
   }
 };
+
+// DELETE /api/products/:id (Permanent Delete from DB and POS)
+export const deleteProduct = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true, name: true, sku: true },
+    });
+
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete associated stock movements
+      await tx.stockMovement.deleteMany({ where: { productId: id } });
+
+      // 2. Delete customer custom rate history
+      if ((tx as any).customerProductRate) {
+        await (tx as any).customerProductRate.deleteMany({ where: { productId: id } });
+      }
+
+      // 3. Delete delivery and web order items
+      if ((tx as any).deliveryItem) {
+        await (tx as any).deliveryItem.deleteMany({ where: { productId: id } });
+      }
+      if ((tx as any).webOrderItem) {
+        await (tx as any).webOrderItem.deleteMany({ where: { productId: id } });
+      }
+
+      // 4. Delete sales & purchase return items
+      if ((tx as any).salesReturnItem) {
+        await (tx as any).salesReturnItem.deleteMany({ where: { productId: id } });
+      }
+      if ((tx as any).purchaseReturnItem) {
+        await (tx as any).purchaseReturnItem.deleteMany({ where: { productId: id } });
+      }
+
+      // 5. Delete sales and purchase items
+      await tx.saleItem.deleteMany({ where: { productId: id } });
+      await tx.purchaseItem.deleteMany({ where: { productId: id } });
+
+      // 6. Permanently delete product record
+      await tx.product.delete({ where: { id } });
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'PRODUCT_DELETED',
+      entityType: 'PRODUCT',
+      entityId: id,
+      details: { name: product.name, sku: product.sku },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Product "${product.name}" (${product.sku}) was permanently deleted from database and POS.`,
+    });
+  } catch (error: any) {
+    console.error('deleteProduct error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete product' });
+  }
+};

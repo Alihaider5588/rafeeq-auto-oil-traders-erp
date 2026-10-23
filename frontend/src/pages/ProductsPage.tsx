@@ -3,10 +3,13 @@ import api, { getMediaUrl } from '../services/api';
 import { Product, Category, Unit } from '../types';
 import { 
   Package, Plus, Search, AlertCircle, Check, Edit2, Sliders, 
-  FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw
+  FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw, Trash2
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const ProductsPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -46,6 +49,7 @@ export const ProductsPage: React.FC = () => {
   });
 
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [imageUploading, setImageUploading] = useState(false);
 
   // Stock Adjust Form
@@ -54,6 +58,22 @@ export const ProductsPage: React.FC = () => {
     quantity: '',
     notes: ''
   });
+
+  // Top Page Operation Notification Banners
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
+
+  const triggerOperationError = (msg: string) => {
+    setOperationError(msg);
+    setOperationSuccess('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const triggerOperationSuccess = (msg: string) => {
+    setOperationSuccess(msg);
+    setOperationError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Category Manage Form
   const [newCatName, setNewCatName] = useState('');
@@ -157,6 +177,7 @@ export const ProductsPage: React.FC = () => {
       isActive: true,
     });
     setModalError('');
+    setFieldErrors({});
     setShowAddEditModal(true);
   };
 
@@ -186,6 +207,7 @@ export const ProductsPage: React.FC = () => {
       isActive: prod.isActive ?? true,
     });
     setModalError('');
+    setFieldErrors({});
     setShowAddEditModal(true);
   };
 
@@ -211,9 +233,49 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
+  const handleDeleteProduct = async (prod: Product) => {
+    const confirmed = window.confirm(
+      `⚠️ KYA AAP IS PRODUCT KO DATABASE AUR POS SE PERMANENTLY DELETE KARNA CHAHTE HAIN?\n\n"${prod.name}" (${prod.sku})\n\nIs product ka tamam stock aur catalog record mukammal delete ho jaye ga.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const res = await api.delete(`/products/${prod.id}`);
+      triggerOperationSuccess(res.data.message || `Product "${prod.name}" database aur POS se permanently delete ho chuka hai!`);
+      loadProducts();
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Product delete nahi ho saka. Barah-e-karam dobara koshish karein.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderFieldErrorTag = (fieldName: string) => {
+    if (!fieldErrors[fieldName]) return null;
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        backgroundColor: '#fee2e2',
+        color: '#b91c1c',
+        padding: '3px 8px',
+        borderRadius: '6px',
+        fontSize: '0.74rem',
+        fontWeight: 700,
+        marginTop: '4px',
+        border: '1px solid #fca5a5'
+      }}>
+        <span>⚠️ yaha par mistake ho rai ha:</span> {fieldErrors[fieldName]}
+      </div>
+    );
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setModalError('');
+    setFieldErrors({});
 
     try {
       const pPrice = parseFloat(formData.purchasePrice);
@@ -222,28 +284,35 @@ export const ProductsPage: React.FC = () => {
       const minStock = parseFloat(formData.minimumStockLevel);
       const opStock = parseFloat(formData.openingStock);
 
+      const errors: Record<string, string> = {};
       if (!formData.name.trim()) {
-        setModalError('Product name is required');
-        return;
+        errors.name = 'Product name lazmi hai, khali nahi chora ja sakta';
       }
       if (!formData.sku.trim()) {
-        setModalError('SKU / Code is required');
-        return;
+        errors.sku = 'SKU / Code lazmi hai';
+      }
+      if (!formData.brand.trim()) {
+        errors.brand = 'Brand / Company name lazmi hai';
       }
       if (!formData.categoryId) {
-        setModalError('Please select a Category');
-        return;
+        errors.categoryId = 'Category select karna lazmi hai';
       }
       if (!formData.unitId) {
-        setModalError('Please select a Base Unit');
-        return;
+        errors.unitId = 'Base unit select karna lazmi hai';
       }
       if (isNaN(pPrice) || pPrice < 0) {
-        setModalError('Please enter a valid Purchase Price');
-        return;
+        errors.purchasePrice = 'Purchase price durust enter karein (0 ya is se barhi raqam)';
       }
       if (isNaN(sPrice) || sPrice < 0) {
-        setModalError('Please enter a valid Retail Sale Rate');
+        errors.salePrice = 'Retail sale rate durust enter karein (0 ya is se barhi raqam)';
+      }
+      if (formData.primaryUnitId && (Number(formData.conversionFactor) < 1 || isNaN(Number(formData.conversionFactor)))) {
+        errors.conversionFactor = 'Conversion rate 1 ya is se barha hona chahiye';
+      }
+
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        setModalError('Form me mistakes hain! Har mistake wale box ke upar tag check karein.');
         return;
       }
 
@@ -277,17 +346,26 @@ export const ProductsPage: React.FC = () => {
       }
 
       setShowAddEditModal(false);
+      triggerOperationSuccess(isEditing ? `Product "${formData.name}" kamyabi se update ho gaya!` : `Naya Product "${formData.name}" kamyabi se add ho gaya!`);
       loadProducts();
     } catch (err: any) {
       const resp = err.response?.data;
       let msg = resp?.message || resp?.error;
-      if (!msg && resp?.errors?.fieldErrors) {
-        const fieldErrors = resp.errors.fieldErrors;
-        msg = Object.entries(fieldErrors)
-          .map(([f, list]: [string, any]) => `${f}: ${list?.[0]}`)
-          .join(', ');
+      const serverFieldErrors: Record<string, string> = {};
+
+      if (resp?.errors?.fieldErrors) {
+        Object.entries(resp.errors.fieldErrors).forEach(([f, list]: [string, any]) => {
+          serverFieldErrors[f] = list?.[0] || 'Invalid value';
+        });
+      }
+      if (msg && msg.toLowerCase().includes('sku')) {
+        serverFieldErrors.sku = 'Yeh SKU pehle se registered hai! Koi doosra unique code enter karein.';
+      }
+      if (Object.keys(serverFieldErrors).length > 0) {
+        setFieldErrors(serverFieldErrors);
       }
       setModalError(msg || 'Failed to save product');
+      triggerOperationError(msg || 'Product save nahi ho saka. Barah-e-karam details check karein.');
     }
   };
 
@@ -315,9 +393,10 @@ export const ProductsPage: React.FC = () => {
       setShowAdjustStockModal(false);
       setSelectedProductForStock(null);
       setStockAdjustData({ type: 'ADD', quantity: '', notes: '' });
+      triggerOperationSuccess(`"${selectedProductForStock.name}" ka stock kamyabi se update ho gaya! (Naya Stock: ${newStock})`);
       loadProducts();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to adjust stock');
+      triggerOperationError(err.response?.data?.message || 'Stock adjust nahi ho saka. Barah-e-karam dobara koshish karein.');
     }
   };
 
@@ -332,14 +411,78 @@ export const ProductsPage: React.FC = () => {
       });
       setNewCatName('');
       setNewCatDesc('');
+      triggerOperationSuccess(`Nayi Category "${newCatName.trim()}" kamyabi se shamil ho gayi!`);
       loadMetadata();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to create category');
+      triggerOperationError(err.response?.data?.message || 'Category shamil nahi ho saki.');
     }
   };
 
   return (
     <div>
+      {/* Top Operation Failure / Success Banners */}
+      {operationError && (
+        <div style={{
+          backgroundColor: '#fee2e2',
+          border: '2px solid #ef4444',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#991b1b',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: '0.95rem' }}>Operation Nakaam Raha:</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#b91c1c' }}>{operationError}</div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setOperationError('')}
+            style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b', fontWeight: 900 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {operationSuccess && (
+        <div style={{
+          backgroundColor: '#ecfdf5',
+          border: '2px solid #10b981',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#065f46',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>✅</span>
+            <div>
+              <div style={{ fontSize: '0.95rem' }}>Kamyabi (Operation Successful):</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#047857' }}>{operationSuccess}</div>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setOperationSuccess('')}
+            style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#065f46', fontWeight: 900 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Page Title & Actions */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -538,6 +681,16 @@ export const ProductsPage: React.FC = () => {
                         >
                           <Sliders size={14} />
                         </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteProduct(p)}
+                            className="btn btn-outline"
+                            style={{ padding: '5px 8px', color: '#ef4444', borderColor: '#fca5a5' }}
+                            title="Permanently Delete Product from POS & DB (Admin only)"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -606,10 +759,15 @@ export const ProductsPage: React.FC = () => {
                     type="text"
                     className="form-control"
                     placeholder="e.g. Total Quartz 9000 5W-40 (4L)"
+                    style={{ ...(fieldErrors.name ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' }));
+                      setFormData({ ...formData, name: e.target.value });
+                    }}
                     required
                   />
+                  {renderFieldErrorTag('name')}
                 </div>
 
                 <div>
@@ -618,10 +776,15 @@ export const ProductsPage: React.FC = () => {
                     type="text"
                     className="form-control"
                     placeholder="e.g. TOT-9000-4L"
+                    style={{ ...(fieldErrors.sku ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.sku) setFieldErrors(prev => ({ ...prev, sku: '' }));
+                      setFormData({ ...formData, sku: e.target.value });
+                    }}
                     required
                   />
+                  {renderFieldErrorTag('sku')}
                 </div>
               </div>
 
@@ -632,18 +795,27 @@ export const ProductsPage: React.FC = () => {
                     type="text"
                     className="form-control"
                     placeholder="e.g. Total Energies, Shell, Guard"
+                    style={{ ...(fieldErrors.brand ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.brand}
-                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.brand) setFieldErrors(prev => ({ ...prev, brand: '' }));
+                      setFormData({ ...formData, brand: e.target.value });
+                    }}
                     required
                   />
+                  {renderFieldErrorTag('brand')}
                 </div>
 
                 <div>
                   <label className="form-label">Category *</label>
                   <select
                     className="form-control"
+                    style={{ ...(fieldErrors.categoryId ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.categoryId) setFieldErrors(prev => ({ ...prev, categoryId: '' }));
+                      setFormData({ ...formData, categoryId: e.target.value });
+                    }}
                     required
                   >
                     <option value="">Select Category</option>
@@ -651,6 +823,7 @@ export const ProductsPage: React.FC = () => {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {renderFieldErrorTag('categoryId')}
                 </div>
               </div>
 
@@ -696,15 +869,23 @@ export const ProductsPage: React.FC = () => {
                     <select
                       className="form-control"
                       value={formData.unitId}
-                      onChange={(e) => setFormData({ ...formData, unitId: e.target.value })}
+                      onChange={(e) => {
+                        if (fieldErrors.unitId) setFieldErrors(prev => ({ ...prev, unitId: '' }));
+                        setFormData({ ...formData, unitId: e.target.value });
+                      }}
                       required
-                      style={{ backgroundColor: '#ffffff', borderColor: '#7dd3fc' }}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        borderColor: fieldErrors.unitId ? '#ef4444' : '#7dd3fc',
+                        ...(fieldErrors.unitId ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+                      }}
                     >
                       <option value="">Select Base Unit</option>
                       {units.map((u) => (
                         <option key={u.id} value={u.id}>{u.name} ({u.symbol})</option>
                       ))}
                     </select>
+                    {renderFieldErrorTag('unitId')}
                     <small style={{ color: '#0284c7', fontSize: '0.72rem' }}>e.g. DOZENS (Dzn), BOTTLE (Btl), PIECE (Pc)</small>
                   </div>
                 </div>
@@ -725,9 +906,17 @@ export const ProductsPage: React.FC = () => {
                         max="500"
                         className="form-control"
                         placeholder="e.g. 25"
-                        style={{ width: '130px', fontWeight: 800, fontSize: '1rem', color: '#0369a1', borderColor: '#0284c7' }}
+                        style={{
+                          width: '130px',
+                          fontWeight: 800,
+                          fontSize: '1rem',
+                          color: '#0369a1',
+                          borderColor: fieldErrors.conversionFactor ? '#ef4444' : '#0284c7',
+                          ...(fieldErrors.conversionFactor ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+                        }}
                         value={formData.conversionFactor === '0' ? '' : formData.conversionFactor}
                         onChange={(e) => {
+                          if (fieldErrors.conversionFactor) setFieldErrors(prev => ({ ...prev, conversionFactor: '' }));
                           const val = e.target.value;
                           setFormData({ ...formData, conversionFactor: val });
                         }}
@@ -739,6 +928,7 @@ export const ProductsPage: React.FC = () => {
                         (Enter 1 to 500 items per carton/box)
                       </small>
                     </div>
+                    {renderFieldErrorTag('conversionFactor')}
                   </div>
                 )}
               </div>
@@ -746,41 +936,71 @@ export const ProductsPage: React.FC = () => {
               {/* Pricing Section */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
-                  <label className="form-label">Purchase / Cost Price (Rs.) *</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>
+                    Purchase / Cost Price (Rs.) * <span style={{ color: '#dc2626', fontSize: '0.72rem' }}>(🔒 Private)</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     className="form-control"
                     placeholder="e.g. 6200"
+                    style={{ ...(fieldErrors.purchasePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.purchasePrice === '0' ? '' : formData.purchasePrice}
-                    onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.purchasePrice) setFieldErrors(prev => ({ ...prev, purchasePrice: '' }));
+                      setFormData({ ...formData, purchasePrice: e.target.value });
+                    }}
                     required
                   />
+                  {renderFieldErrorTag('purchasePrice')}
+                  <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
+                    Sirf internal cost k liye hai, public ko nahi dikhayi jati.
+                  </small>
                 </div>
 
                 <div>
-                  <label className="form-label">Retail Sale Rate (Rs.) *</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>
+                    Retail Sale Rate (Rs.) * <span style={{ color: '#16a34a', fontSize: '0.72rem' }}>(🌐 Public)</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     className="form-control"
                     placeholder="e.g. 7500"
+                    style={{ ...(fieldErrors.salePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.salePrice === '0' ? '' : formData.salePrice}
-                    onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.salePrice) setFieldErrors(prev => ({ ...prev, salePrice: '' }));
+                      setFormData({ ...formData, salePrice: e.target.value });
+                    }}
                     required
                   />
+                  {renderFieldErrorTag('salePrice')}
+                  <small style={{ color: '#059669', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
+                    Yeh counter aur public website par display honi wali price hai.
+                  </small>
                 </div>
 
                 <div>
-                  <label className="form-label">Wholesale Rate (Rs.)</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>
+                    Wholesale Rate (Rs.) <span style={{ color: '#d97706', fontSize: '0.72rem' }}>(🔒 Private - B2B)</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     className="form-control"
                     placeholder="e.g. 6800"
+                    style={{ ...(fieldErrors.wholesalePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
                     value={formData.wholesalePrice === '0' ? '' : formData.wholesalePrice}
-                    onChange={(e) => setFormData({ ...formData, wholesalePrice: e.target.value })}
+                    onChange={(e) => {
+                      if (fieldErrors.wholesalePrice) setFieldErrors(prev => ({ ...prev, wholesalePrice: '' }));
+                      setFormData({ ...formData, wholesalePrice: e.target.value });
+                    }}
                   />
+                  {renderFieldErrorTag('wholesalePrice')}
+                  <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
+                    Wholesale rate public website par show nahi hota.
+                  </small>
                 </div>
               </div>
 

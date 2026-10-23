@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, LedgerEntry } from '../types';
-import { BookOpen, DollarSign, PlusCircle, CheckCircle, Search, RefreshCw } from 'lucide-react';
+import { BookOpen, DollarSign, PlusCircle, CheckCircle, Search, RefreshCw, Printer, AlertCircle, Phone } from 'lucide-react';
 
 export const LedgersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'SUPPLIERS'>('CUSTOMERS');
@@ -14,12 +14,15 @@ export const LedgersPage: React.FC = () => {
 
   // Payment voucher form modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showPrintStatement, setShowPrintStatement] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('CASH');
   const [payReference, setPayReference] = useState('');
   const [payNotes, setPayNotes] = useState('');
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payMsg, setPayMsg] = useState('');
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
 
   useEffect(() => {
     loadEntities();
@@ -89,7 +92,8 @@ export const LedgersPage: React.FC = () => {
 
       const res = await api.post('/ledgers/payment', payload);
       if (res.data.success) {
-        setPayMsg('Payment voucher successfully posted to ledger!');
+        setOperationSuccess('Payment voucher successfully posted to ledger!');
+        setOperationError('');
         setPayAmount('');
         setPayNotes('');
         setPayReference('');
@@ -98,10 +102,33 @@ export const LedgersPage: React.FC = () => {
         loadEntities(); // refresh balance
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Payment failed');
+      const errMsg = err.response?.data?.message || 'Payment voucher could not be recorded';
+      setOperationError(errMsg);
     } finally {
       setPaySubmitting(false);
     }
+  };
+
+  const selectedCustomer = activeTab === 'CUSTOMERS' ? customers.find((c) => c.id === selectedEntityId) : null;
+  const selectedSupplier = activeTab === 'SUPPLIERS' ? suppliers.find((s) => s.id === selectedEntityId) : null;
+
+  const handleShareWhatsApp = () => {
+    if (!selectedCustomer) return;
+    const phone = selectedCustomer.phone.replace(/^0+/, '').replace(/\D/g, '');
+    const balance = Number(entitySummary?.currentReceivable || 0);
+    const balanceText = balance <= 0
+      ? 'Aap ka tamam pichla khata mukammal CLEAR (Rs. 0) hai.'
+      : `Aap ka kul wajib-ul-ada baqaya udhar: Rs. ${balance.toLocaleString()}`;
+    const text = encodeURIComponent(
+      `*RAFIQ AUTO & OIL TRADERS — OKARA*\n\n` +
+      `Mohtaram *${selectedCustomer.shopName}* (${selectedCustomer.ownerName}),\n` +
+      `Aap ke khate ki taza tareen soorat-e-haal:\n\n` +
+      `• Kul Mal (Debits): Rs. ${Number(entitySummary?.totalDebit || 0).toLocaleString()}\n` +
+      `• Kul Wasooli (Credits): Rs. ${Number(entitySummary?.totalCredit || 0).toLocaleString()}\n` +
+      `• *${balanceText}*\n\n` +
+      `Shukriya!\n*Rafiq Auto & Oil Traders, 54-Stop Okara*\nPh: 0306-9258573`
+    );
+    window.open(`https://wa.me/92${phone}?text=${text}`, '_blank');
   };
 
   return (
@@ -128,17 +155,69 @@ export const LedgersPage: React.FC = () => {
             <RefreshCw size={15} className={loading ? 'spin' : ''} /> Refresh
           </button>
           {selectedEntityId && (
-            <button
-              type="button"
-              onClick={() => setShowPaymentModal(true)}
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <DollarSign size={18} /> Record Payment / Receipt
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowPrintStatement(true)}
+                className="btn btn-outline"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                title="Print or Save PDF Statement for Customer"
+              >
+                <Printer size={16} /> Print / Save PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(true)}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <DollarSign size={18} /> Record Payment / Receipt
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Operation Feedback Alerts */}
+      {operationError && (
+        <div style={{
+          backgroundColor: '#fee2e2',
+          border: '2px solid #ef4444',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#991b1b',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 800 }}>
+            <AlertCircle size={22} color="#dc2626" />
+            <span>⚠️ Operation Nakaam Raha: {operationError}</span>
+          </div>
+          <button onClick={() => setOperationError('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b' }}>×</button>
+        </div>
+      )}
+
+      {operationSuccess && (
+        <div style={{
+          backgroundColor: '#dcfce7',
+          border: '1.5px solid #86efac',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          color: '#15803d',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700 }}>
+            <CheckCircle size={20} color="#16a34a" />
+            <span>✓ {operationSuccess}</span>
+          </div>
+          <button onClick={() => setOperationSuccess('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#15803d' }}>×</button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
@@ -360,6 +439,248 @@ export const LedgersPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Ledger Statement Modal (Print / Save as PDF) */}
+      {showPrintStatement && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 110, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '900px',
+            maxWidth: '96%',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }}>
+            {/* Modal Controls Header */}
+            <div className="no-print" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 24px',
+              borderBottom: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                  {activeTab === 'CUSTOMERS' ? 'Customer Account Ledger Statement' : 'Supplier Account Statement'}
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Print button dabane se browser "Save as PDF" ka option deta hai jahan se aap PDF save kar ke customer ko bhej saktay hain.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {activeTab === 'CUSTOMERS' && selectedCustomer && (
+                  <button
+                    type="button"
+                    onClick={handleShareWhatsApp}
+                    className="btn btn-outline btn-sm"
+                    style={{ borderColor: '#16a34a', color: '#16a34a', fontWeight: 700 }}
+                    title="Send Khata Summary to Customer WhatsApp"
+                  >
+                    💬 WhatsApp Khata
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Printer size={16} /> Print / Save as PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintStatement(false)}
+                  className="btn btn-outline btn-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Printable Sheet */}
+            <div style={{ padding: '24px', overflowY: 'auto' }}>
+              <div className="printable-area" style={{
+                backgroundColor: '#ffffff',
+                color: '#000000',
+                fontFamily: 'Arial, Helvetica, sans-serif',
+                fontSize: '12px',
+                lineHeight: 1.5,
+              }}>
+                {/* Official Letterhead */}
+                <div style={{
+                  borderBottom: '2px solid #000000',
+                  paddingBottom: '12px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start'
+                }}>
+                  <div>
+                    <h1 style={{ fontSize: '20px', fontWeight: 900, margin: 0, letterSpacing: '0.5px' }}>
+                      RAFIQ AUTO & OIL TRADERS
+                    </h1>
+                    <div style={{ fontSize: '15px', fontWeight: 800, margin: '2px 0' }}>
+                      رفیق آٹو اینڈ آئل ٹریڈرز
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#333333' }}>
+                      54-Stop Near MCB Bank, Dipalpur Road, Okara | Ph: 0306-9258573, 0327-7497457
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{
+                      display: 'inline-block',
+                      backgroundColor: '#000000',
+                      color: '#ffffff',
+                      padding: '4px 12px',
+                      fontWeight: 900,
+                      fontSize: '12px',
+                      borderRadius: '4px',
+                      letterSpacing: '1px'
+                    }}>
+                      ACCOUNT STATEMENT
+                    </div>
+                    <div style={{ fontSize: '10px', marginTop: '4px', color: '#555555' }}>
+                      Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Details Box */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 1fr',
+                  gap: '14px',
+                  border: '1px solid #000000',
+                  padding: '12px 14px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  backgroundColor: '#fafafa'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '10px', color: '#555', textTransform: 'uppercase', fontWeight: 700 }}>
+                      Party / Account Name
+                    </div>
+                    <div style={{ fontSize: '15px', fontWeight: 900, color: '#000' }}>
+                      {activeTab === 'CUSTOMERS' ? selectedCustomer?.shopName : selectedSupplier?.companyName}
+                    </div>
+                    <div style={{ fontSize: '11px', marginTop: '2px' }}>
+                      Owner: <b>{activeTab === 'CUSTOMERS' ? selectedCustomer?.ownerName : selectedSupplier?.contactPerson}</b>
+                    </div>
+                    <div style={{ fontSize: '11px' }}>
+                      Phone: <b>{activeTab === 'CUSTOMERS' ? selectedCustomer?.phone : selectedSupplier?.phone}</b>
+                    </div>
+                    <div style={{ fontSize: '11px' }}>
+                      Area: {activeTab === 'CUSTOMERS' ? (selectedCustomer?.area || selectedCustomer?.address || 'Okara Local') : (selectedSupplier?.address || 'N/A')}
+                    </div>
+                  </div>
+
+                  <div style={{ borderLeft: '1px solid #ccc', paddingLeft: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                      <span>Total Invoiced (Debits):</span>
+                      <b>Rs. {Number(entitySummary?.totalDebit || 0).toLocaleString()}</b>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                      <span>Total Paid / Received:</span>
+                      <b style={{ color: '#059669' }}>Rs. {Number(entitySummary?.totalCredit || 0).toLocaleString()}</b>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      borderTop: '1.5px solid #000',
+                      paddingTop: '4px',
+                      marginTop: '4px',
+                      fontSize: '13px',
+                      fontWeight: 900
+                    }}>
+                      <span>Net Balance / Udhar:</span>
+                      <span>
+                        Rs. {Number(activeTab === 'CUSTOMERS' ? entitySummary?.currentReceivable : entitySummary?.currentPayable || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    {Number(activeTab === 'CUSTOMERS' ? entitySummary?.currentReceivable : entitySummary?.currentPayable || 0) <= 0 && (
+                      <div style={{
+                        marginTop: '4px',
+                        textAlign: 'right',
+                        color: '#15803d',
+                        fontWeight: 900,
+                        fontSize: '11px'
+                      }}>
+                        ✓ KHATA MUKAMMAL CLEAR (0)
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ledger Transactions Table */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '20px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#000000', color: '#ffffff' }}>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>DATE</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>TYPE</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>REF #</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>DESCRIPTION</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>DEBIT (Rs.)</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>CREDIT (Rs.)</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>BALANCE (Rs.)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerEntries.map((e, idx) => (
+                      <tr key={e.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                        <td style={{ padding: '6px 8px' }}>{new Date(e.date).toLocaleDateString()}</td>
+                        <td style={{ padding: '6px 8px', fontWeight: 700 }}>{e.transactionType}</td>
+                        <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{e.referenceId || '-'}</td>
+                        <td style={{ padding: '6px 8px' }}>{e.description}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: Number(e.debit) > 0 ? 700 : 400 }}>
+                          {Number(e.debit) > 0 ? Number(e.debit).toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: Number(e.credit) > 0 ? 700 : 400, color: Number(e.credit) > 0 ? '#059669' : '#000' }}>
+                          {Number(e.credit) > 0 ? Number(e.credit).toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 900 }}>
+                          Rs. {Number(e.runningBalance).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Signatures & Verification */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginTop: '40px', paddingTop: '20px', borderTop: '1px dashed #000000', fontSize: '11px', textAlign: 'center' }}>
+                  <div>
+                    <div style={{ borderBottom: '1px solid #000', height: '24px' }}></div>
+                    <div style={{ marginTop: '6px', fontWeight: 700 }}>Prepared By (Accounts)</div>
+                  </div>
+                  <div>
+                    <div style={{ borderBottom: '1px solid #000', height: '24px' }}></div>
+                    <div style={{ marginTop: '6px', fontWeight: 700 }}>Proprietor (M. Shafiq) Stamp</div>
+                  </div>
+                  <div>
+                    <div style={{ borderBottom: '1px solid #000', height: '24px' }}></div>
+                    <div style={{ marginTop: '6px', fontWeight: 700 }}>Customer Confirmation</div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'center', fontSize: '9px', color: '#666', marginTop: '20px' }}>
+                  This statement was generated electronically from Rafiq Auto & Oil Traders ERP System.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
