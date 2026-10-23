@@ -3,8 +3,15 @@ import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { OrderStatus } from '../types/enums';
 
+let cachedDashboard: { payload: any; expiry: number } | null = null;
+
 export const getDashboardStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    if (cachedDashboard && Date.now() < cachedDashboard.expiry) {
+      res.json(cachedDashboard.payload);
+      return;
+    }
+
     const today = new Date();
     const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
     const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
@@ -169,7 +176,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       };
     });
 
-    res.json({
+    const dashboardResponse = {
       success: true,
       stats: {
         today: {
@@ -205,7 +212,10 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         recentSales,
         recentAuditLogs,
       },
-    });
+    };
+
+    cachedDashboard = { payload: dashboardResponse, expiry: Date.now() + 15000 };
+    res.json(dashboardResponse);
   } catch (error) {
     console.error('getDashboardStats error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate dashboard statistics' });

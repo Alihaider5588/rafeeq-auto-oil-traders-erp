@@ -1,41 +1,50 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 
+// Direct import for essential entry screen
 import { Login } from './pages/Login';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { SalesmanPortal } from './pages/SalesmanPortal';
-import { ProductsPage } from './pages/ProductsPage';
-import { SalesListPage } from './pages/SalesListPage';
-import { PurchasesPage } from './pages/PurchasesPage';
-import { CustomersAndSuppliersPage } from './pages/PartnersPage';
-import { LedgersPage } from './pages/LedgersPage';
-import { DeliveryManagementPage } from './pages/DeliveryManagementPage';
-import { CashierDashboard } from './pages/CashierDashboard';
-import { OperatorDashboard } from './pages/OperatorDashboard';
-import { ReportsPage } from './pages/ReportsPage';
-import { UserManagementPage } from './pages/UserManagementPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { AuditTrailPage } from './pages/AuditTrailPage';
 
-// New Modules
-import { CataloguePage } from './pages/CataloguePage';
-import { ConfidentialBrandPage } from './pages/ConfidentialBrandPage';
-import { ExpensesPage } from './pages/ExpensesPage';
-import { EmployeesPage } from './pages/EmployeesPage';
-import { WebOrdersQueuePage } from './pages/WebOrdersQueuePage';
-import { UtilitiesPage } from './pages/UtilitiesPage';
+// Helper for typed named-export lazy loading
+const lazyNamed = <T extends Record<string, any>>(
+  importFn: () => Promise<T>,
+  exportName: keyof T
+) => lazy(() => importFn().then((mod) => ({ default: mod[exportName] })));
+
+// Lazy-loaded app modules for blazing-fast initial bundle load
+const AdminDashboard = lazyNamed(() => import('./pages/AdminDashboard'), 'AdminDashboard');
+const SalesmanPortal = lazyNamed(() => import('./pages/SalesmanPortal'), 'SalesmanPortal');
+const ProductsPage = lazyNamed(() => import('./pages/ProductsPage'), 'ProductsPage');
+const SalesListPage = lazyNamed(() => import('./pages/SalesListPage'), 'SalesListPage');
+const PurchasesPage = lazyNamed(() => import('./pages/PurchasesPage'), 'PurchasesPage');
+const CustomersAndSuppliersPage = lazyNamed(() => import('./pages/PartnersPage'), 'CustomersAndSuppliersPage');
+const LedgersPage = lazyNamed(() => import('./pages/LedgersPage'), 'LedgersPage');
+const DeliveryManagementPage = lazyNamed(() => import('./pages/DeliveryManagementPage'), 'DeliveryManagementPage');
+const CashierDashboard = lazyNamed(() => import('./pages/CashierDashboard'), 'CashierDashboard');
+const OperatorDashboard = lazyNamed(() => import('./pages/OperatorDashboard'), 'OperatorDashboard');
+const ReportsPage = lazyNamed(() => import('./pages/ReportsPage'), 'ReportsPage');
+const UserManagementPage = lazyNamed(() => import('./pages/UserManagementPage'), 'UserManagementPage');
+const SettingsPage = lazyNamed(() => import('./pages/SettingsPage'), 'SettingsPage');
+const AuditTrailPage = lazyNamed(() => import('./pages/AuditTrailPage'), 'AuditTrailPage');
+
+// Heavy module pages (split out xlsx, jspdf, etc.)
+const CataloguePage = lazyNamed(() => import('./pages/CataloguePage'), 'CataloguePage');
+const ConfidentialBrandPage = lazyNamed(() => import('./pages/ConfidentialBrandPage'), 'ConfidentialBrandPage');
+const ExpensesPage = lazyNamed(() => import('./pages/ExpensesPage'), 'ExpensesPage');
+const EmployeesPage = lazyNamed(() => import('./pages/EmployeesPage'), 'EmployeesPage');
+const WebOrdersQueuePage = lazyNamed(() => import('./pages/WebOrdersQueuePage'), 'WebOrdersQueuePage');
+const UtilitiesPage = lazyNamed(() => import('./pages/UtilitiesPage'), 'UtilitiesPage');
 
 // Public Website Pages
-import { HomePage } from './pages/public/HomePage';
-import { ProductsCatalogPage } from './pages/public/ProductsCatalogPage';
-import { CategoriesPage } from './pages/public/CategoriesPage';
-import { ProductDetailPage } from './pages/public/ProductDetailPage';
-import { AboutPage } from './pages/public/AboutPage';
-import { ContactPage } from './pages/public/ContactPage';
+const HomePage = lazyNamed(() => import('./pages/public/HomePage'), 'HomePage');
+const ProductsCatalogPage = lazyNamed(() => import('./pages/public/ProductsCatalogPage'), 'ProductsCatalogPage');
+const CategoriesPage = lazyNamed(() => import('./pages/public/CategoriesPage'), 'CategoriesPage');
+const ProductDetailPage = lazyNamed(() => import('./pages/public/ProductDetailPage'), 'ProductDetailPage');
+const AboutPage = lazyNamed(() => import('./pages/public/AboutPage'), 'AboutPage');
+const ContactPage = lazyNamed(() => import('./pages/public/ContactPage'), 'ContactPage');
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({
@@ -85,12 +94,21 @@ const RoleRedirect: React.FC = () => {
   }
 };
 
+const RouteLoadingFallback = () => (
+  <div style={{ display: 'flex', height: '60vh', alignItems: 'center', justifyContent: 'center', color: '#f59e0b', fontSize: '0.95rem', fontWeight: 700 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '1.2rem' }}>🛢️</span> Loading...
+    </div>
+  </div>
+);
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
-          <Routes>
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
           {/* Public Website Routes (No Login Required) */}
           <Route path="/" element={<PublicLayout><HomePage /></PublicLayout>} />
           <Route path="/website" element={<PublicLayout><HomePage /></PublicLayout>} />
@@ -289,9 +307,10 @@ export const App: React.FC = () => {
             }
           />
 
-          {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Catch-all */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </CartProvider>
   </AuthProvider>

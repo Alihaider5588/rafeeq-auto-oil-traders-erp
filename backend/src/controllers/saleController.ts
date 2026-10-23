@@ -246,16 +246,27 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     const userId = req.user!.id;
     const assignedSalesmanId = data.salesmanId || (req.user!.role === Role.SALESMAN ? userId : null);
 
-    // Fetch System Settings
-    const settings = await prisma.systemSetting.findFirst();
+    const productIds = Array.from(new Set(data.items.map((it) => it.productId)));
+
+    // Fetch System Settings, Customer, and all required Products in 1 single parallel roundtrip
+    const [settings, customer, fetchedProducts] = await Promise.all([
+      prisma.systemSetting.findFirst(),
+      prisma.customer.findUnique({ where: { id: data.customerId } }),
+      prisma.product.findMany({
+        where: { id: { in: productIds } },
+        include: { unit: true, primaryUnit: true },
+      }),
+    ]);
+
     const allowNegativeStock = settings?.allowNegativeStock ?? false;
     const requireApproval = settings?.requireOrderApproval && req.user!.role === Role.SALESMAN;
 
-    const customer = await prisma.customer.findUnique({ where: { id: data.customerId } });
     if (!customer) {
       res.status(404).json({ success: false, message: 'Customer not found' });
       return;
     }
+
+    const prodMap = new Map(fetchedProducts.map((p) => [p.id, p]));
 
     // Verify stock availability & calculate costs with Primary/Secondary unit conversion
     let totalSaleAmount = 0;
@@ -275,10 +286,7 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     }> = [];
 
     for (const item of data.items) {
-      const prod = await prisma.product.findUnique({
-        where: { id: item.productId },
-        include: { unit: true, primaryUnit: true },
-      });
+      const prod = prodMap.get(item.productId);
       if (!prod) {
         res.status(404).json({ success: false, message: `Product not found: ${item.productId}` });
         return;
@@ -379,18 +387,6 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
             data: { currentStock: new Prisma.Decimal(newStock) },
           });
 
-          await tx.stockMovement.create({
-            data: {
-              productId: it.productId,
-              movementType: MovementType.SALE,
-              quantity: new Prisma.Decimal(it.baseQuantity),
-              previousStock: new Prisma.Decimal(it.currentStock),
-              newStock: new Prisma.Decimal(newStock),
-              referenceId: sale.id,
-              description: `Sale Inv #${invoiceNumber} (${it.quantity} ${it.unitType})`,
-            },
-          });
-
           // 3. Upsert Customer/Party-Wise Product Rate History
           if ((tx as any).customerProductRate) {
             await (tx as any).customerProductRate.upsert({
@@ -417,6 +413,19 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
             });
           }
         }
+
+        // Batch create all stock movements in 1 single query
+        await tx.stockMovement.createMany({
+          data: itemDetails.map((it) => ({
+            productId: it.productId,
+            movementType: MovementType.SALE,
+            quantity: new Prisma.Decimal(it.baseQuantity),
+            previousStock: new Prisma.Decimal(it.currentStock),
+            newStock: new Prisma.Decimal(it.currentStock - it.baseQuantity),
+            referenceId: sale.id,
+            description: `Sale Inv #${invoiceNumber} (${it.quantity} ${it.unitType})`,
+          })),
+        });
 
         // 4. Update Customer Ledger & Current Receivable
         const currentReceivable = Number(customer.currentReceivable);
@@ -472,42 +481,48 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
       return sale;
     });
 
-    // Audit rate overrides if any
-    const priceOverrides = itemDetails.filter((it) => it.unitPrice !== it.standardPrice);
-    if (priceOverrides.length > 0) {
-      await logAudit({
-        userId,
-        action: 'PRICE_OVERRIDE',
-        entityType: 'SALE',
-        entityId: result.id,
-        details: {
-          invoiceNumber,
-          customer: customer.shopName,
-          overrides: priceOverrides.map((o) => ({
-            product: o.productName,
-            standard: o.standardPrice,
-            charged: o.unitPrice,
-            unitType: o.unitType,
-          })),
-        },
-        ipAddress: req.ip,
-      });
-    }
+    // Fire-and-forget background audit logs without delaying the invoice HTTP response
+    (async () => {
+      try {
+        const priceOverrides = itemDetails.filter((it) => it.unitPrice !== it.standardPrice);
+        if (priceOverrides.length > 0) {
+          await logAudit({
+            userId,
+            action: 'PRICE_OVERRIDE',
+            entityType: 'SALE',
+            entityId: result.id,
+            details: {
+              invoiceNumber,
+              customer: customer.shopName,
+              overrides: priceOverrides.map((o) => ({
+                product: o.productName,
+                standard: o.standardPrice,
+                charged: o.unitPrice,
+                unitType: o.unitType,
+              })),
+            },
+            ipAddress: req.ip,
+          });
+        }
 
-    await logAudit({
-      userId,
-      action: 'SALE_CREATED',
-      entityType: 'SALE',
-      entityId: result.id,
-      details: {
-        invoiceNumber,
-        customer: customer.shopName,
-        netAmount,
-        receivedAmount: data.receivedAmount,
-        grossProfit: totalGrossProfit,
-      },
-      ipAddress: req.ip,
-    });
+        await logAudit({
+          userId,
+          action: 'SALE_CREATED',
+          entityType: 'SALE',
+          entityId: result.id,
+          details: {
+            invoiceNumber,
+            customer: customer.shopName,
+            netAmount,
+            receivedAmount: data.receivedAmount,
+            grossProfit: totalGrossProfit,
+          },
+          ipAddress: req.ip,
+        });
+      } catch (logErr) {
+        console.error('Async audit log error:', logErr);
+      }
+    })();
 
     res.status(201).json({
       success: true,

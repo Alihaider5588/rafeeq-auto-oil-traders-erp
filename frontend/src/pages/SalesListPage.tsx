@@ -59,8 +59,6 @@ export const SalesListPage: React.FC = () => {
 
   useEffect(() => {
     fetchSales();
-    loadCustomers();
-    loadProducts();
   }, []);
 
   const fetchSales = async () => {
@@ -115,6 +113,8 @@ export const SalesListPage: React.FC = () => {
 
   // Open Edit Invoice Modal (Admin Only)
   const openEditModal = (sale: Sale) => {
+    loadCustomers();
+    loadProducts();
     setEditModalSale(sale);
     setEditCustomerId(sale.customerId);
     setEditItems(
