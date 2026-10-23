@@ -102,8 +102,10 @@ export const getPublicProducts = async (req: Request, res: Response): Promise<vo
       specifications: p.specifications || '',
       imageUrl: p.imageUrl || null,
       inStock: Number(p.currentStock) > 0,
-      publicPrice: p.showPublicPrice ? Number(p.salePrice) : null,
-      showPublicPrice: p.showPublicPrice,
+      currentStock: Number(p.currentStock || 0),
+      publicPrice: Number(p.salePrice || 0),
+      salePrice: Number(p.salePrice || 0),
+      showPublicPrice: true,
     }));
 
     res.json({
@@ -178,8 +180,10 @@ export const getPublicProductById = async (req: Request, res: Response): Promise
       specifications: product.specifications || '',
       imageUrl: product.imageUrl || null,
       inStock: Number(product.currentStock) > 0,
-      publicPrice: product.showPublicPrice ? Number(product.salePrice) : null,
-      showPublicPrice: product.showPublicPrice,
+      currentStock: Number(product.currentStock || 0),
+      publicPrice: Number(product.salePrice || 0),
+      salePrice: Number(product.salePrice || 0),
+      showPublicPrice: true,
     };
 
     res.json({ success: true, product: sanitized });

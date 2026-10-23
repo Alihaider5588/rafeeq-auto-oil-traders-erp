@@ -408,17 +408,18 @@ export const ProductsCatalogPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                     <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-                        Wholesale Rate
+                      <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#16a34a', display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+                        <span>Rs. {Number(p.publicPrice || 0).toLocaleString()}</span>
+                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>/ {p.unitSymbol || p.unit || 'Pc'}</span>
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        Available on Request / Order
+                      <div style={{ fontSize: '0.68rem', color: '#d97706', fontWeight: 700 }}>
+                        ★ Retail Rate (Bulk Carton Avail)
                       </div>
                       {p.primaryUnit && p.conversionFactor > 1 && (
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                          1 {p.primaryUnit} = {p.conversionFactor} {p.unitSymbol}
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                          📦 1 {p.primaryUnit} = {p.conversionFactor} {p.unitSymbol}
                         </div>
                       )}
                     </div>

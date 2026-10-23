@@ -32,6 +32,7 @@ interface PublicProduct {
   imageUrl: string | null;
   inStock: boolean;
   publicPrice: number | null;
+  salePrice?: number | null;
   showPublicPrice: boolean;
 }
 
@@ -169,7 +170,7 @@ export const ProductDetailPage: React.FC = () => {
           }}>
             <Truck size={22} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div style={{ fontSize: '0.85rem', color: '#92400e', lineHeight: 1.5 }}>
-              <strong>Bulk Van Route Delivery Available:</strong> Order full cartons or mixed boxes for retail counter supply in Okara, Dipalpur, Renala Khurd, and surrounding workshops.
+              <strong>Bulk Van Route Delivery Available:</strong> Order full cartons or mixed boxes for retail counter supply across <strong>Okara, Kasur, and Sahiwal</strong> (including Dipalpur, Renala Khurd, Pattoki, Chunian, Chichawatni, and surrounding workshops).
             </div>
           </div>
         </div>
@@ -202,9 +203,16 @@ export const ProductDetailPage: React.FC = () => {
             marginBottom: '24px',
           }}>
             <div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Wholesale Price on Request</div>
-              <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
-                Contact our sales desk or place an online order request for today's wholesale rate.
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 900, color: '#16a34a' }}>
+                  Rs. {Number(product.publicPrice || product.salePrice || 0).toLocaleString()}
+                </span>
+                <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                  / {product.unitSymbol || product.unit || 'Pc'} (Retail Rate)
+                </span>
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#d97706', fontWeight: 700, marginTop: '4px' }}>
+                ★ Special Tiered Discounts on Wholesale Full-Carton Bookings
               </div>
             </div>
 

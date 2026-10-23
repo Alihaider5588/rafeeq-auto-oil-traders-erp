@@ -542,17 +542,18 @@ export const HomePage: React.FC = () => {
                       </div>
                     )}
 
-                    <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                       <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-                          Wholesale Pricing
+                        <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#16a34a', display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+                          <span>Rs. {Number(p.publicPrice || 0).toLocaleString()}</span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>/ {p.unitSymbol || p.unit || 'Pc'}</span>
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                          Direct Dealership Stock
+                        <div style={{ fontSize: '0.68rem', color: '#d97706', fontWeight: 700 }}>
+                          ★ Retail Rate (Bulk Carton Avail)
                         </div>
                         {p.primaryUnit && p.conversionFactor > 1 && (
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                            1 {p.primaryUnit} = {p.conversionFactor} {p.unitSymbol}
+                          <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                            📦 1 {p.primaryUnit} = {p.conversionFactor} {p.unitSymbol}
                           </div>
                         )}
                       </div>
@@ -658,18 +659,18 @@ export const HomePage: React.FC = () => {
               fontWeight: 800,
               marginBottom: '16px',
             }}>
-              <Truck size={14} /> Okara & Punjab Distribution Hub
+              <Truck size={14} /> Okara, Kasur & Sahiwal Distribution Hub
             </div>
             <h2 style={{ fontSize: '1.9rem', fontWeight: 900, color: '#ffffff', margin: '0 0 14px 0', lineHeight: 1.25 }}>
-              Dedicated Van Routes & Rapid Shop Delivery
+              Dedicated Van Routes in Okara, Kasur & Sahiwal
             </h2>
             <p style={{ fontSize: '0.92rem', color: '#94a3b8', lineHeight: 1.6, margin: '0 0 24px 0' }}>
-              We operate daily delivery vehicles stocking workshop chains, retail counters, and lube facilities. Order cartons with confidence — prompt dispatches, authentic refinery packaging, and computerized invoices straight to your doorstep.
+              We operate daily delivery vehicles stocking workshop chains, retail counters, and lube facilities across Okara, Kasur, and Sahiwal. Order cartons with confidence — prompt dispatches, authentic refinery packaging, and computerized invoices straight to your doorstep.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '28px' }}>
               <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div style={{ color: '#f59e0b', fontWeight: 800, fontSize: '1.2rem' }}>Same Day</div>
-                <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Local Okara Dispatches</div>
+                <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Okara, Kasur & Sahiwal Dispatches</div>
               </div>
               <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div style={{ color: '#22c55e', fontWeight: 800, fontSize: '1.2rem' }}>Zero Transit</div>
@@ -913,10 +914,10 @@ export const HomePage: React.FC = () => {
 
             <details style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px 22px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
               <summary style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.05rem', outline: 'none' }}>
-                Do you offer delivery van supply outside Okara city?
+                Do you offer delivery van supply in Okara, Kasur & Sahiwal?
               </summary>
               <p style={{ color: '#64748b', fontSize: '0.92rem', lineHeight: 1.7, margin: '12px 0 0 0', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-                Yes, our delivery van routes cover Dipalpur Road, Renala Khurd, Hujra Shah Muqeem, and nearby agricultural lube dealers. Contact our dispatch desk on <strong>0306-9258573</strong> to confirm your route day.
+                Yes, our delivery van routes actively cover <strong>Okara, Kasur, and Sahiwal</strong> (including Dipalpur, Renala Khurd, Pattoki, Chunian, Chichawatni, and nearby agricultural lube dealers). Contact our dispatch desk on <strong>0306-9258573</strong> to confirm your recurring weekly route day.
               </p>
             </details>
 
@@ -1072,8 +1073,12 @@ export const HomePage: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.9rem' }}>
                 <div style={{ color: '#0f172a', fontWeight: 700 }}>{company.phone}</div>
                 <div style={{ color: '#64748b', fontSize: '0.8rem' }}>Proprietors: {company.proprietorNames}</div>
-                <span style={{ color: '#1e293b', fontSize: '0.82rem', fontWeight: 600, marginTop: '2px' }}>Sat – Thu: 8:00 AM – 9:00 PM</span>
-                <span style={{ color: '#dc2626', fontSize: '0.8rem', fontWeight: 800 }}>Friday: CLOSED (جمعہ تعطیل)</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#16a34a', fontWeight: 800, fontSize: '0.88rem', marginTop: '3px' }}>
+                  <span>🟢 Open 24/7 (24 گھنٹے سروس دستیاب ہے)</span>
+                </div>
+                <span style={{ color: '#059669', fontSize: '0.8rem', fontWeight: 700 }}>
+                  ✓ Friday Open (جمعہ تعطیل منسوخ — ہفتے کے 7 دن چوبیس گھنٹے کھلا ہے)
+                </span>
               </div>
             </div>
 

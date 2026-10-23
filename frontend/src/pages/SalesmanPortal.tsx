@@ -313,7 +313,9 @@ export const SalesmanPortal: React.FC = () => {
         marginBottom: '20px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
@@ -736,7 +738,7 @@ export const SalesmanPortal: React.FC = () => {
                     )}
 
                     {/* Unit Selector, Editable Rate, and Quantity */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px', alignItems: 'center' }}>
                       {/* Unit Type (Carton vs Bottle) */}
                       <div>
                         {conv > 1 ? (
@@ -826,7 +828,7 @@ export const SalesmanPortal: React.FC = () => {
               marginBottom: '20px'
             }}>
               {/* Order and Udhar Breakdown */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #cbd5e1' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #cbd5e1' }}>
                 <div>
                   <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Current Bill (Is Order Ka Total):</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
@@ -843,7 +845,7 @@ export const SalesmanPortal: React.FC = () => {
               </div>
 
               {/* Total Payable (Bill + Sabqa Udhar) */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', backgroundColor: '#e2e8f0', padding: '10px 14px', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', backgroundColor: '#e2e8f0', padding: '10px 14px', borderRadius: '8px', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>
                   Kul Wajib-ul-Ada (Current Bill + Sabqa Udhar):
                 </span>
@@ -903,7 +905,7 @@ export const SalesmanPortal: React.FC = () => {
               </div>
 
               {/* Payment Input Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px', marginTop: '10px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Payment Received / Wasool (Rs.) *</label>
                   <input

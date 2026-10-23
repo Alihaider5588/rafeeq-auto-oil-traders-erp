@@ -391,7 +391,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           fontSize: '0.73rem',
           color: '#64748b'
         }}>
-          Software by <strong style={{ color: '#f59e0b', letterSpacing: '0.03em' }}>Nexura Digital</strong>
+          Software by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#f59e0b', letterSpacing: '0.03em', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: '3px' }}>Nexura Digital</a>
         </div>
       </aside>
 

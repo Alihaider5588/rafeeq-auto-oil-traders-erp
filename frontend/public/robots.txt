@@ -1,0 +1,58 @@
+# Robots.txt for Rafiq Auto & Oil Traders
+# Designed for maximum Search Engine (SEO), Generative Engine (GEO) and AI Crawler (AEO) visibility
+
+User-agent: *
+Allow: /
+Allow: /website
+Allow: /website/products
+Allow: /website/categories
+Allow: /website/about
+Allow: /website/contact
+Allow: /llms.txt
+Disallow: /admin
+Disallow: /salesman
+Disallow: /cashier
+Disallow: /operator
+Disallow: /api/
+
+# OpenAI / ChatGPT Crawlers
+User-agent: GPTBot
+Allow: /
+Allow: /llms.txt
+
+User-agent: ChatGPT-User
+Allow: /
+Allow: /llms.txt
+
+# Anthropic / Claude Crawlers
+User-agent: ClaudeBot
+Allow: /
+Allow: /llms.txt
+
+User-agent: anthropic-ai
+Allow: /
+Allow: /llms.txt
+
+# Perplexity AI Crawlers
+User-agent: PerplexityBot
+Allow: /
+Allow: /llms.txt
+
+# Google Gemini / SGE & Googlebot
+User-agent: Google-Extended
+Allow: /
+Allow: /llms.txt
+
+User-agent: Googlebot
+Allow: /
+
+# Microsoft Bing & Copilot
+User-agent: Bingbot
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot
+Allow: /
+
+# Canonical Sitemap and LLM Context Reference
+Sitemap: /sitemap.xml

@@ -378,7 +378,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             <div style={{ marginTop: '10px', paddingTop: '12px', borderTop: '1px solid #1e293b', fontSize: '0.8rem', color: '#94a3b8' }}>
               <div>📍 54-Stop Near MCB Bank, Dipalpur Road, Okara</div>
               <div style={{ marginTop: '4px', color: '#ffb91f', fontWeight: 700 }}>📞 0306-9258573 / 0327-7497457</div>
-              <div style={{ marginTop: '4px', color: '#ef4444', fontWeight: 600 }}>⏰ Saturday - Thursday: 8AM - 9PM (Friday Closed)</div>
+              <div style={{ marginTop: '4px', color: '#22c55e', fontWeight: 700 }}>🟢 Open 24/7: 24 Hours / 7 Days (Friday Open / جمعہ تعطیل منسوخ)</div>
             </div>
           </div>
         )}
@@ -408,7 +408,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             </div>
             
             <p style={{ fontSize: '0.88rem', lineHeight: 1.7, color: '#94a3b8', margin: '0 0 20px 0' }}>
-              Okara's trusted automotive lubricants and engine oil wholesale depot. Providing guaranteed genuine passenger car oils, commercial lubricants, filters, and motorcycle care products across Punjab.
+              Okara, Kasur & Sahiwal's trusted automotive lubricants and engine oil wholesale depot. Providing guaranteed genuine passenger car oils, commercial lubricants, filters, and motorcycle care products across Punjab.
             </p>
             
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -419,7 +419,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
                 • Wholesale Rates
               </span>
               <span style={{ fontSize: '0.75rem', backgroundColor: 'rgba(255, 185, 31, 0.1)', color: '#ffb91f', border: '1px solid rgba(255,185,31,0.3)', padding: '5px 12px', borderRadius: '20px', fontWeight: 700 }}>
-                • Okara Van Route
+                • Okara, Kasur & Sahiwal Van Routes
               </span>
             </div>
           </div>
@@ -534,7 +534,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             <span>{companyInfo.operationalAreas} Hubs</span>
             <span style={{ color: '#334155' }}>|</span>
             <span style={{ color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              Developed by <strong style={{ color: '#ffb91f', letterSpacing: '0.03em' }}>Nexura Digital</strong>
+              Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#ffb91f', letterSpacing: '0.03em', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: '3px' }}>Nexura Digital</a>
             </span>
           </div>
         </div>

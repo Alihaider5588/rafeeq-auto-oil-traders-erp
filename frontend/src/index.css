@@ -756,5 +756,47 @@ table.data-table tbody tr:hover {
     justify-content: center !important;
     text-align: center !important;
   }
+
+  /* Global Mobile POS & Table View Enhancements */
+  .table-container {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+  }
+
+  .data-table {
+    min-width: 620px !important;
+  }
+
+  .card {
+    padding: 16px !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  /* Form controls touch friendly on mobile */
+  .form-control, .btn {
+    min-height: 40px !important;
+    font-size: 0.9rem !important;
+  }
+
+  /* Main content mobile padding */
+  .main-content {
+    padding: 12px 10px !important;
+  }
+
+  .topbar {
+    padding: 10px 14px !important;
+  }
+
+  /* Responsive Modals on Mobile Phones */
+  div[style*="position: fixed"][style*="z-index: 100"] > div,
+  div[style*="position: fixed"][style*="z-index: 110"] > div {
+    max-width: 96vw !important;
+    max-height: 94vh !important;
+    padding: 18px 14px !important;
+  }
 }
+
 

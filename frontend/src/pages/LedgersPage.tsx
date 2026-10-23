@@ -677,7 +677,7 @@ export const LedgersPage: React.FC = () => {
                 </div>
 
                 <div style={{ textAlign: 'center', fontSize: '9px', color: '#666', marginTop: '20px' }}>
-                  This statement was generated electronically from Rafiq Auto & Oil Traders ERP System.
+                  This statement was generated electronically from Rafiq Auto & Oil Traders ERP System | Software Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000', fontWeight: 800, textDecoration: 'underline' }}>Nexura Digital</a> (Contact: <a href="tel:03147816393" style={{ color: '#000', fontWeight: 800, textDecoration: 'none' }}>03147816393</a>)
                 </div>
               </div>
             </div>

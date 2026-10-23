@@ -765,9 +765,10 @@ export const SalesListPage: React.FC = () => {
                 <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '6px 0 4px 0' }}>
                   * {selectedSale.invoiceNumber} *
                 </div>
-                <p style={{ margin: '2px 0' }}>Thank you for your business!</p>
                 <p style={{ margin: '2px 0', fontSize: '9px' }}>Goods once sold will only be exchanged within 3 days with receipt.</p>
-                <p style={{ margin: '4px 0 0 0', fontSize: '9px', fontWeight: 700 }}>Software: Rafiq Auto POS</p>
+                <div style={{ margin: '6px 0 0 0', paddingTop: '6px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a' }}>
+                  Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000000', fontWeight: 900, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000000', fontWeight: 900, textDecoration: 'none' }}>03147816393</a>
+                </div>
               </div>
             </div>
           </div>
