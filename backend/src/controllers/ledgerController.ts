@@ -239,3 +239,122 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ success: false, message: error.message || 'Payment processing failed' });
   }
 };
+
+export const deleteLedgerEntry = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { type = 'CUSTOMERS' } = req.query;
+    const userId = req.user!.id;
+
+    if (type === 'CUSTOMERS') {
+      const entry = await prisma.customerLedger.findUnique({
+        where: { id },
+        include: { customer: true },
+      });
+
+      if (!entry) {
+        res.status(404).json({ success: false, message: 'Ledger payment record not found.' });
+        return;
+      }
+
+      // Revert customer balance: if it was a payment/credit, deleting it increases receivable back
+      const creditAmt = Number(entry.credit || 0);
+      const debitAmt = Number(entry.debit || 0);
+      const currentRec = Number(entry.customer.currentReceivable || 0);
+      const revertedRec = currentRec + creditAmt - debitAmt;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.customer.update({
+          where: { id: entry.customerId },
+          data: { currentReceivable: new Prisma.Decimal(revertedRec) },
+        });
+
+        if (entry.referenceId) {
+          await tx.payment.deleteMany({
+            where: { receiptNumber: entry.referenceId },
+          });
+        }
+
+        await tx.customerLedger.delete({
+          where: { id },
+        });
+      });
+
+      await logAudit({
+        userId,
+        action: 'LEDGER_PAYMENT_DELETED',
+        entityType: 'CUSTOMER_LEDGER',
+        entityId: id,
+        details: {
+          customerName: entry.customer.shopName,
+          amountReverted: creditAmt > 0 ? creditAmt : debitAmt,
+          previousReceivable: currentRec,
+          newReceivable: revertedRec,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.json({
+        success: true,
+        message: `Customer payment record deleted successfully. Current balance updated to Rs. ${revertedRec.toLocaleString()}.`,
+      });
+      return;
+    } else {
+      // SUPPLIERS
+      const entry = await prisma.supplierLedger.findUnique({
+        where: { id },
+        include: { supplier: true },
+      });
+
+      if (!entry) {
+        res.status(404).json({ success: false, message: 'Supplier ledger payment record not found.' });
+        return;
+      }
+
+      const debitAmt = Number(entry.debit || 0);
+      const creditAmt = Number(entry.credit || 0);
+      const currentPay = Number(entry.supplier.currentPayable || 0);
+      const revertedPay = currentPay + debitAmt - creditAmt;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.supplier.update({
+          where: { id: entry.supplierId },
+          data: { currentPayable: new Prisma.Decimal(revertedPay) },
+        });
+
+        if (entry.referenceId) {
+          await tx.payment.deleteMany({
+            where: { receiptNumber: entry.referenceId },
+          });
+        }
+
+        await tx.supplierLedger.delete({
+          where: { id },
+        });
+      });
+
+      await logAudit({
+        userId,
+        action: 'SUPPLIER_PAYMENT_DELETED',
+        entityType: 'SUPPLIER_LEDGER',
+        entityId: id,
+        details: {
+          supplierName: entry.supplier.companyName,
+          amountReverted: debitAmt > 0 ? debitAmt : creditAmt,
+          previousPayable: currentPay,
+          newPayable: revertedPay,
+        },
+        ipAddress: req.ip,
+      });
+
+      res.json({
+        success: true,
+        message: `Supplier payment record deleted successfully. Current balance updated to Rs. ${revertedPay.toLocaleString()}.`,
+      });
+      return;
+    }
+  } catch (error: any) {
+    console.error('deleteLedgerEntry error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete ledger entry.' });
+  }
+};

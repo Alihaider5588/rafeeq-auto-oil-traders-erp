@@ -9,6 +9,7 @@ export interface AuthenticatedRequest extends Request {
     username: string;
     fullName: string;
     role: Role;
+    permissions?: string[];
   };
 }
 
@@ -39,6 +40,7 @@ export const authenticate = async (
         username: true,
         fullName: true,
         role: true,
+        permissions: true,
         isActive: true,
       },
     });
@@ -48,9 +50,21 @@ export const authenticate = async (
       return;
     }
 
+    let parsedPerms: string[] = [];
+    if (user.permissions) {
+      try {
+        parsedPerms = JSON.parse(user.permissions);
+      } catch {
+        parsedPerms = [];
+      }
+    }
+
     req.user = {
-      ...user,
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
       role: user.role as Role,
+      permissions: parsedPerms,
     };
     next();
   } catch (error) {
@@ -58,11 +72,20 @@ export const authenticate = async (
   }
 };
 
-export const authorize = (allowedRoles: Role[]) => {
+export const authorize = (allowedRoles: Role[], requiredPerm?: string) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
       return;
+    }
+
+    if (req.user.role === Role.ADMIN) {
+      return next();
+    }
+
+    // Granular permission check: if user has been granted permission by Admin for this tab/module
+    if (requiredPerm && req.user.permissions && Array.isArray(req.user.permissions) && req.user.permissions.includes(requiredPerm)) {
+      return next();
     }
 
     if (!allowedRoles.includes(req.user.role)) {

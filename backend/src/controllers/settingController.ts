@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
@@ -25,15 +26,22 @@ export const getSettings = async (_req: AuthenticatedRequest, res: Response): Pr
 
 export const updateSettings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const data = req.body;
+    const { id, createdAt, updatedAt, ...validData } = req.body;
     let settings = await prisma.systemSetting.findFirst();
 
+    if (validData.taxRatePercent !== undefined && validData.taxRatePercent !== null) {
+      validData.taxRatePercent = new Prisma.Decimal(validData.taxRatePercent);
+    }
+    if (validData.exchangeRate !== undefined && validData.exchangeRate !== null) {
+      validData.exchangeRate = new Prisma.Decimal(validData.exchangeRate);
+    }
+
     if (!settings) {
-      settings = await prisma.systemSetting.create({ data });
+      settings = await prisma.systemSetting.create({ data: validData });
     } else {
       settings = await prisma.systemSetting.update({
         where: { id: settings.id },
-        data,
+        data: validData,
       });
     }
 
@@ -42,13 +50,14 @@ export const updateSettings = async (req: AuthenticatedRequest, res: Response): 
       action: 'SETTINGS_UPDATED',
       entityType: 'SETTINGS',
       entityId: settings.id,
-      details: data,
+      details: validData,
       ipAddress: req.ip,
     });
 
     res.json({ success: true, settings });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to update settings' });
+  } catch (error: any) {
+    console.error('updateSettings error:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Failed to update settings' });
   }
 };
 

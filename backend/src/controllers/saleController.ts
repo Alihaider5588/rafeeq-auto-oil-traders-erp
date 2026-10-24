@@ -343,6 +343,15 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     const isWalkIn = customer.phone === '00000000000' || customer.shopName.toLowerCase().includes('walk-in');
     const projectedReceivable = currentReceivable + remainingBalance;
 
+    // RULE: Walk-in counter customer ko udhar / credit par saman dena sakht mana hai
+    if (isWalkIn && remainingBalance > 0) {
+      res.status(400).json({
+        success: false,
+        message: `⛔ Walk-in Counter Customer ko koi cheez credit / udhar par nahi di ja sakti! Baqaya udhar: Rs. ${remainingBalance.toLocaleString()}. Agar is customer ko udhar dena hai to pehle isay 'Customers' page par add karein taake iska proper khata ban sake.`,
+      });
+      return;
+    }
+
     if (!isWalkIn && creditLimit > 0 && projectedReceivable > creditLimit) {
       res.status(400).json({
         success: false,
@@ -863,6 +872,15 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
     const remainingBalance = netAmount - data.receivedAmount;
     const totalGrossProfit = netAmount - totalSaleCost;
     const saleDate = data.saleDate ? new Date(data.saleDate) : existingSale.saleDate;
+
+    const isWalkIn = newCustomer.phone === '00000000000' || newCustomer.shopName.toLowerCase().includes('walk-in');
+    if (isWalkIn && remainingBalance > 0) {
+      res.status(400).json({
+        success: false,
+        message: `⛔ Walk-in Counter Customer ko koi cheez credit / udhar par nahi di ja sakti! Baqaya udhar: Rs. ${remainingBalance.toLocaleString()}. Agar is customer ko udhar dena hai to pehle isay 'Customers' page par add karein taake iska proper khata ban sake.`,
+      });
+      return;
+    }
 
     await prisma.$transaction(async (tx) => {
       // 1. REVERSE PREVIOUS STOCK (if sale was completed)

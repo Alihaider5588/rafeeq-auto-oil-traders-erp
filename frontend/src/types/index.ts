@@ -84,6 +84,8 @@ export interface SaleItem {
   productId: string;
   product?: Product;
   quantity: number;
+  unitType?: 'PRIMARY' | 'SECONDARY' | string;
+  baseQuantity?: number;
   unitPrice: number;
   unitCost?: number;
   totalPrice: number;

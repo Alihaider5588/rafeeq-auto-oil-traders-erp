@@ -47,9 +47,10 @@ const AboutPage = lazyNamed(() => import('./pages/public/AboutPage'), 'AboutPage
 const ContactPage = lazyNamed(() => import('./pages/public/ContactPage'), 'ContactPage');
 
 // Protected Route Guard
-const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({
+const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[]; path?: string }> = ({
   children,
   roles,
+  path,
 }) => {
   const { user, token, isLoading } = useAuth();
 
@@ -65,6 +66,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
 
   if (!token || !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Full Admin has universal access to A-Z modules
+  if (user.role === 'ADMIN') {
+    return <Layout>{children}</Layout>;
+  }
+
+  // Granular Admin Permissions: if Admin assigned permission for this path to this user
+  if (path && user.permissions && Array.isArray(user.permissions) && user.permissions.includes(path)) {
+    return <Layout>{children}</Layout>;
   }
 
   const userRole = (user.role || '').toUpperCase();
@@ -135,7 +146,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/admin">
                 <AdminDashboard />
               </ProtectedRoute>
             }
@@ -143,7 +154,7 @@ export const App: React.FC = () => {
           <Route
             path="/cashier"
             element={
-              <ProtectedRoute roles={['ADMIN', 'CASHIER']}>
+              <ProtectedRoute roles={['ADMIN', 'CASHIER']} path="/cashier">
                 <CashierDashboard />
               </ProtectedRoute>
             }
@@ -151,7 +162,7 @@ export const App: React.FC = () => {
           <Route
             path="/operator"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/operator">
                 <OperatorDashboard />
               </ProtectedRoute>
             }
@@ -159,7 +170,7 @@ export const App: React.FC = () => {
           <Route
             path="/salesman"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute path="/salesman">
                 <SalesmanPortal />
               </ProtectedRoute>
             }
@@ -169,7 +180,7 @@ export const App: React.FC = () => {
           <Route
             path="/products"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/products">
                 <ProductsPage />
               </ProtectedRoute>
             }
@@ -177,7 +188,7 @@ export const App: React.FC = () => {
           <Route
             path="/sales"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']} path="/sales">
                 <SalesListPage />
               </ProtectedRoute>
             }
@@ -185,7 +196,7 @@ export const App: React.FC = () => {
           <Route
             path="/web-orders"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/web-orders">
                 <WebOrdersQueuePage />
               </ProtectedRoute>
             }
@@ -193,7 +204,7 @@ export const App: React.FC = () => {
           <Route
             path="/purchases"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/purchases">
                 <PurchasesPage />
               </ProtectedRoute>
             }
@@ -201,7 +212,7 @@ export const App: React.FC = () => {
           <Route
             path="/customers"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'SALESMAN', 'CASHIER']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'SALESMAN', 'CASHIER']} path="/customers">
                 <CustomersAndSuppliersPage type="CUSTOMERS" />
               </ProtectedRoute>
             }
@@ -209,7 +220,7 @@ export const App: React.FC = () => {
           <Route
             path="/suppliers"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/suppliers">
                 <CustomersAndSuppliersPage type="SUPPLIERS" />
               </ProtectedRoute>
             }
@@ -217,7 +228,7 @@ export const App: React.FC = () => {
           <Route
             path="/ledgers"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']} path="/ledgers">
                 <LedgersPage />
               </ProtectedRoute>
             }
@@ -225,7 +236,7 @@ export const App: React.FC = () => {
           <Route
             path="/delivery"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/delivery">
                 <DeliveryManagementPage />
               </ProtectedRoute>
             }
@@ -233,7 +244,7 @@ export const App: React.FC = () => {
           <Route
             path="/catalogue"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute path="/catalogue">
                 <CataloguePage />
               </ProtectedRoute>
             }
@@ -241,7 +252,7 @@ export const App: React.FC = () => {
           <Route
             path="/expenses"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']} path="/expenses">
                 <ExpensesPage />
               </ProtectedRoute>
             }
@@ -249,7 +260,7 @@ export const App: React.FC = () => {
           <Route
             path="/employees"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/employees">
                 <EmployeesPage />
               </ProtectedRoute>
             }
@@ -257,7 +268,7 @@ export const App: React.FC = () => {
           <Route
             path="/reports"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/reports">
                 <ReportsPage />
               </ProtectedRoute>
             }
@@ -267,7 +278,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin/confidential-brand"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/admin/confidential-brand">
                 <ConfidentialBrandPage />
               </ProtectedRoute>
             }
@@ -277,7 +288,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']} path="/admin/users">
                 <UserManagementPage />
               </ProtectedRoute>
             }
@@ -285,7 +296,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin/settings"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/admin/settings">
                 <SettingsPage />
               </ProtectedRoute>
             }
@@ -293,7 +304,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin/utilities"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/admin/utilities">
                 <UtilitiesPage />
               </ProtectedRoute>
             }
@@ -301,7 +312,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin/audit"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN']} path="/admin/audit">
                 <AuditTrailPage />
               </ProtectedRoute>
             }

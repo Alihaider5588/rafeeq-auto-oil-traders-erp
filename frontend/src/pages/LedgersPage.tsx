@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, LedgerEntry } from '../types';
-import { BookOpen, DollarSign, PlusCircle, CheckCircle, Search, RefreshCw, Printer, AlertCircle, Phone } from 'lucide-react';
+import { BookOpen, DollarSign, PlusCircle, CheckCircle, Search, RefreshCw, Printer, AlertCircle, Phone, Trash2, ShieldAlert } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const LedgersPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'SUPPLIERS'>('CUSTOMERS');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -11,6 +15,7 @@ export const LedgersPage: React.FC = () => {
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [entitySummary, setEntitySummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Payment voucher form modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -129,6 +134,34 @@ export const LedgersPage: React.FC = () => {
       `Shukriya!\n*Rafiq Auto & Oil Traders, 54-Stop Okara*\nPh: 0306-9258573`
     );
     window.open(`https://wa.me/92${phone}?text=${text}`, '_blank');
+  };
+
+  const handleDeletePaymentRecord = async (entry: LedgerEntry) => {
+    if (!isAdmin) {
+      alert('Sirf Admin he ledger payment record delete kar sakta ha!');
+      return;
+    }
+
+    const amt = Number(entry.credit) > 0 ? Number(entry.credit) : Number(entry.debit);
+    const confirmMsg = `⚠️ Delete Ledger Payment Record (Admin Only)?\n\nReference: ${entry.referenceId || '-'}\nType: ${entry.transactionType}\nRaqam: Rs. ${amt.toLocaleString()}\nDescription: ${entry.description}\n\nIs entry ko delete karne se customer/supplier ka khata (balance) automatically revert ho jaye ga.\nKya aap waqai delete karna chahte hain?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setDeletingId(entry.id);
+      setOperationError('');
+      setOperationSuccess('');
+      const res = await api.delete(`/ledgers/entry/${entry.id}?type=${activeTab}`);
+      setOperationSuccess(res.data?.message || 'Payment record delete ho geya aur balance revert ho gaya.');
+      if (selectedEntityId) {
+        await loadLedger(selectedEntityId);
+      }
+      await loadEntities();
+    } catch (err: any) {
+      setOperationError(err.response?.data?.message || err.message || 'Payment record delete nahi ho saka.');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -308,18 +341,19 @@ export const LedgersPage: React.FC = () => {
               <th style={{ textAlign: 'right' }}>Debit (Rs.)</th>
               <th style={{ textAlign: 'right' }}>Credit (Rs.)</th>
               <th style={{ textAlign: 'right' }}>Running Balance</th>
+              {isAdmin && <th style={{ textAlign: 'center', width: '90px' }}>Action</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   Loading ledger transactions...
                 </td>
               </tr>
             ) : ledgerEntries.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                   No ledger entries recorded yet.
                 </td>
               </tr>
@@ -343,6 +377,32 @@ export const LedgersPage: React.FC = () => {
                   <td style={{ textAlign: 'right', fontWeight: 800 }}>
                     Rs. {Number(entry.runningBalance).toLocaleString()}
                   </td>
+                  {isAdmin && (
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePaymentRecord(entry)}
+                        disabled={deletingId === entry.id}
+                        className="btn btn-outline"
+                        style={{
+                          color: '#ef4444',
+                          borderColor: '#fca5a5',
+                          backgroundColor: '#fef2f2',
+                          padding: '4px 8px',
+                          fontSize: '0.75rem',
+                          borderRadius: '6px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          cursor: 'pointer',
+                        }}
+                        title="Admin Only: Delete payment record and revert ledger balance"
+                      >
+                        <Trash2 size={13} />
+                        {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

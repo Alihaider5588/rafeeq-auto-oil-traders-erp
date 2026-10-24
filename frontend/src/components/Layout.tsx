@@ -162,27 +162,27 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
         {/* Navigation list */}
         <nav style={{ padding: '16px 12px', flex: 1, overflowY: 'auto' }}>
-          {/* Role-specific home links */}
-          {user?.role === 'ADMIN' && (
+          {/* Role-specific home links (Can also be granted to other users by Admin) */}
+          {canAccessTab('/admin', ['ADMIN']) && (
             <NavLink to="/admin" style={navItemStyle}>
               <LayoutDashboard size={18} /> Admin Dashboard
             </NavLink>
           )}
 
-          {user?.role === 'OPERATOR' && (
+          {canAccessTab('/operator', ['ADMIN', 'OPERATOR']) && (
             <NavLink to="/operator" style={navItemStyle}>
               <LayoutDashboard size={18} /> Operator Desk
             </NavLink>
           )}
 
-          {user?.role === 'CASHIER' && (
+          {canAccessTab('/cashier', ['ADMIN', 'CASHIER']) && (
             <NavLink to="/cashier" style={navItemStyle}>
               <LayoutDashboard size={18} /> Cashier Desk
             </NavLink>
           )}
 
           {/* Sales Portal: available to SALESMAN, ADMIN, OPERATOR */}
-          {canAccessTab('/salesman', ['SALESMAN', 'OPERATOR']) && (
+          {canAccessTab('/salesman', ['SALESMAN', 'OPERATOR', 'ADMIN']) && (
             <NavLink to="/salesman" style={navItemStyle}>
               <Smartphone size={18} /> Sales Portal
             </NavLink>
@@ -190,7 +190,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           <div style={{ height: '1px', background: '#1e293b', margin: '12px 4px' }} />
 
-          {/* Core ERP Modules - Dynamically Configurable Tabs by Admin */}
+          {/* Core ERP Modules - Dynamically Configurable Tabs A to Z by Admin */}
           
           {/* Products & Stock */}
           {canAccessTab('/products', ['ADMIN', 'OPERATOR']) && (
@@ -262,48 +262,58 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </NavLink>
           )}
 
-          {/* Employees & Attendance: ONLY ADMIN OR EXPLICITLY PERMITTED */}
+          {/* Employees & Attendance */}
           {canAccessTab('/employees', ['ADMIN']) && (
             <NavLink to="/employees" style={navItemStyle}>
               <Users size={18} /> Employees & Attendance
             </NavLink>
           )}
 
-          {/* Profit & Reports: ONLY ADMIN OR EXPLICITLY PERMITTED */}
+          {/* Profit & Reports */}
           {canAccessTab('/reports', ['ADMIN']) && (
             <NavLink to="/reports" style={navItemStyle}>
               <TrendingUp size={18} /> Profit & Reports
             </NavLink>
           )}
 
-          {/* Admin Vault & System Configuration: ONLY ADMIN */}
-          {/* User Management (Staff Accounts & Permissions: ADMIN & OPERATOR) */}
+          {/* User Management */}
           {canAccessTab('/admin/users', ['ADMIN', 'OPERATOR']) && (
             <NavLink to="/admin/users" style={navItemStyle}>
               <Shield size={18} /> User Management
             </NavLink>
           )}
 
-          {/* Admin Vault & System Configuration: ONLY ADMIN */}
-          {user?.role === 'ADMIN' && (
+          {/* Admin Vault, Audit, Settings & Utilities */}
+          {(canAccessTab('/admin/confidential-brand', ['ADMIN']) ||
+            canAccessTab('/admin/audit', ['ADMIN']) ||
+            canAccessTab('/admin/settings', ['ADMIN']) ||
+            canAccessTab('/admin/utilities', ['ADMIN'])) && (
             <>
               <div style={{ height: '1px', background: '#1e293b', margin: '12px 4px' }} />
-              <NavLink to="/admin/confidential-brand" style={({ isActive }) => ({
-                ...navItemStyle({ isActive }),
-                color: isActive ? '#fff' : '#f87171',
-                backgroundColor: isActive ? '#991b1b' : 'transparent',
-              })}>
-                <ShieldAlert size={18} /> Confidential Brand Vault
-              </NavLink>
-              <NavLink to="/admin/audit" style={navItemStyle}>
-                <FileText size={18} /> Audit Trail
-              </NavLink>
-              <NavLink to="/admin/settings" style={navItemStyle}>
-                <Settings size={18} /> System Settings
-              </NavLink>
-              <NavLink to="/admin/utilities" style={navItemStyle}>
-                <Wrench size={18} /> Utilities
-              </NavLink>
+              {canAccessTab('/admin/confidential-brand', ['ADMIN']) && (
+                <NavLink to="/admin/confidential-brand" style={({ isActive }) => ({
+                  ...navItemStyle({ isActive }),
+                  color: isActive ? '#fff' : '#f87171',
+                  backgroundColor: isActive ? '#991b1b' : 'transparent',
+                })}>
+                  <ShieldAlert size={18} /> Confidential Brand Vault
+                </NavLink>
+              )}
+              {canAccessTab('/admin/audit', ['ADMIN']) && (
+                <NavLink to="/admin/audit" style={navItemStyle}>
+                  <FileText size={18} /> Audit Trail
+                </NavLink>
+              )}
+              {canAccessTab('/admin/settings', ['ADMIN']) && (
+                <NavLink to="/admin/settings" style={navItemStyle}>
+                  <Settings size={18} /> System Settings
+                </NavLink>
+              )}
+              {canAccessTab('/admin/utilities', ['ADMIN']) && (
+                <NavLink to="/admin/utilities" style={navItemStyle}>
+                  <Wrench size={18} /> Utilities
+                </NavLink>
+              )}
             </>
           )}
 

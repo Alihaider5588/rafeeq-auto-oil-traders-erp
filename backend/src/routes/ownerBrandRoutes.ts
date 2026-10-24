@@ -24,7 +24,7 @@ const router = Router();
 
 // Strictly authenticate and require ADMIN role for all routes in this namespace
 router.use(authenticate);
-router.use(authorize([Role.ADMIN]));
+router.use(authorize([Role.ADMIN], '/admin/confidential-brand'));
 
 // Re-verification endpoint (receives password, verifies, returns token)
 router.post('/verify-access', verifyOwnerBrandAccess);

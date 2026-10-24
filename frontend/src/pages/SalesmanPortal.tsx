@@ -16,7 +16,10 @@ import {
   UserCheck,
   UserPlus,
   ShoppingBag,
-  Store
+  Store,
+  Printer,
+  Percent,
+  X
 } from 'lucide-react';
 
 interface ExtendedProduct extends Product {
@@ -30,6 +33,7 @@ interface CartItem {
   unitType: 'PRIMARY' | 'SECONDARY';
   unitPrice: number;
   standardRate: number;
+  discountPercent?: number;
   rateInfo?: {
     hasHistory: boolean;
     suggestedRate: number;
@@ -53,6 +57,17 @@ export const SalesmanPortal: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [searchProduct, setSearchProduct] = useState('');
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  // Category & Full Bill Discount States
+  const [discountScope, setDiscountScope] = useState<'FULL_BILL' | 'CATEGORY'>('FULL_BILL');
+  const [discountCategory, setDiscountCategory] = useState<string>('');
+  const [discountPercent, setDiscountPercent] = useState<string>('4');
+  const [appliedDiscountSummary, setAppliedDiscountSummary] = useState<string>('');
+
+  // Post-Sync Generated Invoice Receipt Modal
+  const [completedSale, setCompletedSale] = useState<any>(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
+  const [settings, setSettings] = useState<any>(null);
 
   // Quick Add Customer Modal
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -98,12 +113,16 @@ export const SalesmanPortal: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [cRes, pRes] = await Promise.all([
+      const [cRes, pRes, sRes] = await Promise.all([
         api.get('/partners/customers'),
         api.get('/products'),
+        api.get('/settings').catch(() => null),
       ]);
       setCustomers(cRes.data.customers || []);
       setProducts(pRes.data.data || []);
+      if (sRes?.data?.settings) {
+        setSettings(sRes.data.settings);
+      }
     } catch (e) {
       console.error('Error loading salesman data', e);
     }
@@ -203,7 +222,11 @@ export const SalesmanPortal: React.FC = () => {
 
   const previousDebt = Number(selectedCustomer?.currentReceivable || 0);
   const customerCreditLimit = Number(selectedCustomer?.creditLimit || 0);
-  const isWalkIn = selectedCustomer?.phone === '00000000000' || selectedCustomer?.shopName?.toLowerCase().includes('walk-in');
+  const isWalkIn =
+    !selectedCustomer ||
+    selectedCustomer?.phone === '00000000000' ||
+    selectedCustomer?.shopName?.toLowerCase().includes('walk-in') ||
+    selectedCustomer?.id === 'walk-in';
 
   const totalBill = cart.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
@@ -213,6 +236,7 @@ export const SalesmanPortal: React.FC = () => {
   const totalPayableWithDebt = totalBill + previousDebt;
   const netRemainingDebt = totalPayableWithDebt - receivedPayment;
   const isCreditExceeded = !isWalkIn && customerCreditLimit > 0 && netRemainingDebt > customerCreditLimit;
+  const isWalkInCreditAttempt = isWalkIn && totalBill > 0 && (totalBill - receivedPayment) > 0;
 
   const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,6 +271,79 @@ export const SalesmanPortal: React.FC = () => {
     }
   };
 
+  const availableCategories = Array.from(
+    new Map(
+      products
+        .filter((p) => p.category?.name || p.categoryId)
+        .map((p) => [p.category?.name || p.categoryId, p.category?.name || 'General Lubricant'])
+    ).entries()
+  ).map(([id, name]) => ({ id, name }));
+
+  const handleApplyDiscount = () => {
+    const pct = parseFloat(discountPercent);
+    if (isNaN(pct) || pct <= 0 || pct > 100) {
+      alert('Barahe karam 1% se 100% ke darmian valid discount percentage darj karein.');
+      return;
+    }
+    if (cart.length === 0) {
+      alert('Pehlay basket me kam az kam 1 product shamil karein.');
+      return;
+    }
+    if (discountScope === 'CATEGORY' && !discountCategory) {
+      alert('Pehlay wo category select karein jis par discount lagana chahte hain.');
+      return;
+    }
+
+    let affectedCount = 0;
+    const updated = cart.map((item) => {
+      const itemCatName = item.product.category?.name || item.product.categoryId || '';
+      const matches =
+        discountScope === 'FULL_BILL' ||
+        itemCatName === discountCategory ||
+        item.product.categoryId === discountCategory;
+
+      if (matches) {
+        affectedCount++;
+        const conv = Number(item.product.conversionFactor) || 1;
+        const baseRate =
+          item.unitType === 'PRIMARY'
+            ? Number(item.product.salePrice) * conv
+            : Number(item.product.salePrice);
+        const discountedPrice = Math.round(baseRate * (1 - pct / 100));
+        return {
+          ...item,
+          unitPrice: discountedPrice,
+          discountPercent: pct,
+        };
+      }
+      return item;
+    });
+
+    setCart(updated);
+    if (discountScope === 'FULL_BILL') {
+      setAppliedDiscountSummary(`Full Bill: ${pct}% discount applied to all ${affectedCount} item(s)!`);
+    } else {
+      setAppliedDiscountSummary(`Category "${discountCategory}": ${pct}% discount applied to ${affectedCount} item(s)!`);
+    }
+  };
+
+  const handleResetDiscount = () => {
+    const updated = cart.map((item) => {
+      const conv = Number(item.product.conversionFactor) || 1;
+      const baseRate =
+        item.unitType === 'PRIMARY'
+          ? Number(item.product.salePrice) * conv
+          : Number(item.product.salePrice);
+      return {
+        ...item,
+        unitPrice: baseRate,
+        discountPercent: undefined,
+      };
+    });
+    setCart(updated);
+    setAppliedDiscountSummary('');
+  };
+
   const handleSubmitOrder = async () => {
     const errors: Record<string, string> = {};
 
@@ -267,13 +364,22 @@ export const SalesmanPortal: React.FC = () => {
     if (receivedPayment < 0 || isNaN(receivedPayment)) {
       errors.receivedPayment = 'Received payment minus me nahi ho sakti';
     }
+    if (isWalkInCreditAttempt) {
+      errors.receivedPayment = `Walk-in customer ko udhar dena sakht mana hai (Baqaya: Rs. ${(totalBill - receivedPayment).toLocaleString()}). Customer list me shamil karein ya poora cash wasool karein.`;
+    }
     if (isCreditExceeded) {
       errors.customer = `⛔ Customer ka udhar credit limit (Rs. ${customerCreditLimit.toLocaleString()}) se barh gaya hai. Bill creation disabled hai!`;
     }
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setErrorMsg(isCreditExceeded ? `⛔ Credit Limit Exceeded! Customer ka udhar (Rs. ${netRemainingDebt.toLocaleString()}) credit limit se zyada hai.` : 'POS me entry me mistake ha! Neeche red box check karein.');
+      setErrorMsg(
+        isWalkInCreditAttempt
+          ? `⛔ Walk-in Customer ko udhar / credit par saman dena sakht mana hai! Agar is customer ne udhar lena hai to pehle isay 'Customers' me add karein.`
+          : isCreditExceeded
+          ? `⛔ Credit Limit Exceeded! Customer ka udhar (Rs. ${netRemainingDebt.toLocaleString()}) credit limit se zyada hai.`
+          : 'POS me entry me mistake ha! Neeche red box check karein.'
+      );
       return;
     }
 
@@ -319,14 +425,29 @@ export const SalesmanPortal: React.FC = () => {
 
       const res = await api.post('/sales', payload);
       if (res.data.success) {
+        let createdSaleData = res.data.sale;
+        try {
+          const fullRes = await api.get(`/sales/${createdSaleData.id}`);
+          if (fullRes.data?.sale) {
+            createdSaleData = fullRes.data.sale;
+          }
+        } catch {
+          if (!createdSaleData.customer) {
+            createdSaleData.customer = selectedCustomer;
+          }
+        }
+
+        setCompletedSale(createdSaleData);
+        setShowInvoiceModal(true);
         setSuccessMsg(
-          `Invoice ${res.data.sale?.invoiceNumber || ''} created successfully! Customer rate history updated.`
+          `Invoice ${createdSaleData?.invoiceNumber || ''} created successfully! Record Sales & POS me save ho chuka hai.`
         );
         setErrorMsg('');
         setCart([]);
         setReceivedPayment(0);
         setNotes('');
         setSelectedCustomer(null);
+        setAppliedDiscountSummary('');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         loadData();
       }
@@ -738,6 +859,162 @@ export const SalesmanPortal: React.FC = () => {
           3. Order Basket & Negotiated Unit Rates
         </h3>
 
+        {/* DISCOUNT PANEL: Category-Wise or Full Bill Percentage Discount */}
+        {cart.length > 0 && (
+          <div style={{
+            padding: '14px 16px',
+            backgroundColor: '#f0fdf4',
+            border: '1.5px solid #86efac',
+            borderRadius: '12px',
+            marginBottom: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  backgroundColor: '#16a34a',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800
+                }}>
+                  <Percent size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#166534' }}>
+                    Discount Manager (% Raayat)
+                  </h4>
+                  <span style={{ fontSize: '0.74rem', color: '#15803d' }}>
+                    Category-wise ya Full Bill par percentage discount lagayein (automatically applied on products)
+                  </span>
+                </div>
+              </div>
+
+              {appliedDiscountSummary && (
+                <span style={{
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  backgroundColor: '#dcfce7',
+                  color: '#166534',
+                  padding: '3px 10px',
+                  borderRadius: '20px',
+                  border: '1px solid #86efac'
+                }}>
+                  ✓ {appliedDiscountSummary}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'flex-end' }}>
+              {/* Scope: Full Bill vs Category */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
+                  Discount Scope:
+                </label>
+                <select
+                  className="form-control"
+                  style={{ fontSize: '0.82rem', padding: '6px 8px', backgroundColor: '#ffffff' }}
+                  value={discountScope}
+                  onChange={(e) => setDiscountScope(e.target.value as any)}
+                >
+                  <option value="FULL_BILL">Full Bill Discount</option>
+                  <option value="CATEGORY">Category-Wise Discount</option>
+                </select>
+              </div>
+
+              {/* Category Dropdown (if Scope === CATEGORY) */}
+              {discountScope === 'CATEGORY' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
+                    Select Category:
+                  </label>
+                  <select
+                    className="form-control"
+                    style={{ fontSize: '0.82rem', padding: '6px 8px', backgroundColor: '#ffffff' }}
+                    value={discountCategory}
+                    onChange={(e) => setDiscountCategory(e.target.value)}
+                  >
+                    <option value="">-- Choose Category --</option>
+                    {availableCategories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Discount % Input */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
+                  Discount (% Percentage):
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="number"
+                    min="0.5"
+                    max="100"
+                    step="0.5"
+                    className="form-control"
+                    style={{ fontSize: '0.85rem', padding: '6px 26px 6px 8px', fontWeight: 700, backgroundColor: '#ffffff' }}
+                    placeholder="e.g. 4"
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(e.target.value)}
+                  />
+                  <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontWeight: 800, color: '#16a34a', fontSize: '0.82rem' }}>
+                    %
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={handleApplyDiscount}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Apply {discountPercent || '0'}%
+                </button>
+
+                {appliedDiscountSummary && (
+                  <button
+                    type="button"
+                    onClick={handleResetDiscount}
+                    style={{
+                      backgroundColor: '#fee2e2',
+                      color: '#b91c1c',
+                      border: '1px solid #fca5a5',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer'
+                    }}
+                    title="Reset back to standard prices"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {cart.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
             Basket is empty. Select products above to calculate bill.
@@ -759,8 +1036,30 @@ export const SalesmanPortal: React.FC = () => {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.product.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Code: {item.product.sku}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.product.name}</span>
+                          {item.discountPercent && (
+                            <span style={{
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              border: '1px solid #86efac',
+                              padding: '2px 8px',
+                              borderRadius: '20px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800
+                            }}>
+                              -{item.discountPercent}% OFF
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          Code: {item.product.sku} | Cat: {item.product.category?.name || 'Lubricant'}
+                          {item.discountPercent && (
+                            <span style={{ marginLeft: '6px', color: '#64748b', textDecoration: 'line-through' }}>
+                              Standard: Rs. {item.standardRate.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -1065,6 +1364,40 @@ export const SalesmanPortal: React.FC = () => {
                 </div>
               )}
 
+              {/* Walk-in Customer Credit Prohibition Banner */}
+              {isWalkInCreditAttempt && (
+                <div style={{
+                  marginTop: '14px',
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  backgroundColor: '#fef2f2',
+                  border: '2px solid #dc2626',
+                  color: '#991b1b'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertCircle size={22} color="#dc2626" />
+                      <span style={{ fontWeight: 800, fontSize: '0.96rem' }}>
+                        ⛔ Walk-in Customer Ko Udhar Dena Sakht Mana Hai!
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="btn btn-primary btn-sm"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                    >
+                      <UserPlus size={15} /> + Add Customer in List
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
+                    Walk-in counter customer ka koi pichla khata / record nahi hota. Baqaya udhar: <b>Rs. {(totalBill - receivedPayment).toLocaleString()}</b>.
+                    <br />
+                    Agar is customer ko udhar lena hai to pehle isay <b>Customer List</b> me shamil karein taake iska proper khata aur ledger maintain ho sakay.
+                  </div>
+                </div>
+              )}
+
               {/* Credit Limit Exceeded Warning Banner */}
               {isCreditExceeded && (
                 <div style={{
@@ -1101,7 +1434,7 @@ export const SalesmanPortal: React.FC = () => {
 
             <button
               type="button"
-              disabled={submitting || isCreditExceeded}
+              disabled={submitting || isCreditExceeded || isWalkInCreditAttempt}
               onClick={handleSubmitOrder}
               className="btn btn-primary btn-lg"
               style={{
@@ -1110,10 +1443,16 @@ export const SalesmanPortal: React.FC = () => {
                 justifyContent: 'center',
                 alignItems: 'center',
                 gap: '10px',
-                ...(isCreditExceeded ? { backgroundColor: '#ef4444', borderColor: '#ef4444', opacity: 0.85, cursor: 'not-allowed' } : {})
+                ...(isCreditExceeded || isWalkInCreditAttempt ? { backgroundColor: '#ef4444', borderColor: '#ef4444', opacity: 0.85, cursor: 'not-allowed' } : {})
               }}
             >
-              {submitting ? 'Submitting Order to Server...' : isCreditExceeded ? (
+              {submitting ? (
+                'Submitting Order to Server...'
+              ) : isWalkInCreditAttempt ? (
+                <>
+                  <AlertCircle size={20} /> ⛔ Walk-in Udhar Mana Hai — Customer Add Karein Ya Cash Lein
+                </>
+              ) : isCreditExceeded ? (
                 <>
                   <AlertCircle size={20} /> ⛔ Credit Limit Exceeded — Invoice Disabled (Limit Barhayein Ya Cash Lein)
                 </>
@@ -1254,6 +1593,294 @@ export const SalesmanPortal: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Post-Sync Generated Invoice Receipt Modal */}
+      {showInvoiceModal && completedSale && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '460px',
+            width: '100%',
+            maxHeight: '94vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '14px 18px',
+              backgroundColor: '#1e293b',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Printer size={18} color="#d97706" />
+                <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>
+                  Invoice Generated (Record Saved in POS)
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700
+                  }}
+                >
+                  <Printer size={14} /> Print Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInvoiceModal(false)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px'
+                  }}
+                  title="Close Modal"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body / Thermal Printable Area */}
+            <div style={{ padding: '20px', overflowY: 'auto', backgroundColor: '#f8fafc' }}>
+              <style>{`
+                @media print {
+                  body * { visibility: hidden !important; }
+                  #salesman-receipt-container, #salesman-receipt-container * { visibility: visible !important; }
+                  #salesman-receipt-container {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    max-width: 80mm !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    color: #000000 !important;
+                  }
+                }
+              `}</style>
+
+              <div id="salesman-receipt-container" style={{
+                backgroundColor: '#ffffff',
+                padding: '16px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                fontFamily: 'monospace',
+                color: '#000000',
+                fontSize: '11px'
+              }}>
+                {/* Company Header */}
+                <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px' }}>
+                  <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '0.5px' }}>
+                    {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
+                  </h2>
+                  <p style={{ margin: '1px 0', fontSize: '10px', fontWeight: 700 }}>
+                    Prop: {settings?.proprietorNames || 'M. Shafiq & Haji Muhammad Rafiq'}
+                  </p>
+                  <p style={{ margin: '1px 0', fontSize: '10px' }}>
+                    {settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara'}
+                  </p>
+                  <p style={{ margin: '1px 0', fontSize: '10px' }}>
+                    Ph: {settings?.phone || '0306-9258573 / 0327-7497457'}
+                  </p>
+                </div>
+
+                {/* Invoice Meta */}
+                <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '6px', marginBottom: '8px', fontSize: '11px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span><b>INV #:</b> {completedSale.invoiceNumber}</span>
+                    <span><b>DATE:</b> {new Date(completedSale.saleDate || completedSale.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span><b>CUSTOMER:</b> {completedSale.customer?.shopName || 'Walk-in Customer'}</span>
+                    <span><b>PHONE:</b> {completedSale.customer?.phone || '-'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span><b>SALESMAN:</b> {completedSale.salesman?.fullName || 'Sales Portal'}</span>
+                    <span><b>MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #000000', textAlign: 'left' }}>
+                        <th style={{ paddingBottom: '4px' }}>ITEM</th>
+                        <th style={{ textAlign: 'center', paddingBottom: '4px' }}>QTY</th>
+                        <th style={{ textAlign: 'right', paddingBottom: '4px' }}>RATE</th>
+                        <th style={{ textAlign: 'right', paddingBottom: '4px' }}>TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {completedSale.items?.map((it: any, idx: number) => {
+                        const isPrimary = it.unitType === 'PRIMARY';
+                        const unitName = isPrimary
+                          ? (it.product?.primaryUnit?.name || it.product?.primaryUnit?.symbol || 'Carton')
+                          : (it.product?.unit?.name || it.product?.unit?.symbol || 'Piece');
+                        return (
+                          <tr key={idx} style={{ verticalAlign: 'top' }}>
+                            <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
+                              <b>{it.product?.name || `Item #${idx + 1}`}</b>
+                            </td>
+                            <td style={{ textAlign: 'center', paddingTop: '4px', whiteSpace: 'nowrap' }}>
+                              <b>{Number(it.quantity)}</b> <span style={{ fontSize: '9px', color: '#333' }}>{unitName}</span>
+                            </td>
+                            <td style={{ textAlign: 'right', paddingTop: '4px' }}>
+                              {Number(it.unitPrice).toLocaleString()}
+                            </td>
+                            <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
+                              {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals Breakdown in EXACT REQUIRED SEQUENCE */}
+                {(() => {
+                  const isWalkIn =
+                    !completedSale.customer ||
+                    completedSale.customer.phone === '00000000000' ||
+                    completedSale.customer.shopName?.toLowerCase().includes('walk-in');
+                  const netBill = Number(completedSale.netAmount || 0);
+                  const currentReceivable = Number(completedSale.customer?.currentReceivable || 0);
+                  const billRemaining = Number(completedSale.remainingBalance || 0);
+                  // Previous udhar before this invoice
+                  const previousUdhar = isWalkIn ? 0 : Math.max(0, currentReceivable - billRemaining);
+                  const grandTotal = netBill + previousUdhar;
+                  const paidAmount = Number(completedSale.receivedAmount || 0);
+                  const remainingBalance = Math.max(0, grandTotal - paidAmount);
+
+                  return (
+                    <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '10px', fontSize: '11px' }}>
+                      {Number(completedSale.discount) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', color: '#555' }}>
+                          <span>GROSS TOTAL:</span>
+                          <span>Rs. {Number(completedSale.totalAmount).toLocaleString()}</span>
+                        </div>
+                      )}
+                      {Number(completedSale.discount) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#15803d', fontWeight: 600 }}>
+                          <span>DISCOUNT:</span>
+                          <span>- Rs. {Number(completedSale.discount).toLocaleString()}</span>
+                        </div>
+                      )}
+
+                      {/* 1. NET BILL */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        borderTop: Number(completedSale.discount) > 0 ? '1px dashed #000000' : 'none',
+                        paddingTop: '3px'
+                      }}>
+                        <span>NET BILL:</span>
+                        <span>Rs. {netBill.toLocaleString()}</span>
+                      </div>
+
+                      {/* 2. PREVIOUS UDHAAR */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                        <span>PREVIOUS UDHAAR:</span>
+                        <span style={{ fontWeight: 600 }}>
+                          {isWalkIn || previousUdhar <= 0 ? 'Rs. 0' : `Rs. ${previousUdhar.toLocaleString()}`}
+                        </span>
+                      </div>
+
+                      {/* 3. GRAND TOTAL */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        borderTop: '1px solid #000000',
+                        borderBottom: '1px solid #000000',
+                        padding: '4px 0',
+                        margin: '4px 0'
+                      }}>
+                        <span>GRAND TOTAL:</span>
+                        <span>Rs. {grandTotal.toLocaleString()}</span>
+                      </div>
+
+                      {/* 4. PAID AMOUNT */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                        <span>PAID AMOUNT:</span>
+                        <span style={{ fontWeight: 700 }}>Rs. {paidAmount.toLocaleString()}</span>
+                      </div>
+
+                      {/* 5. REMAINING BALANCE */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        marginTop: '4px',
+                        paddingTop: '3px',
+                        borderTop: '1px dashed #000000'
+                      }}>
+                        <span>REMAINING BALANCE:</span>
+                        <span style={{ color: remainingBalance <= 0 ? '#15803d' : '#000000' }}>
+                          {remainingBalance <= 0 ? 'CLEAR (Rs. 0)' : `Rs. ${remainingBalance.toLocaleString()}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Footer Barcode / Receipt Message */}
+                <div style={{ textAlign: 'center', fontSize: '10px' }}>
+                  <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '6px 0 4px 0' }}>
+                    * {completedSale.invoiceNumber} *
+                  </div>
+                  {settings?.showTermsOnInvoice !== false && (
+                    <p style={{ margin: '3px 0', fontSize: '9px', lineHeight: '1.3' }}>
+                      {settings?.invoiceFooterNote || 'Goods once sold will only be replaced within 3 days with original bill.'}
+                    </p>
+                  )}
+                  <div style={{ margin: '6px 0 0 0', paddingTop: '6px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a' }}>
+                    Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000000', fontWeight: 900, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000000', fontWeight: 900, textDecoration: 'none' }}>03147816393</a>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

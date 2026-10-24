@@ -36,17 +36,26 @@ export const UserManagementPage: React.FC = () => {
 
   const AVAILABLE_TABS = [
     { path: '/sales', label: 'Sales & POS Terminal (سیل و کاؤنٹر بلنگ)' },
+    { path: '/salesman', label: 'Salesman Mobile Portal (سیلز مین پورٹل)' },
     { path: '/products', label: 'Products & Stock (پروڈکٹس و انوینٹری)' },
+    { path: '/web-orders', label: 'Web Orders Queue (ویب سائٹ آرڈرز)' },
     { path: '/purchases', label: 'Purchases (انورڈ مال کی خریداری)' },
     { path: '/customers', label: 'Customers & Khata (کسٹمرز و دکانیں)' },
     { path: '/suppliers', label: 'Suppliers & Mills (سپلائرز و کمپنیاں)' },
     { path: '/ledgers', label: 'Ledgers & Accounts (کھاتے و وصولیاں)' },
     { path: '/expenses', label: 'Daily Expenses (روزمرہ دکان اخراجات)' },
     { path: '/delivery', label: 'Van Delivery & Routes (ڈلیوری وین و روٹس)' },
-    { path: '/salesman', label: 'Salesman Mobile Portal (سیلز مین پورٹل)' },
-    { path: '/web-orders', label: 'Web Orders Queue (ویب سائٹ آرڈرز)' },
     { path: '/catalogue', label: 'PDF Product Catalogue (پروڈکٹ کیٹلاگ)' },
     { path: '/employees', label: 'Employees & Attendance (ملازمین و حاضری)' },
+    { path: '/reports', label: 'Profit & Reports (منافع و تفصیلی رپورٹس)' },
+    { path: '/admin/settings', label: 'System Settings (سسٹم پرنٹ و بزنس سیٹنگز)' },
+    { path: '/admin/utilities', label: 'Utilities (ڈیٹا امپورٹ، بارکوڈ و ٹولز)' },
+    { path: '/admin/users', label: 'User Management (صارفین و پرمیشن مینجمنٹ)' },
+    { path: '/admin/audit', label: 'Audit Trail (سسٹم آڈٹ لاگز)' },
+    { path: '/admin/confidential-brand', label: 'Confidential Brand Vault (خفیہ برانڈ تجوری)' },
+    { path: '/admin', label: 'Admin Dashboard (ایڈمن ڈیش بورڈ)' },
+    { path: '/operator', label: 'Operator Desk (آپریٹر ڈیسک)' },
+    { path: '/cashier', label: 'Cashier Desk (کیشیئر ڈیسک)' },
   ];
 
   useEffect(() => {

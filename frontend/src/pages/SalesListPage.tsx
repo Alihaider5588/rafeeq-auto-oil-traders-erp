@@ -73,9 +73,23 @@ export const SalesListPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const [settings, setSettings] = useState<any>(null);
+
   useEffect(() => {
     fetchSales();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await api.get('/settings');
+      if (res.data?.settings) {
+        setSettings(res.data.settings);
+      }
+    } catch (e) {
+      console.error('Failed to load settings', e);
+    }
+  };
 
   const fetchSales = async () => {
     try {
@@ -703,69 +717,104 @@ export const SalesListPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedSale.items?.map((it, idx) => (
-                      <tr key={idx} style={{ verticalAlign: 'top' }}>
-                        <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
-                          <b>{it.product?.name}</b>
-                          {(it as any).unitType && (it as any).unitType !== 'SECONDARY' && (
-                            <span style={{ fontSize: '9px', display: 'block', color: '#555' }}>({(it as any).unitType})</span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'center', paddingTop: '4px' }}>{Number(it.quantity)}</td>
-                        <td style={{ textAlign: 'right', paddingTop: '4px' }}>{Number(it.unitPrice).toLocaleString()}</td>
-                        <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
-                          {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedSale.items?.map((it, idx) => {
+                      const isPrimary = it.unitType === 'PRIMARY';
+                      const unitName = isPrimary
+                        ? (it.product?.primaryUnit?.name || it.product?.primaryUnit?.symbol || 'Carton')
+                        : (it.product?.unit?.name || it.product?.unit?.symbol || 'Piece');
+                      return (
+                        <tr key={idx} style={{ verticalAlign: 'top' }}>
+                          <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
+                            <b>{it.product?.name}</b>
+                          </td>
+                          <td style={{ textAlign: 'center', paddingTop: '4px', whiteSpace: 'nowrap' }}>
+                            <b>{Number(it.quantity)}</b> <span style={{ fontSize: '9px', color: '#333' }}>{unitName}</span>
+                          </td>
+                          <td style={{ textAlign: 'right', paddingTop: '4px' }}>{Number(it.unitPrice).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
+                            {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* Totals */}
-              <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '10px', fontSize: '11px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                  <span>GROSS TOTAL:</span>
-                  <span>Rs. {Number(selectedSale.totalAmount).toLocaleString()}</span>
-                </div>
-                {Number(selectedSale.discount) > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                    <span>DISCOUNT:</span>
-                    <span>- Rs. {Number(selectedSale.discount).toLocaleString()}</span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '13px', borderTop: '1px solid #000000', paddingTop: '4px', marginTop: '4px' }}>
-                  <span>NET BILL:</span>
-                  <span>Rs. {Number(selectedSale.netAmount).toLocaleString()}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                  <span>PAID AMOUNT:</span>
-                  <span>Rs. {Number(selectedSale.receivedAmount).toLocaleString()}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginTop: '3px' }}>
-                  <span>THIS BILL BALANCE:</span>
-                  <span>Rs. {Number(selectedSale.remainingBalance).toLocaleString()}</span>
-                </div>
-                {selectedSale.customer && selectedSale.customer.phone !== '00000000000' && (
-                  <div style={{ borderTop: '1px dashed #000000', marginTop: '6px', paddingTop: '5px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
-                      <span>CUSTOMER KHATA (UDHAR):</span>
-                      <span style={{ color: Number(selectedSale.customer?.currentReceivable || 0) <= 0 ? '#15803d' : '#000000' }}>
-                        {Number(selectedSale.customer?.currentReceivable || 0) <= 0
-                          ? 'CLEAR / EMPTY (0)'
-                          : `Rs. ${Number(selectedSale.customer?.currentReceivable || 0).toLocaleString()}`}
+              {/* Totals Breakdown */}
+              {(() => {
+                const isWalkIn = !selectedSale.customer || selectedSale.customer.phone === '00000000000' || selectedSale.customer.shopName?.toLowerCase().includes('walk-in');
+                const netBill = Number(selectedSale.netAmount || 0);
+                const currentReceivable = Number(selectedSale.customer?.currentReceivable || 0);
+                const billRemaining = Number(selectedSale.remainingBalance || 0);
+                // Previous udhar prior to this invoice
+                const previousUdhar = isWalkIn ? 0 : Math.max(0, currentReceivable - billRemaining);
+                const grandTotal = netBill + previousUdhar;
+                const paidAmount = Number(selectedSale.receivedAmount || 0);
+                const remainingBalance = Math.max(0, grandTotal - paidAmount);
+
+                return (
+                  <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '10px', fontSize: '11px' }}>
+                    {Number(selectedSale.discount) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', color: '#555' }}>
+                        <span>GROSS TOTAL:</span>
+                        <span>Rs. {Number(selectedSale.totalAmount).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {Number(selectedSale.discount) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#15803d', fontWeight: 600 }}>
+                        <span>DISCOUNT:</span>
+                        <span>- Rs. {Number(selectedSale.discount).toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    {/* 1. NET BILL */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '12px', borderTop: Number(selectedSale.discount) > 0 ? '1px dashed #000000' : 'none', paddingTop: '3px' }}>
+                      <span>NET BILL:</span>
+                      <span>Rs. {netBill.toLocaleString()}</span>
+                    </div>
+
+                    {/* 2. PREVIOUS UDHAAR */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                      <span>PREVIOUS UDHAAR:</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {isWalkIn || previousUdhar <= 0 ? 'Rs. 0' : `Rs. ${previousUdhar.toLocaleString()}`}
+                      </span>
+                    </div>
+
+                    {/* 3. GRAND TOTAL */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '13px', borderTop: '1px solid #000000', borderBottom: '1px solid #000000', padding: '4px 0', margin: '4px 0' }}>
+                      <span>GRAND TOTAL:</span>
+                      <span>Rs. {grandTotal.toLocaleString()}</span>
+                    </div>
+
+                    {/* 4. PAID AMOUNT */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                      <span>PAID AMOUNT:</span>
+                      <span style={{ fontWeight: 700 }}>Rs. {paidAmount.toLocaleString()}</span>
+                    </div>
+
+                    {/* 5. REMAINING BALANCE */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '12px', marginTop: '4px', paddingTop: '3px', borderTop: '1px dashed #000000' }}>
+                      <span>REMAINING BALANCE:</span>
+                      <span style={{ color: remainingBalance <= 0 ? '#15803d' : '#000000' }}>
+                        {remainingBalance <= 0 ? 'CLEAR (Rs. 0)' : `Rs. ${remainingBalance.toLocaleString()}`}
                       </span>
                     </div>
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Footer Barcode / Receipt Message */}
               <div style={{ textAlign: 'center', fontSize: '10px' }}>
                 <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '6px 0 4px 0' }}>
                   * {selectedSale.invoiceNumber} *
                 </div>
-                <p style={{ margin: '2px 0', fontSize: '9px' }}>Goods once sold will only be exchanged within 3 days with receipt.</p>
+                {settings?.showTermsOnInvoice !== false && (
+                  <p style={{ margin: '3px 0', fontSize: '9px', lineHeight: '1.3' }}>
+                    {settings?.invoiceFooterNote || 'Goods once sold will only be replaced within 3 days with original bill.'}
+                  </p>
+                )}
                 <div style={{ margin: '6px 0 0 0', paddingTop: '6px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a' }}>
                   Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000000', fontWeight: 900, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000000', fontWeight: 900, textDecoration: 'none' }}>03147816393</a>
                 </div>
