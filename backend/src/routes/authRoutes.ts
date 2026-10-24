@@ -9,9 +9,9 @@ router.post('/login', login);
 router.get('/profile', authenticate, getProfile);
 router.post('/change-password', authenticate, changePassword);
 
-// Admin-only user management
-router.get('/users', authenticate, authorize([Role.ADMIN]), getUsers);
-router.post('/users', authenticate, authorize([Role.ADMIN]), createUser);
-router.put('/users/:id', authenticate, authorize([Role.ADMIN]), updateUser);
+// User management (Admin & Operator)
+router.get('/users', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), getUsers);
+router.post('/users', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), createUser);
+router.put('/users/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), updateUser);
 
 export default router;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Supplier, Product } from '../types';
-import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const PurchasesPage: React.FC = () => {
@@ -24,6 +24,16 @@ export const PurchasesPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
+
+  // Quick Add Supplier Modal
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
+  const [creatingSupplier, setCreatingSupplier] = useState(false);
+  const [quickSuppForm, setQuickSuppForm] = useState({
+    companyName: '',
+    contactPerson: '',
+    phone: '',
+    address: '',
+  });
 
   useEffect(() => {
     loadPurchases();
@@ -52,6 +62,30 @@ export const PurchasesPage: React.FC = () => {
       setProducts(pRes.data.data || []);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleQuickCreateSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingSupplier(true);
+    setOperationError('');
+    try {
+      const res = await api.post('/partners/suppliers', {
+        ...quickSuppForm,
+        openingBalance: 0,
+      });
+      if (res.data?.success && res.data.supplier) {
+        const created = res.data.supplier;
+        setSuppliers((prev) => [created, ...prev]);
+        setSupplierId(created.id);
+        setShowAddSupplierModal(false);
+        setQuickSuppForm({ companyName: '', contactPerson: '', phone: '', address: '' });
+        setOperationSuccess(`Supplier "${created.companyName}" kamyabi se shamil ho gaya aur automatically select ho chuka hai!`);
+      }
+    } catch (err: any) {
+      setOperationError(err.response?.data?.message || 'Supplier shamil nahi ho saka.');
+    } finally {
+      setCreatingSupplier(false);
     }
   };
 
@@ -302,7 +336,26 @@ export const PurchasesPage: React.FC = () => {
             <form onSubmit={handleCreatePurchase}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Supplier Company *</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label className="form-label" style={{ marginBottom: 0 }}>Supplier Company *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSupplierModal(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#d97706',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Plus size={14} /> + New Supplier
+                    </button>
+                  </div>
                   <select
                     className="form-control"
                     value={supplierId}
@@ -411,6 +464,113 @@ export const PurchasesPage: React.FC = () => {
                 </button>
                 <button type="submit" disabled={submitting} className="btn btn-primary">
                   {submitting ? 'Saving...' : 'Post Purchase & Update Stock'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Supplier Modal */}
+      {showAddSupplierModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '500px',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '8px', borderRadius: '10px' }}>
+                  <Building2 size={20} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  Add New Oil Supplier / Mill
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddSupplierModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateSupplier}>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Company Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Shell Pakistan / Total Parco"
+                  value={quickSuppForm.companyName}
+                  onChange={(e) => setQuickSuppForm({ ...quickSuppForm, companyName: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Contact Person</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Tariq Mahmood"
+                    value={quickSuppForm.contactPerson}
+                    onChange={(e) => setQuickSuppForm({ ...quickSuppForm, contactPerson: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Phone Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="03001234567"
+                    value={quickSuppForm.phone}
+                    onChange={(e) => setQuickSuppForm({ ...quickSuppForm, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Address / Depot Location</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Oil Terminal, Karachi / Multan Road Lahore"
+                  value={quickSuppForm.address}
+                  onChange={(e) => setQuickSuppForm({ ...quickSuppForm, address: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSupplierModal(false)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingSupplier}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                >
+                  <Plus size={16} /> {creatingSupplier ? 'Saving...' : 'Add & Select Supplier'}
                 </button>
               </div>
             </form>

@@ -277,6 +277,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           )}
 
           {/* Admin Vault & System Configuration: ONLY ADMIN */}
+          {/* User Management (Staff Accounts & Permissions: ADMIN & OPERATOR) */}
+          {canAccessTab('/admin/users', ['ADMIN', 'OPERATOR']) && (
+            <NavLink to="/admin/users" style={navItemStyle}>
+              <Shield size={18} /> User Management
+            </NavLink>
+          )}
+
+          {/* Admin Vault & System Configuration: ONLY ADMIN */}
           {user?.role === 'ADMIN' && (
             <>
               <div style={{ height: '1px', background: '#1e293b', margin: '12px 4px' }} />
@@ -286,9 +294,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 backgroundColor: isActive ? '#991b1b' : 'transparent',
               })}>
                 <ShieldAlert size={18} /> Confidential Brand Vault
-              </NavLink>
-              <NavLink to="/admin/users" style={navItemStyle}>
-                <Shield size={18} /> User Management
               </NavLink>
               <NavLink to="/admin/audit" style={navItemStyle}>
                 <FileText size={18} /> Audit Trail

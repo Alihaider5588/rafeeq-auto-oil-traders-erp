@@ -277,7 +277,7 @@ export const App: React.FC = () => {
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR']}>
                 <UserManagementPage />
               </ProtectedRoute>
             }

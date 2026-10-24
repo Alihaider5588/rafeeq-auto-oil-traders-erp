@@ -26,7 +26,7 @@ router.use(authenticate);
 // Online Website Orders Queue (View, Confirm, Reject, Delete)
 router.get('/web-orders', getWebOrdersQueue);
 router.post('/web-orders/:id/confirm', authorize([Role.ADMIN, Role.OPERATOR]), confirmWebOrder);
-router.post('/web-orders/:id/reject', authorize([Role.ADMIN, Role.OPERATOR]), rejectWebOrder);
+router.post('/web-orders/:id/reject', authorize([Role.ADMIN]), rejectWebOrder);
 router.delete('/web-orders/:id', authorize([Role.ADMIN]), deleteWebOrder);
 
 // Rate History query for party-product combination
@@ -37,7 +37,7 @@ router.get('/', getSales);
 router.get('/:id', getSaleById);
 router.post('/', createSale); // Admins, Operators, Cashiers & Salesmen can create sales
 router.post('/:id/approve', authorize([Role.ADMIN, Role.OPERATOR]), approveSale);
-router.post('/:id/cancel', authorize([Role.ADMIN, Role.OPERATOR]), cancelSale);
+router.post('/:id/cancel', authorize([Role.ADMIN]), cancelSale);
 
 // Strict Admin-only Invoice Correction / Edit
 router.put('/:id/edit', authorize([Role.ADMIN]), editSaleInvoice);

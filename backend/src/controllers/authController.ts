@@ -169,6 +169,15 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
 
     const { username, fullName, phone, password, role, permissions } = parseResult.data;
 
+    // Security Guard: Operator cannot create Admin accounts
+    if (req.user?.role === Role.OPERATOR && role === Role.ADMIN) {
+      res.status(403).json({
+        success: false,
+        message: 'Computer Operators cannot create Administrator accounts.',
+      });
+      return;
+    }
+
     // RULE: Only ONE Admin account is allowed
     if (role === Role.ADMIN) {
       const existingAdmin = await prisma.user.findFirst({
@@ -251,6 +260,18 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    // Security Guard: Operator cannot modify Admin account or promote users to Admin
+    if (req.user?.role === Role.OPERATOR) {
+      if (existing.role === Role.ADMIN) {
+        res.status(403).json({ success: false, message: 'Operators cannot modify Administrator accounts.' });
+        return;
+      }
+      if (role === Role.ADMIN) {
+        res.status(403).json({ success: false, message: 'Operators cannot promote users to Administrator.' });
+        return;
+      }
+    }
+
     if (role === Role.ADMIN && existing.role !== Role.ADMIN) {
       const adminCount = await prisma.user.count({ where: { role: Role.ADMIN } });
       if (adminCount >= 1) {
@@ -316,7 +337,11 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
     }
 
     // Determine target user
-    const userIdToUpdate = (req.user?.role === Role.ADMIN && targetUserId) ? targetUserId : req.user?.id;
+    let userIdToUpdate = req.user?.id;
+    const isPrivileged = req.user?.role === Role.ADMIN || req.user?.role === Role.OPERATOR;
+    if (isPrivileged && targetUserId) {
+      userIdToUpdate = targetUserId;
+    }
 
     if (!userIdToUpdate) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -329,8 +354,15 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    // If a non-admin changes their own password, verify current password
-    if (req.user?.role !== Role.ADMIN || userIdToUpdate === req.user.id) {
+    // Security Guard: Operator cannot change Admin password
+    if (req.user?.role === Role.OPERATOR && user.role === Role.ADMIN) {
+      res.status(403).json({ success: false, message: 'Operators cannot change Administrator credentials.' });
+      return;
+    }
+
+    // If changing their own password, verify current password (unless privileged admin/operator resetting another user)
+    const isResettingOtherStaff = isPrivileged && userIdToUpdate !== req.user?.id;
+    if (!isResettingOtherStaff) {
       if (!currentPassword) {
         res.status(400).json({ success: false, message: 'Current password is required.' });
         return;

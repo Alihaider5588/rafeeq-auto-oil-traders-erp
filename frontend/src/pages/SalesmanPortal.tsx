@@ -14,6 +14,7 @@ import {
   Layers,
   History,
   UserCheck,
+  UserPlus,
   ShoppingBag,
   Store
 } from 'lucide-react';
@@ -52,6 +53,18 @@ export const SalesmanPortal: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [searchProduct, setSearchProduct] = useState('');
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  // Quick Add Customer Modal
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [quickCustForm, setQuickCustForm] = useState({
+    shopName: '',
+    ownerName: '',
+    phone: '',
+    address: '',
+    area: '',
+    creditLimit: '100000',
+  });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
@@ -200,6 +213,39 @@ export const SalesmanPortal: React.FC = () => {
   const totalPayableWithDebt = totalBill + previousDebt;
   const netRemainingDebt = totalPayableWithDebt - receivedPayment;
   const isCreditExceeded = !isWalkIn && customerCreditLimit > 0 && netRemainingDebt > customerCreditLimit;
+
+  const handleQuickCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingCustomer(true);
+    setErrorMsg('');
+    try {
+      const res = await api.post('/partners/customers', {
+        ...quickCustForm,
+        openingBalance: 0,
+        creditLimit: parseFloat(quickCustForm.creditLimit || '100000'),
+      });
+      if (res.data?.success && res.data.customer) {
+        const created = res.data.customer;
+        setCustomers((prev) => [created, ...prev]);
+        setSelectedCustomer(created);
+        setShowAddCustomerModal(false);
+        setQuickCustForm({
+          shopName: '',
+          ownerName: '',
+          phone: '',
+          address: '',
+          area: '',
+          creditLimit: '100000',
+        });
+        setSuccessMsg(`Customer "${created.shopName}" shamil ho gaya aur automatically select ho chuka hai!`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Customer shamil nahi ho saka.');
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
 
   const handleSubmitOrder = async () => {
     const errors: Record<string, string> = {};
@@ -456,6 +502,29 @@ export const SalesmanPortal: React.FC = () => {
             }}
           >
             <UserCheck size={16} /> Walk-in Customer (Shop Counter)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFieldErrors((prev) => ({ ...prev, customer: '' }));
+              setShowAddCustomerModal(true);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#0284c7',
+              color: '#ffffff',
+              border: 'none',
+              padding: '7px 14px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <UserPlus size={16} /> + Add New Customer
           </button>
         </div>
 
@@ -1057,6 +1126,137 @@ export const SalesmanPortal: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Quick Add Customer Modal */}
+      {showAddCustomerModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ backgroundColor: '#e0f2fe', color: '#0284c7', padding: '8px', borderRadius: '10px' }}>
+                  <UserPlus size={20} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  Add New Customer / Shop
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateCustomer}>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Shop / Business Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Al-Madina Autos"
+                  value={quickCustForm.shopName}
+                  onChange={(e) => setQuickCustForm({ ...quickCustForm, shopName: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Owner Name *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Haji Aslam"
+                    value={quickCustForm.ownerName}
+                    onChange={(e) => setQuickCustForm({ ...quickCustForm, ownerName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Mobile Number *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="03001234567"
+                    value={quickCustForm.phone}
+                    onChange={(e) => setQuickCustForm({ ...quickCustForm, phone: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Area / Van Route</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Dipalpur Road / Kasur"
+                    value={quickCustForm.area}
+                    onChange={(e) => setQuickCustForm({ ...quickCustForm, area: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Credit Limit (Rs.)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={quickCustForm.creditLimit}
+                    onChange={(e) => setQuickCustForm({ ...quickCustForm, creditLimit: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Address / Landmark</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Near Shell Pump, Main Bazar"
+                  value={quickCustForm.address}
+                  onChange={(e) => setQuickCustForm({ ...quickCustForm, address: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingCustomer}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                >
+                  <UserPlus size={16} /> {creatingCustomer ? 'Saving...' : 'Add & Select Customer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

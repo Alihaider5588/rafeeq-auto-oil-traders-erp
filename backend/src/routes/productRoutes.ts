@@ -39,16 +39,16 @@ router.post('/:id/adjust-stock', authorize([Role.ADMIN, Role.OPERATOR]), adjustP
 
 // Categories
 router.get('/meta/categories', getCategories);
-router.post('/meta/categories', authorize([Role.ADMIN]), createCategory);
-router.put('/meta/categories/:id', authorize([Role.ADMIN]), updateCategory);
+router.post('/meta/categories', authorize([Role.ADMIN, Role.OPERATOR]), createCategory);
+router.put('/meta/categories/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateCategory);
 router.get('/categories', getCategories);
-router.post('/categories', authorize([Role.ADMIN]), createCategory);
-router.put('/categories/:id', authorize([Role.ADMIN]), updateCategory);
+router.post('/categories', authorize([Role.ADMIN, Role.OPERATOR]), createCategory);
+router.put('/categories/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateCategory);
 
 // Units
 router.get('/meta/units', getUnits);
-router.post('/meta/units', authorize([Role.ADMIN]), createUnit);
+router.post('/meta/units', authorize([Role.ADMIN, Role.OPERATOR]), createUnit);
 router.get('/units', getUnits);
-router.post('/units', authorize([Role.ADMIN]), createUnit);
+router.post('/units', authorize([Role.ADMIN, Role.OPERATOR]), createUnit);
 
 export default router;

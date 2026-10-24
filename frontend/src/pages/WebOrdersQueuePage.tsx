@@ -375,25 +375,27 @@ export const WebOrdersQueuePage: React.FC = () => {
                   {/* Actions for Pending Orders */}
                   {isPending && (user?.role === 'ADMIN' || user?.role === 'OPERATOR') && (
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <button
-                        onClick={() => handleRejectOrder(ord)}
-                        disabled={actionLoadingId === ord.id}
-                        style={{
-                          backgroundColor: '#ffffff',
-                          border: '1px solid #ef4444',
-                          color: '#ef4444',
-                          padding: '7px 14px',
-                          borderRadius: '8px',
-                          fontSize: '0.85rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        <XCircle size={15} /> Reject
-                      </button>
+                      {user?.role === 'ADMIN' && (
+                        <button
+                          onClick={() => handleRejectOrder(ord)}
+                          disabled={actionLoadingId === ord.id}
+                          style={{
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #ef4444',
+                            color: '#ef4444',
+                            padding: '7px 14px',
+                            borderRadius: '8px',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <XCircle size={15} /> Reject
+                        </button>
+                      )}
 
                       <button
                         onClick={() => handleConfirmOrder(ord)}

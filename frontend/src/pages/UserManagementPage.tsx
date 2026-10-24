@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { User, Role } from '../types';
 import { Shield, Plus, Key, CheckCircle, XCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const UserManagementPage: React.FC = () => {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN';
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -263,20 +266,22 @@ export const UserManagementPage: React.FC = () => {
                         </button>
                       )}
 
-                      <button
-                        onClick={() => {
-                          setSelectedUserForPassword(u);
-                          setShowPasswordModal(true);
-                          setPasswordError('');
-                          setPasswordSuccess('');
-                          setNewPassword('');
-                        }}
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        title="Change / Reset Password"
-                      >
-                        <Key size={14} /> Change Password
-                      </button>
+                      {(isAdmin || u.role !== 'ADMIN') && (
+                        <button
+                          onClick={() => {
+                            setSelectedUserForPassword(u);
+                            setShowPasswordModal(true);
+                            setPasswordError('');
+                            setPasswordSuccess('');
+                            setNewPassword('');
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          title="Change / Reset Password"
+                        >
+                          <Key size={14} /> Change Password
+                        </button>
+                      )}
 
                       {u.role !== 'ADMIN' && (
                         <button
