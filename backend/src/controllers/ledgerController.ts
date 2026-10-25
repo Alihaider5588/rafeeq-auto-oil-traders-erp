@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 import { PaymentMethod, TransactionType } from '../types/enums';
 import { Prisma } from '@prisma/client';
+import { clearDashboardCache } from './reportController';
 
 const paymentSchema = z.object({
   customerId: z.string().min(1).optional().nullable(),
@@ -230,6 +231,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.status(201).json({
       success: true,
       message: 'Payment recorded successfully',
@@ -294,6 +296,7 @@ export const deleteLedgerEntry = async (req: AuthenticatedRequest, res: Response
         ipAddress: req.ip,
       });
 
+      clearDashboardCache();
       res.json({
         success: true,
         message: `Customer payment record deleted successfully. Current balance updated to Rs. ${revertedRec.toLocaleString()}.`,
@@ -347,6 +350,7 @@ export const deleteLedgerEntry = async (req: AuthenticatedRequest, res: Response
         ipAddress: req.ip,
       });
 
+      clearDashboardCache();
       res.json({
         success: true,
         message: `Supplier payment record deleted successfully. Current balance updated to Rs. ${revertedPay.toLocaleString()}.`,

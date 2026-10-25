@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 import { MovementType, PaymentMethod, TransactionType } from '../types/enums';
 import { Prisma } from '@prisma/client';
+import { clearDashboardCache } from './reportController';
 
 const purchaseItemSchema = z.object({
   productId: z.string().min(1),
@@ -281,6 +282,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.status(201).json({
       success: true,
       message: 'Inward purchase saved and stock updated',
@@ -382,6 +384,7 @@ export const deletePurchase = async (req: AuthenticatedRequest, res: Response): 
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.json({
       success: true,
       message: `Purchase bill #${purchase.invoiceNumber} permanently deleted. Stock and supplier ledger reverted.`,

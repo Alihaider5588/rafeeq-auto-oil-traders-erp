@@ -6,6 +6,7 @@ import { logAudit } from '../services/auditService';
 import { MovementType, OrderStatus, PaymentMethod, Role, TransactionType } from '../types/enums';
 import { Prisma } from '@prisma/client';
 import { clearProductsCache } from './productController';
+import { clearDashboardCache } from './reportController';
 
 const saleItemSchema = z.object({
   productId: z.string().min(1),
@@ -566,6 +567,7 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
     customerRateCache.clear();
     clearProductsCache();
+    clearDashboardCache();
 
     res.status(201).json({
       success: true,
@@ -702,6 +704,7 @@ export const approveSale = async (req: AuthenticatedRequest, res: Response): Pro
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.json({ success: true, message: 'Order approved and stock/ledger updated' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'Approval failed' });
@@ -797,6 +800,7 @@ export const cancelSale = async (req: AuthenticatedRequest, res: Response): Prom
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.json({ success: true, message: 'Sale voided and stock/ledger reversed successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'Failed to cancel sale' });
@@ -1079,6 +1083,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.json({ success: true, message: 'Sale invoice corrected successfully by Admin' });
   } catch (error: any) {
     console.error('editSaleInvoice error:', error);
@@ -1392,6 +1397,7 @@ export const deleteSale = async (req: AuthenticatedRequest, res: Response): Prom
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.json({
       success: true,
       message: `Invoice #${sale.invoiceNumber} was permanently deleted from database and POS. Stock & ledgers restored.`,

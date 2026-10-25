@@ -5,6 +5,10 @@ import { OrderStatus } from '../types/enums';
 
 let cachedDashboard: { payload: any; expiry: number } | null = null;
 
+export const clearDashboardCache = (): void => {
+  cachedDashboard = null;
+};
+
 export const getDashboardStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (cachedDashboard && Date.now() < cachedDashboard.expiry) {
@@ -50,11 +54,15 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         _count: { id: true },
       }),
 
-      // Today Payments (collections)
+      // Today Customer Udhar Recovery Payments (collections from ledger - excluding direct POS counter sales to avoid double counting)
       prisma.payment.aggregate({
         where: {
           paymentDate: { gte: startOfToday, lte: endOfToday },
           customerId: { not: null },
+          NOT: [
+            { receiptNumber: { startsWith: 'REC-POS-' } },
+            { notes: { startsWith: 'POS Received' } },
+          ],
         },
         _sum: { amount: true },
       }),

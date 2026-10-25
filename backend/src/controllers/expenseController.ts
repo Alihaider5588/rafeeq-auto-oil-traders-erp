@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 import { Role } from '../types/enums';
 import { Prisma } from '@prisma/client';
+import { clearDashboardCache } from './reportController';
 
 const expenseSchema = z.object({
   category: z.string().min(1, 'Category is required'),
@@ -128,6 +129,7 @@ export const createExpense = async (req: AuthenticatedRequest, res: Response): P
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.status(201).json({ success: true, expense });
   } catch (error) {
     console.error('Failed to record expense:', error);
@@ -156,6 +158,7 @@ export const deleteExpense = async (req: AuthenticatedRequest, res: Response): P
       ipAddress: req.ip,
     });
 
+    clearDashboardCache();
     res.json({ success: true, message: 'Expense deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to delete expense' });
