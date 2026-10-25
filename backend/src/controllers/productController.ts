@@ -479,6 +479,10 @@ export const updateCategory = async (req: AuthenticatedRequest, res: Response): 
   }
 };
 
+export const clearUnitsCache = (): void => {
+  cachedUnits = null;
+};
+
 // Units
 export const getUnits = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -508,6 +512,7 @@ export const createUnit = async (req: AuthenticatedRequest, res: Response): Prom
     const unit = await prisma.unit.create({
       data: { name: name.trim(), symbol: symbol.trim() },
     });
+    cachedUnits = null;
 
     res.status(201).json({ success: true, unit });
   } catch (error) {

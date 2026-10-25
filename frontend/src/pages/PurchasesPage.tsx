@@ -25,7 +25,8 @@ export const PurchasesPage: React.FC = () => {
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
 
-  // Quick Add Supplier Modal
+  const [categories, setCategories] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [quickSuppForm, setQuickSuppForm] = useState({
@@ -33,6 +34,22 @@ export const PurchasesPage: React.FC = () => {
     contactPerson: '',
     phone: '',
     address: '',
+  });
+
+  // Quick Add Product Modal
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [targetItemIndex, setTargetItemIndex] = useState<number>(0);
+  const [quickProductForm, setQuickProductForm] = useState({
+    name: '',
+    sku: '',
+    categoryId: '',
+    brand: '',
+    unitId: '',
+    purchasePrice: '',
+    salePrice: '',
+    wholesalePrice: '',
+    minimumStockLevel: '5',
   });
 
   useEffect(() => {
@@ -54,12 +71,16 @@ export const PurchasesPage: React.FC = () => {
 
   const loadMeta = async () => {
     try {
-      const [sRes, pRes] = await Promise.all([
+      const [sRes, pRes, cRes, uRes] = await Promise.all([
         api.get('/partners/suppliers'),
         api.get('/products'),
+        api.get('/products/categories'),
+        api.get('/products/units'),
       ]);
       setSuppliers(sRes.data.suppliers || []);
       setProducts(pRes.data.data || []);
+      setCategories(cRes.data.categories || []);
+      setUnits(uRes.data.units || []);
     } catch (e) {
       console.error(e);
     }
@@ -86,6 +107,73 @@ export const PurchasesPage: React.FC = () => {
       setOperationError(err.response?.data?.message || 'Supplier shamil nahi ho saka.');
     } finally {
       setCreatingSupplier(false);
+    }
+  };
+
+  const handleQuickCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickProductForm.name.trim() || !quickProductForm.categoryId || !quickProductForm.unitId) {
+      setOperationError('Product Name, Category, aur Base Unit select karna lazmi hai.');
+      return;
+    }
+
+    setCreatingProduct(true);
+    setOperationError('');
+    try {
+      const generatedSku = quickProductForm.sku.trim() || `PRD-${Date.now().toString().slice(-6)}`;
+      const pCost = parseFloat(quickProductForm.purchasePrice || '0');
+      const pSale = parseFloat(quickProductForm.salePrice || quickProductForm.purchasePrice || '0');
+      const pWholesale = parseFloat(quickProductForm.wholesalePrice || '0');
+
+      const res = await api.post('/products', {
+        name: quickProductForm.name.trim(),
+        sku: generatedSku,
+        categoryId: quickProductForm.categoryId,
+        brand: quickProductForm.brand.trim() || 'General',
+        unitId: quickProductForm.unitId,
+        purchasePrice: pCost,
+        salePrice: pSale,
+        wholesalePrice: pWholesale,
+        minimumStockLevel: parseFloat(quickProductForm.minimumStockLevel || '5'),
+        openingStock: 0,
+        showOnWebsite: true,
+        showInCatalog: true,
+        showPublicPrice: true,
+        isActive: true,
+      });
+
+      if (res.data?.success && res.data.product) {
+        const createdProd = res.data.product;
+        setProducts((prev) => [createdProd, ...prev]);
+
+        // Auto-select in current purchase row
+        const updated = [...items];
+        if (updated[targetItemIndex]) {
+          updated[targetItemIndex].productId = createdProd.id;
+          updated[targetItemIndex].unitCost = pCost;
+        } else {
+          updated.push({ productId: createdProd.id, quantity: 1, unitCost: pCost });
+        }
+        setItems(updated);
+
+        setShowAddProductModal(false);
+        setQuickProductForm({
+          name: '',
+          sku: '',
+          categoryId: categories[0]?.id || '',
+          brand: '',
+          unitId: units[0]?.id || '',
+          purchasePrice: '',
+          salePrice: '',
+          wholesalePrice: '',
+          minimumStockLevel: '5',
+        });
+        setOperationSuccess(`Naya Product "${createdProd.name}" kamyabi se shamil ho gaya aur automatically purchase row mein select ho chuka hai!`);
+      }
+    } catch (err: any) {
+      setOperationError(err.response?.data?.message || 'Product shamil nahi ho saka.');
+    } finally {
+      setCreatingProduct(false);
     }
   };
 
@@ -384,7 +472,34 @@ export const PurchasesPage: React.FC = () => {
 
               {/* Items List */}
               <div style={{ marginBottom: '16px' }}>
-                <label className="form-label">Products Received *</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Products Received (Maal Inward) *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetItemIndex(items.length - 1 >= 0 ? items.length - 1 : 0);
+                      setQuickProductForm(prev => ({
+                        ...prev,
+                        categoryId: prev.categoryId || categories[0]?.id || '',
+                        unitId: prev.unitId || units[0]?.id || '',
+                      }));
+                      setShowAddProductModal(true);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#2563eb',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Plus size={14} /> + Naya Product / Item Add Karein
+                  </button>
+                </div>
                 {items.map((it, idx) => (
                   <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr auto', gap: '10px', marginBottom: '8px' }}>
                     <select
@@ -571,6 +686,168 @@ export const PurchasesPage: React.FC = () => {
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
                 >
                   <Plus size={16} /> {creatingSupplier ? 'Saving...' : 'Add & Select Supplier'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Product Modal */}
+      {showAddProductModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '24px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#e0e7ff', color: '#4338ca', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ShoppingBag size={20} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                  + Naya Product / Item Catalog Mein Shamil Karein
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateProduct}>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Product Name *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Havoline 20W-50 (4L) / Silicon Tube"
+                  value={quickProductForm.name}
+                  onChange={(e) => setQuickProductForm({ ...quickProductForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Category *</label>
+                  <select
+                    className="form-control"
+                    value={quickProductForm.categoryId}
+                    onChange={(e) => setQuickProductForm({ ...quickProductForm, categoryId: e.target.value })}
+                    required
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Brand / Company *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Caltex / Total / Shell"
+                    value={quickProductForm.brand}
+                    onChange={(e) => setQuickProductForm({ ...quickProductForm, brand: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Base Unit (Pcs/Ltr/Can) *</label>
+                  <select
+                    className="form-control"
+                    value={quickProductForm.unitId}
+                    onChange={(e) => setQuickProductForm({ ...quickProductForm, unitId: e.target.value })}
+                    required
+                  >
+                    <option value="">Select Base Unit</option>
+                    {units.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.symbol})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">SKU / Item Code</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. HAV-20W50-4L (Auto if blank)"
+                    value={quickProductForm.sku}
+                    onChange={(e) => setQuickProductForm({ ...quickProductForm, sku: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Purchase / Cost Price (Rs.) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="form-control"
+                    placeholder="e.g. 4200"
+                    value={quickProductForm.purchasePrice}
+                    onChange={(e) => setQuickProductForm({ ...quickProductForm, purchasePrice: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Sale Retail Price (Rs.) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="form-control"
+                    placeholder="e.g. 4800"
+                    value={quickProductForm.salePrice}
+                    onChange={(e) => setQuickProductForm({ ...quickProductForm, salePrice: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(false)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingProduct}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                >
+                  <Plus size={16} /> {creatingProduct ? 'Saving...' : 'Add & Select In Purchase'}
                 </button>
               </div>
             </form>

@@ -6,6 +6,7 @@ import { logAudit } from '../services/auditService';
 import { MovementType, PaymentMethod, TransactionType } from '../types/enums';
 import { Prisma } from '@prisma/client';
 import { clearDashboardCache } from './reportController';
+import { clearProductsCache } from './productController';
 
 const purchaseItemSchema = z.object({
   productId: z.string().min(1),
@@ -282,6 +283,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     clearDashboardCache();
     res.status(201).json({
       success: true,
@@ -384,6 +386,7 @@ export const deletePurchase = async (req: AuthenticatedRequest, res: Response): 
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     clearDashboardCache();
     res.json({
       success: true,

@@ -24,6 +24,9 @@ export const ProductsPage: React.FC = () => {
   const [showAdjustStockModal, setShowAdjustStockModal] = useState(false);
   const [selectedProductForStock, setSelectedProductForStock] = useState<Product | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showUnitModal, setShowUnitModal] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
+  const [newUnitSymbol, setNewUnitSymbol] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -418,6 +421,32 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
+  const handleCreateUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUnitName.trim() || !newUnitSymbol.trim()) return;
+
+    try {
+      const res = await api.post('/products/units', {
+        name: newUnitName.trim(),
+        symbol: newUnitSymbol.trim()
+      });
+      if (res.data?.success && res.data.unit) {
+        setUnits((prev) => [...prev, res.data.unit]);
+      }
+      setNewUnitName('');
+      setNewUnitSymbol('');
+      setShowUnitModal(false);
+      triggerOperationSuccess(`Naya Packaging / Measurement Unit "${newUnitName.trim()}" shamil ho gaya!`);
+      loadMetadata();
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Unit shamil nahi ho saka.');
+    }
+  };
+
+  const totalCatalogCost = products.reduce((acc, p) => acc + (Number(p.currentStock || 0) * Number(p.purchasePrice || 0)), 0);
+  const totalCatalogUnits = products.reduce((acc, p) => acc + Number(p.currentStock || 0), 0);
+  const lowStockCount = products.filter((p) => Number(p.currentStock || 0) <= Number(p.minimumStockLevel || 0)).length;
+
   return (
     <div>
       {/* Top Operation Failure / Success Banners */}
@@ -493,12 +522,48 @@ export const ProductsPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={() => setShowUnitModal(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Layers size={16} /> Packaging Units
+          </button>
           <button onClick={() => setShowCategoryModal(true)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <FolderPlus size={16} /> Manage Categories
           </button>
           <button onClick={handleOpenAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Plus size={18} /> Add New Product
           </button>
+        </div>
+      </div>
+
+      {/* Real-time Inventory Valuation & Catalog KPI Banner */}
+      <div className="stat-grid" style={{ marginBottom: '20px' }}>
+        <div className="stat-card blue">
+          <div className="stat-label">Total Catalog Products</div>
+          <div className="stat-value">{products.length} Items</div>
+          <div className="stat-sub">Registered oil & spare part items</div>
+        </div>
+
+        <div className="stat-card emerald">
+          <div className="stat-label">Total Current Stock</div>
+          <div className="stat-value">{totalCatalogUnits.toLocaleString()} Units</div>
+          <div className="stat-sub">Total physical bottles/cans/pieces in shop</div>
+        </div>
+
+        <div className="stat-card purple" style={{ borderLeft: '4px solid #8b5cf6' }}>
+          <div className="stat-label">Total Stock Worth (کل مال کی لاگت)</div>
+          <div className="stat-value" style={{ color: '#7c3aed' }}>
+            Rs. {Math.round(totalCatalogCost).toLocaleString()}
+          </div>
+          <div className="stat-sub">Live valuation at purchase cost price</div>
+        </div>
+
+        <div className="stat-card amber" style={{ borderLeft: '4px solid #f59e0b' }}>
+          <div className="stat-label">Low Stock / Reorder Needed</div>
+          <div className="stat-value" style={{ color: lowStockCount > 0 ? '#d97706' : '#059669' }}>
+            {lowStockCount} Items
+          </div>
+          <div className="stat-sub">
+            {lowStockCount > 0 ? 'Urgent purchase inward required' : 'All stock levels healthy'}
+          </div>
         </div>
       </div>
 
@@ -552,6 +617,7 @@ export const ProductsPage: React.FC = () => {
               <th style={{ textAlign: 'right' }}>Cost Price</th>
               <th style={{ textAlign: 'right' }}>Sale Price</th>
               <th style={{ textAlign: 'right' }}>Current Stock</th>
+              <th style={{ textAlign: 'right' }}>Stock Worth (Cost)</th>
               <th style={{ textAlign: 'center' }}>Visibility</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
@@ -559,13 +625,13 @@ export const ProductsPage: React.FC = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   Loading product catalog...
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                   No products found. Add products to get started.
                 </td>
               </tr>
@@ -644,6 +710,14 @@ export const ProductsPage: React.FC = () => {
                           ({cartons} {p.primaryUnit.symbol} {remBottles > 0 ? `+ ${remBottles} ${p.unit?.symbol}` : ''})
                         </div>
                       )}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                      <div style={{ color: stock * cost > 0 ? '#1d4ed8' : '#94a3b8', fontSize: '0.92rem' }}>
+                        Rs. {Math.round(stock * cost).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500 }}>
+                        {stock} {p.unit?.symbol || 'Pcs'} × Rs. {cost.toLocaleString()}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
@@ -834,11 +908,29 @@ export const ProductsPage: React.FC = () => {
                   <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Layers size={17} color="#0284c7" /> Packaging & Unit Conversion (Primary & Secondary Units)
                   </div>
-                  {formData.primaryUnitId && (
-                    <span style={{ fontSize: '0.78rem', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', border: '1px solid #7dd3fc' }}>
-                      1 {units.find(u => u.id === formData.primaryUnitId)?.name || 'PRIMARY'} = {formData.conversionFactor || 1} {units.find(u => u.id === formData.unitId)?.name || 'SECONDARY'}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowUnitModal(true)}
+                      style={{
+                        background: '#e0f2fe',
+                        border: '1px solid #7dd3fc',
+                        color: '#0284c7',
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Add Custom Unit
+                    </button>
+                    {formData.primaryUnitId && (
+                      <span style={{ fontSize: '0.78rem', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', border: '1px solid #7dd3fc' }}>
+                        1 {units.find(u => u.id === formData.primaryUnitId)?.name || 'PRIMARY'} = {formData.conversionFactor || 1} {units.find(u => u.id === formData.unitId)?.name || 'SECONDARY'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '12px' }}>
@@ -1264,6 +1356,69 @@ export const ProductsPage: React.FC = () => {
                   <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
                     <span style={{ fontWeight: 600 }}>{c.name}</span>
                     <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.description || 'Active'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unit Management Modal */}
+      {showUnitModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 110, padding: '20px'
+        }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '14px', width: '500px', maxWidth: '90%', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Manage Packaging / Units</h3>
+              <button
+                onClick={() => setShowUnitModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUnit} style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#0369a1' }}>
+                + Add Custom Unit (e.g. Dozen, Bundle, Balti, Pouch)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  required
+                  placeholder="Unit Name (e.g. Dozen)"
+                  className="form-control"
+                  value={newUnitName}
+                  onChange={(e) => setNewUnitName(e.target.value)}
+                />
+                <input
+                  type="text"
+                  required
+                  placeholder="Symbol (e.g. Dzn)"
+                  className="form-control"
+                  value={newUnitSymbol}
+                  onChange={(e) => setNewUnitSymbol(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                + Save Unit
+              </button>
+            </form>
+
+            <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b', marginBottom: '8px' }}>
+                Existing Units ({units.length})
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                {units.map((u) => (
+                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem' }}>
+                    <span style={{ fontWeight: 600 }}>{u.name}</span>
+                    <span style={{ color: '#0284c7', fontWeight: 700 }}>({u.symbol})</span>
                   </div>
                 ))}
               </div>
