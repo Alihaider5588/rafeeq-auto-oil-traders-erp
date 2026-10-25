@@ -16,17 +16,23 @@ if (isPostgresRequested) {
   }
 
   try {
+    let connectionUrl = neonUrl.trim();
+    if (connectionUrl.includes('-pooler.') && !connectionUrl.includes('pgbouncer=true')) {
+      const sep = connectionUrl.includes('?') ? '&' : '?';
+      connectionUrl = `${connectionUrl}${sep}pgbouncer=true&connection_limit=10&connect_timeout=15`;
+    }
+
     const { PrismaClient: PostgresClient } = require('@prisma/client-postgres');
     prismaInstance = new PostgresClient({
       datasources: {
         db: {
-          url: neonUrl.trim(),
+          url: connectionUrl,
         },
       },
-      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+      log: ['error', 'warn'],
     });
 
-    console.log('[Database] Configured in POSTGRESQL mode (Neon Production).');
+    console.log('[Database] Configured in POSTGRESQL mode (Neon Production, Pooled).');
   } catch (err: any) {
     console.error('================================================================');
     console.error('FATAL ERROR: Failed to load PostgreSQL Prisma Client (@prisma/client-postgres):', err?.message || 'Unknown error');

@@ -28,6 +28,14 @@ const productSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+let cachedAllProducts: any = null;
+let cachedAllProductsTime = 0;
+const PRODUCTS_CACHE_TTL = 30 * 1000;
+
+export const clearProductsCache = () => {
+  cachedAllProducts = null;
+};
+
 export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '50' } = req.query;
@@ -35,6 +43,12 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
     const limitNum = Math.min(200, Math.max(1, parseInt(limit as string, 10) || 50));
     const skip = (pageNum - 1) * limitNum;
+
+    const isDefaultRequest = !search && !categoryId && !brand && !lowStock && !showOnWebsite && !showInCatalog && pageNum === 1;
+    if (isDefaultRequest && cachedAllProducts && Date.now() - cachedAllProductsTime < PRODUCTS_CACHE_TTL) {
+      res.json(cachedAllProducts);
+      return;
+    }
 
     const where: Prisma.ProductWhereInput = {};
 
@@ -74,7 +88,7 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
       );
     }
 
-    res.json({
+    const responseData = {
       success: true,
       data: filteredProducts,
       pagination: {
@@ -83,7 +97,14 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
         limit: limitNum,
         totalPages: Math.ceil(total / limitNum),
       },
-    });
+    };
+
+    if (isDefaultRequest) {
+      cachedAllProducts = responseData;
+      cachedAllProductsTime = Date.now();
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error('getProducts error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve products' });
@@ -197,6 +218,7 @@ export const createProduct = async (req: AuthenticatedRequest, res: Response): P
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     res.status(201).json({ success: true, product });
   } catch (error) {
     console.error('createProduct error:', error);
@@ -256,6 +278,7 @@ export const updateProduct = async (req: AuthenticatedRequest, res: Response): P
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     res.json({ success: true, product });
   } catch (error) {
     console.error('updateProduct error:', error);
@@ -332,6 +355,7 @@ export const adjustProductStock = async (req: AuthenticatedRequest, res: Respons
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     res.json({ success: true, message: 'Stock adjusted successfully', product: updated });
   } catch (error) {
     console.error('adjustProductStock error:', error);
@@ -369,15 +393,30 @@ export const handleImageUpload = (req: AuthenticatedRequest, res: Response): voi
   });
 };
 
+// Categories & Units Caching
+let cachedCategories: any = null;
+let cachedCategoriesTime = 0;
+let cachedUnits: any = null;
+let cachedUnitsTime = 0;
+const CACHE_TTL = 60 * 1000;
+
 // Categories
 export const getCategories = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const now = Date.now();
+    if (cachedCategories && now - cachedCategoriesTime < CACHE_TTL) {
+      res.json({ success: true, categories: cachedCategories });
+      return;
+    }
+
     const categories = await prisma.category.findMany({
       include: {
         _count: { select: { products: true } },
       },
       orderBy: { name: 'asc' },
     });
+    cachedCategories = categories;
+    cachedCategoriesTime = now;
     res.json({ success: true, categories });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to get categories' });
@@ -395,6 +434,7 @@ export const createCategory = async (req: AuthenticatedRequest, res: Response): 
     const category = await prisma.category.create({
       data: { name: name.trim(), description: description ? description.trim() : null },
     });
+    cachedCategories = null;
 
     await logAudit({
       userId: req.user?.id,
@@ -431,6 +471,7 @@ export const updateCategory = async (req: AuthenticatedRequest, res: Response): 
       where: { id },
       data: updateData,
     });
+    cachedCategories = null;
 
     res.json({ success: true, category });
   } catch (error) {
@@ -441,7 +482,15 @@ export const updateCategory = async (req: AuthenticatedRequest, res: Response): 
 // Units
 export const getUnits = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const now = Date.now();
+    if (cachedUnits && now - cachedUnitsTime < CACHE_TTL) {
+      res.json({ success: true, units: cachedUnits });
+      return;
+    }
+
     const units = await prisma.unit.findMany({ orderBy: { name: 'asc' } });
+    cachedUnits = units;
+    cachedUnitsTime = now;
     res.json({ success: true, units });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to get units' });
@@ -523,6 +572,7 @@ export const deleteProduct = async (req: AuthenticatedRequest, res: Response): P
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     res.json({
       success: true,
       message: `Product "${product.name}" (${product.sku}) was permanently deleted from database and POS.`,

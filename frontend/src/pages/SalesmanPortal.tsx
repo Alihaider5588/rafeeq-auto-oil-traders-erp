@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api, { getMediaUrl } from '../services/api';
 import { Customer, Product } from '../types';
 import {
@@ -43,6 +43,32 @@ interface CartItem {
   };
 }
 
+// Dedicated clock component to prevent re-rendering the entire POS page every 1 second
+const PosLiveClock: React.FC = React.memo(() => {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div style={{
+      textAlign: 'right',
+      backgroundColor: '#0f172a',
+      padding: '8px 14px',
+      borderRadius: '10px',
+      border: '1px solid #334155'
+    }}>
+      <div style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+        <Clock size={12} /> POS Date & Time
+      </div>
+      <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#f59e0b', marginTop: '2px' }}>
+        {time.toLocaleDateString()} {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+      </div>
+    </div>
+  );
+});
+
 export const SalesmanPortal: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -56,7 +82,7 @@ export const SalesmanPortal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [searchProduct, setSearchProduct] = useState('');
-  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const rateCacheRef = useRef<Record<string, any>>({});
 
   // Category & Full Bill Discount States
   const [discountScope, setDiscountScope] = useState<'FULL_BILL' | 'CATEGORY'>('FULL_BILL');
@@ -80,11 +106,6 @@ export const SalesmanPortal: React.FC = () => {
     area: '',
     creditLimit: '100000',
   });
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const renderFieldErrorTag = (fieldName: string) => {
     if (!fieldErrors[fieldName]) return null;
@@ -129,17 +150,25 @@ export const SalesmanPortal: React.FC = () => {
   };
 
   const fetchCustomerRate = async (customerId: string, productId: string, unitType: 'PRIMARY' | 'SECONDARY') => {
+    if (!customerId || customerId === 'walk-in') return null;
+    const cacheKey = `${customerId}:${productId}:${unitType}`;
+    if (rateCacheRef.current[cacheKey]) {
+      return rateCacheRef.current[cacheKey];
+    }
     try {
       const res = await api.get('/sales/customer-rate', {
         params: { customerId, productId, unitType }
       });
+      if (res.data?.success) {
+        rateCacheRef.current[cacheKey] = res.data;
+      }
       return res.data;
     } catch {
       return null;
     }
   };
 
-  const addToCart = async (product: ExtendedProduct) => {
+  const addToCart = (product: ExtendedProduct) => {
     if (fieldErrors.cart) setFieldErrors(prev => ({ ...prev, cart: '' }));
     const existingIndex = cart.findIndex((item) => item.product.id === product.id);
     if (existingIndex > -1) {
@@ -149,53 +178,69 @@ export const SalesmanPortal: React.FC = () => {
       return;
     }
 
-    let initialPrice = Number(product.salePrice);
-    let rateInfo: any = null;
+    const standardPrice = Number(product.salePrice);
+    const isWalkIn = !selectedCustomer || selectedCustomer.id === 'walk-in' || selectedCustomer.phone === '00000000000' || selectedCustomer.shopName.toLowerCase().includes('walk-in');
 
-    if (selectedCustomer) {
-      rateInfo = await fetchCustomerRate(selectedCustomer.id, product.id, 'SECONDARY');
-      if (rateInfo?.suggestedRate) {
-        initialPrice = Number(rateInfo.suggestedRate);
-      }
-    }
+    const cacheKey = selectedCustomer ? `${selectedCustomer.id}:${product.id}:SECONDARY` : '';
+    const cachedRate = cacheKey ? rateCacheRef.current[cacheKey] : null;
+    const initialPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : standardPrice;
 
-    setCart([
-      ...cart,
+    // Instantly add to cart without network freeze
+    setCart(prev => [
+      ...prev,
       {
         product,
         quantity: 1,
         unitType: 'SECONDARY',
         unitPrice: initialPrice,
-        standardRate: Number(product.salePrice),
-        rateInfo: rateInfo || undefined,
+        standardRate: standardPrice,
+        rateInfo: cachedRate || undefined,
       },
     ]);
+
+    // Asynchronously update with negotiated rate in background if available
+    if (!isWalkIn && selectedCustomer && !cachedRate) {
+      fetchCustomerRate(selectedCustomer.id, product.id, 'SECONDARY').then(rateInfo => {
+        if (rateInfo?.suggestedRate) {
+          setCart(curCart =>
+            curCart.map(it =>
+              it.product.id === product.id && it.unitType === 'SECONDARY'
+                ? { ...it, unitPrice: Number(rateInfo.suggestedRate), rateInfo }
+                : it
+            )
+          );
+        }
+      });
+    }
   };
 
-  const handleUnitChange = async (index: number, newUnit: 'PRIMARY' | 'SECONDARY') => {
+  const handleUnitChange = (index: number, newUnit: 'PRIMARY' | 'SECONDARY') => {
     const item = cart[index];
     const conv = Number(item.product.conversionFactor) || 1;
-    let newPrice = item.unitPrice;
+    const standardBase = Number(item.product.salePrice);
+    const fallbackPrice = newUnit === 'PRIMARY' ? standardBase * conv : standardBase;
 
-    if (selectedCustomer) {
-      const rateData = await fetchCustomerRate(selectedCustomer.id, item.product.id, newUnit);
-      if (rateData?.suggestedRate) {
-        newPrice = Number(rateData.suggestedRate);
-      } else {
-        newPrice = newUnit === 'PRIMARY' ? Number(item.product.salePrice) * conv : Number(item.product.salePrice);
-      }
-      const updated = [...cart];
-      updated[index] = { ...item, unitType: newUnit, unitPrice: newPrice, rateInfo: rateData };
-      setCart(updated);
-    } else {
-      if (newUnit === 'PRIMARY') {
-        newPrice = Number(item.product.salePrice) * conv;
-      } else {
-        newPrice = Number(item.product.salePrice);
-      }
-      const updated = [...cart];
-      updated[index] = { ...item, unitType: newUnit, unitPrice: newPrice };
-      setCart(updated);
+    const isWalkIn = !selectedCustomer || selectedCustomer.id === 'walk-in' || selectedCustomer.phone === '00000000000' || selectedCustomer.shopName.toLowerCase().includes('walk-in');
+    const cacheKey = selectedCustomer ? `${selectedCustomer.id}:${item.product.id}:${newUnit}` : '';
+    const cachedRate = cacheKey ? rateCacheRef.current[cacheKey] : null;
+    const targetPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : fallbackPrice;
+
+    const updated = [...cart];
+    updated[index] = { ...item, unitType: newUnit, unitPrice: targetPrice, rateInfo: cachedRate || undefined };
+    setCart(updated);
+
+    if (!isWalkIn && selectedCustomer && !cachedRate) {
+      fetchCustomerRate(selectedCustomer.id, item.product.id, newUnit).then(rateData => {
+        if (rateData?.suggestedRate) {
+          setCart(curCart => {
+            const next = [...curCart];
+            if (next[index] && next[index].product.id === item.product.id && next[index].unitType === newUnit) {
+              next[index] = { ...next[index], unitPrice: Number(rateData.suggestedRate), rateInfo: rateData };
+            }
+            return next;
+          });
+        }
+      });
     }
   };
 
@@ -502,20 +547,7 @@ export const SalesmanPortal: React.FC = () => {
           </div>
         </div>
 
-        <div style={{
-          textAlign: 'right',
-          backgroundColor: '#0f172a',
-          padding: '8px 14px',
-          borderRadius: '10px',
-          border: '1px solid #334155'
-        }}>
-          <div style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
-            <Clock size={12} /> POS Date & Time
-          </div>
-          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#f59e0b', marginTop: '2px' }}>
-            {currentDateTime.toLocaleDateString()} {currentDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
-          </div>
-        </div>
+        <PosLiveClock />
       </div>
 
       {errorMsg && (

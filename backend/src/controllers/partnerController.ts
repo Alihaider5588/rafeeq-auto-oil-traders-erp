@@ -132,35 +132,43 @@ export const createSupplier = async (req: AuthenticatedRequest, res: Response): 
   }
 };
 
+let isWalkInCustomerEnsured = false;
+let cachedAllCustomers: any = null;
+let cachedAllCustomersTime = 0;
+const CUSTOMERS_CACHE_TTL = 30 * 1000;
+
 // CUSTOMERS
 export const getCustomers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { search, area, salesmanId } = req.query;
 
-    // Ensure Walk-in Customer exists by default for direct shop sales
-    const walkInExists = await prisma.customer.findFirst({
-      where: {
-        OR: [
-          { phone: '00000000000' },
-          { shopName: { contains: 'Walk-in' } }
-        ]
-      }
-    });
-
-    if (!walkInExists) {
-      await prisma.customer.create({
-        data: {
-          shopName: 'Walk-in Customer / Counter Sale',
-          ownerName: 'Direct Cash Customer',
-          phone: '00000000000',
-          address: 'Main Shop / Counter',
-          area: 'Okara Local',
-          openingBalance: new Prisma.Decimal(0),
-          currentReceivable: new Prisma.Decimal(0),
-          creditLimit: new Prisma.Decimal(0),
-          notes: 'Standard Walk-in customer for retail counter billing',
+    // Ensure Walk-in Customer exists by default once per server lifecycle
+    if (!isWalkInCustomerEnsured) {
+      const walkInExists = await prisma.customer.findFirst({
+        where: {
+          OR: [
+            { phone: '00000000000' },
+            { shopName: { contains: 'Walk-in' } }
+          ]
         }
       });
+
+      if (!walkInExists) {
+        await prisma.customer.create({
+          data: {
+            shopName: 'Walk-in Customer / Counter Sale',
+            ownerName: 'Direct Cash Customer',
+            phone: '00000000000',
+            address: 'Main Shop / Counter',
+            area: 'Okara Local',
+            openingBalance: new Prisma.Decimal(0),
+            currentReceivable: new Prisma.Decimal(0),
+            creditLimit: new Prisma.Decimal(0),
+            notes: 'Standard Walk-in customer for retail counter billing',
+          }
+        });
+      }
+      isWalkInCustomerEnsured = true;
     }
 
     const where: Prisma.CustomerWhereInput = {};
@@ -176,6 +184,12 @@ export const getCustomers = async (req: AuthenticatedRequest, res: Response): Pr
     if (area) where.area = area as string;
     if (salesmanId) where.salesmanId = salesmanId as string;
 
+    const isUnfiltered = !search && !area && !salesmanId;
+    if (isUnfiltered && cachedAllCustomers && Date.now() - cachedAllCustomersTime < CUSTOMERS_CACHE_TTL) {
+      res.json({ success: true, customers: cachedAllCustomers });
+      return;
+    }
+
     const customers = await prisma.customer.findMany({
       where,
       include: {
@@ -183,6 +197,11 @@ export const getCustomers = async (req: AuthenticatedRequest, res: Response): Pr
       },
       orderBy: { shopName: 'asc' },
     });
+
+    if (isUnfiltered) {
+      cachedAllCustomers = customers;
+      cachedAllCustomersTime = Date.now();
+    }
 
     res.json({ success: true, customers });
   } catch (error) {
@@ -266,6 +285,7 @@ export const createCustomer = async (req: AuthenticatedRequest, res: Response): 
       ipAddress: req.ip,
     });
 
+    cachedAllCustomers = null;
     res.status(201).json({ success: true, customer });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'Failed to create customer' });
@@ -334,6 +354,8 @@ export const deleteCustomer = async (req: AuthenticatedRequest, res: Response): 
       details: { shopName: customer.shopName },
       ipAddress: req.ip,
     });
+
+    cachedAllCustomers = null;
 
     res.json({
       success: true,

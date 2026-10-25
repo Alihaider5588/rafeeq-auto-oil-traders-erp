@@ -4,8 +4,18 @@ import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 
+let cachedSettings: any = null;
+let cachedSettingsTime = 0;
+const SETTINGS_CACHE_TTL = 60 * 1000;
+
 export const getSettings = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const now = Date.now();
+    if (cachedSettings && now - cachedSettingsTime < SETTINGS_CACHE_TTL) {
+      res.json({ success: true, settings: cachedSettings });
+      return;
+    }
+
     let settings = await prisma.systemSetting.findFirst();
     if (!settings) {
       settings = await prisma.systemSetting.create({
@@ -18,6 +28,8 @@ export const getSettings = async (_req: AuthenticatedRequest, res: Response): Pr
         },
       });
     }
+    cachedSettings = settings;
+    cachedSettingsTime = now;
     res.json({ success: true, settings });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to retrieve settings' });
@@ -44,6 +56,9 @@ export const updateSettings = async (req: AuthenticatedRequest, res: Response): 
         data: validData,
       });
     }
+
+    cachedSettings = settings;
+    cachedSettingsTime = Date.now();
 
     await logAudit({
       userId: req.user?.id,

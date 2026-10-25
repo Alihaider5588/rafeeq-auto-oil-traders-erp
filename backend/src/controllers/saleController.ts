@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 import { MovementType, OrderStatus, PaymentMethod, Role, TransactionType } from '../types/enums';
 import { Prisma } from '@prisma/client';
+import { clearProductsCache } from './productController';
 
 const saleItemSchema = z.object({
   productId: z.string().min(1),
@@ -123,6 +124,8 @@ export const getSaleById = async (req: AuthenticatedRequest, res: Response): Pro
   }
 };
 
+const customerRateCache = new Map<string, { data: any; expiry: number }>();
+
 // Customer/Party-Wise Product Rate History lookup
 export const getCustomerProductRate = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -130,6 +133,17 @@ export const getCustomerProductRate = async (req: AuthenticatedRequest, res: Res
 
     if (!customerId || !productId) {
       res.status(400).json({ success: false, message: 'customerId and productId are required' });
+      return;
+    }
+
+    const cId = String(customerId);
+    const pId = String(productId);
+    const uType = String(unitType);
+    const cacheKey = `${cId}:${pId}:${uType}`;
+
+    const cached = customerRateCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiry) {
+      res.json(cached.data);
       return;
     }
 
@@ -214,7 +228,7 @@ export const getCustomerProductRate = async (req: AuthenticatedRequest, res: Res
       totalPrice: Number(item.totalPrice),
     }));
 
-    res.json({
+    const rateResponse = {
       success: true,
       hasHistory,
       suggestedRate: Math.round(suggestedRate * 100) / 100,
@@ -227,7 +241,10 @@ export const getCustomerProductRate = async (req: AuthenticatedRequest, res: Res
       primaryUnit: product.primaryUnit,
       baseUnit: product.unit,
       rateHistory,
-    });
+    };
+
+    customerRateCache.set(cacheKey, { data: rateResponse, expiry: Date.now() + 5 * 60 * 1000 });
+    res.json(rateResponse);
   } catch (error) {
     console.error('getCustomerProductRate error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve rate history' });
@@ -546,6 +563,9 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
         console.error('Async audit log error:', logErr);
       }
     })();
+
+    customerRateCache.clear();
+    clearProductsCache();
 
     res.status(201).json({
       success: true,

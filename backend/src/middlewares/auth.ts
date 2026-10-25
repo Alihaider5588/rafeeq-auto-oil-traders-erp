@@ -13,6 +13,21 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+export const userAuthCache = new Map<string, {
+  id: string;
+  username: string;
+  fullName: string;
+  role: Role;
+  permissions: string[];
+  isActive: boolean;
+  expiry: number;
+}>();
+
+export const clearUserAuthCache = (userId?: string) => {
+  if (userId) userAuthCache.delete(userId);
+  else userAuthCache.clear();
+};
+
 export const authenticate = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -33,7 +48,24 @@ export const authenticate = async (
       role: Role;
     };
 
-    const user = await prisma.user.findUnique({
+    let user: any = null;
+    const cached = userAuthCache.get(decoded.id);
+    if (cached && Date.now() < cached.expiry) {
+      if (!cached.isActive) {
+        res.status(401).json({ success: false, message: 'User account is inactive or not found' });
+        return;
+      }
+      req.user = {
+        id: cached.id,
+        username: cached.username,
+        fullName: cached.fullName,
+        role: cached.role,
+        permissions: cached.permissions,
+      };
+      return next();
+    }
+
+    user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {
         id: true,
@@ -58,6 +90,16 @@ export const authenticate = async (
         parsedPerms = [];
       }
     }
+
+    userAuthCache.set(user.id, {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      role: user.role as Role,
+      permissions: parsedPerms,
+      isActive: user.isActive,
+      expiry: Date.now() + 3 * 60 * 1000,
+    });
 
     req.user = {
       id: user.id,
