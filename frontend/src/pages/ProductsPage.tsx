@@ -91,7 +91,7 @@ export const ProductsPage: React.FC = () => {
     try {
       setLoading(true);
       const res = await api.get('/products', {
-        params: { search, categoryId: selectedCategory || undefined },
+        params: { search, categoryId: selectedCategory || undefined, limit: 2000 },
       });
       setProducts(res.data.data || []);
     } catch (e) {

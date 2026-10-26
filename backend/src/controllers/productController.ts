@@ -38,10 +38,10 @@ export const clearProductsCache = () => {
 
 export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '50' } = req.query;
+    const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '2000' } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(2000, Math.max(1, parseInt(limit as string, 10) || 50));
+    const limitNum = Math.min(2000, Math.max(1, parseInt(limit as string, 10) || 2000));
     const skip = (pageNum - 1) * limitNum;
 
     const isDefaultRequest = !search && !categoryId && !brand && !lowStock && !showOnWebsite && !showInCatalog && pageNum === 1;
