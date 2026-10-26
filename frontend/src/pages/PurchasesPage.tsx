@@ -71,18 +71,26 @@ export const PurchasesPage: React.FC = () => {
 
   const loadMeta = async () => {
     try {
-      const [sRes, pRes, cRes, uRes] = await Promise.all([
+      const [sRes, pRes, cRes, uRes] = await Promise.allSettled([
         api.get('/partners/suppliers'),
-        api.get('/products'),
+        api.get('/products?limit=1000'),
         api.get('/products/categories'),
         api.get('/products/units'),
       ]);
-      setSuppliers(sRes.data.suppliers || []);
-      setProducts(pRes.data.data || []);
-      setCategories(cRes.data.categories || []);
-      setUnits(uRes.data.units || []);
+      if (sRes.status === 'fulfilled' && sRes.value.data) {
+        setSuppliers(sRes.value.data.suppliers || sRes.value.data.data || []);
+      }
+      if (pRes.status === 'fulfilled' && pRes.value.data) {
+        setProducts(pRes.value.data.data || pRes.value.data.products || []);
+      }
+      if (cRes.status === 'fulfilled' && cRes.value.data) {
+        setCategories(cRes.value.data.categories || cRes.value.data.data || []);
+      }
+      if (uRes.status === 'fulfilled' && uRes.value.data) {
+        setUnits(uRes.value.data.units || uRes.value.data.data || []);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('loadMeta error:', e);
     }
   };
 
@@ -267,7 +275,15 @@ export const PurchasesPage: React.FC = () => {
             Record oil shipments received from refineries & distributors (automatically increases stock)
           </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
+        <button
+          onClick={() => {
+            if (suppliers.length === 0 || products.length === 0) {
+              loadMeta();
+            }
+            setShowModal(true);
+          }}
+          className="btn btn-primary"
+        >
           <Plus size={18} /> New Purchase Entry
         </button>
       </div>

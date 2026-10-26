@@ -29,15 +29,7 @@ router.post(
   handleImageUpload
 );
 
-// Products
-router.get('/', getProducts);
-router.get('/:id', getProductById);
-router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createProduct);
-router.put('/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateProduct);
-router.delete('/:id', authorize([Role.ADMIN]), deleteProduct);
-router.post('/:id/adjust-stock', authorize([Role.ADMIN, Role.OPERATOR]), adjustProductStock);
-
-// Categories
+// Categories (Must be defined before /:id routes)
 router.get('/meta/categories', getCategories);
 router.post('/meta/categories', authorize([Role.ADMIN, Role.OPERATOR]), createCategory);
 router.put('/meta/categories/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateCategory);
@@ -45,10 +37,18 @@ router.get('/categories', getCategories);
 router.post('/categories', authorize([Role.ADMIN, Role.OPERATOR]), createCategory);
 router.put('/categories/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateCategory);
 
-// Units
+// Units (Must be defined before /:id routes)
 router.get('/meta/units', getUnits);
 router.post('/meta/units', authorize([Role.ADMIN, Role.OPERATOR]), createUnit);
 router.get('/units', getUnits);
 router.post('/units', authorize([Role.ADMIN, Role.OPERATOR]), createUnit);
+
+// Products
+router.get('/', getProducts);
+router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createProduct);
+router.get('/:id', getProductById);
+router.put('/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateProduct);
+router.delete('/:id', authorize([Role.ADMIN]), deleteProduct);
+router.post('/:id/adjust-stock', authorize([Role.ADMIN, Role.OPERATOR]), adjustProductStock);
 
 export default router;
