@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma';
 import { Role } from '../types/enums';
+import { getJwtSecret } from '../utils/security';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -41,7 +42,7 @@ export const authenticate = async (
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'rafeeque_super_secret_jwt_key_2026';
+    const secret = getJwtSecret();
     const decoded = jwt.verify(token, secret) as {
       id: string;
       username: string;

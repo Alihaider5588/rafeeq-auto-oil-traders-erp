@@ -18,6 +18,7 @@ import {
   parseReceiptData,
 } from '../controllers/ownerBrandController';
 import { authenticate, authorize } from '../middlewares/auth';
+import { authLimiter, passwordLimiter } from '../middlewares/rateLimiter';
 import { Role } from '../types/enums';
 
 const router = Router();
@@ -27,10 +28,10 @@ router.use(authenticate);
 router.use(authorize([Role.ADMIN], '/admin/confidential-brand'));
 
 // Re-verification endpoint (receives password, verifies, returns token)
-router.post('/verify-access', verifyOwnerBrandAccess);
+router.post('/verify-access', authLimiter, verifyOwnerBrandAccess);
 
 // Change Vault / Master Admin Password
-router.post('/change-password', changeVaultPassword);
+router.post('/change-password', passwordLimiter, changeVaultPassword);
 
 // Protected by re-verification token requirement
 router.use(requireOwnerBrandAuth);

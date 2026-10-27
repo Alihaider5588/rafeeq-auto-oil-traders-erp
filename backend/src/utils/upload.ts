@@ -11,6 +11,10 @@ if (!isVercel && !fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Allowed extensions and MIME types whitelist (Strictly no SVG to prevent XSS)
+const ALLOWED_EXTENSIONS = new Set(['jpeg', 'jpg', 'png', 'webp']);
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 // Storage configuration: memory for serverless (zero file loss), disk for local
 const storage = isVercel
   ? multer.memoryStorage()
@@ -19,29 +23,30 @@ const storage = isVercel
         cb(null, uploadDir);
       },
       filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-        cb(null, `prod-${uniqueSuffix}${ext}`);
+        const rawExt = path.extname(file.originalname).toLowerCase().replace('.', '');
+        const safeExt = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : 'jpg';
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e8)}`;
+        cb(null, `prod-${uniqueSuffix}.${safeExt}`);
       },
     });
 
-// File filter (images only: jpeg, jpg, png, webp)
+// File filter (strict whitelist verification)
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowed = /jpeg|jpg|png|webp/;
   const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
-  const mime = file.mimetype.toLowerCase();
+  const mime = (file.mimetype || '').toLowerCase().trim();
 
-  if (allowed.test(ext) && (mime.includes('image/') || allowed.test(mime))) {
+  if (ALLOWED_EXTENSIONS.has(ext) && ALLOWED_MIME_TYPES.has(mime)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files (jpeg, jpg, png, webp) are permitted.'));
+    cb(new Error('Security violation: Only legitimate JPEG, PNG, and WebP image files are permitted.'));
   }
 };
 
 export const uploadProductImage = multer({
   storage,
   limits: {
-    fileSize: 4 * 1024 * 1024, // 4MB limit for cloud persistence
+    fileSize: 4 * 1024 * 1024, // 4MB maximum file size
+    files: 1, // Only 1 file per request
   },
   fileFilter,
 });

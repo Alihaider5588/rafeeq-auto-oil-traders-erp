@@ -7,8 +7,9 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 import { Role } from '../types/enums';
 import { Prisma } from '@prisma/client';
+import { getJwtSecret } from '../utils/security';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'rafeeque_super_secure_jwt_secret_token_key_2026_oil_traders';
+const JWT_SECRET = getJwtSecret();
 
 // 1. Password Re-verification endpoint for confidential access
 export const verifyOwnerBrandAccess = async (req: AuthenticatedRequest, res: Response): Promise<void> => {

@@ -3,9 +3,10 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
-import { AuthenticatedRequest } from '../middlewares/auth';
+import { AuthenticatedRequest, clearUserAuthCache } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
 import { Role } from '../types/enums';
+import { getJwtSecret } from '../utils/security';
 
 const loginSchema = z.object({
   identifier: z.string().optional(),
@@ -45,22 +46,42 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (!user) {
+      await logAudit({
+        action: 'LOGIN_FAILED',
+        entityType: 'USER',
+        details: { identifier, reason: 'User not found' },
+        ipAddress: req.ip,
+      });
       res.status(401).json({ success: false, message: 'Invalid username/phone or password' });
       return;
     }
 
     if (!user.isActive) {
+      await logAudit({
+        userId: user.id,
+        action: 'LOGIN_BLOCKED',
+        entityType: 'USER',
+        details: { username: user.username, reason: 'Account disabled' },
+        ipAddress: req.ip,
+      });
       res.status(403).json({ success: false, message: 'Account has been disabled. Please contact Admin.' });
       return;
     }
 
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatch) {
+      await logAudit({
+        userId: user.id,
+        action: 'LOGIN_FAILED',
+        entityType: 'USER',
+        details: { username: user.username, reason: 'Incorrect password' },
+        ipAddress: req.ip,
+      });
       res.status(401).json({ success: false, message: 'Invalid username/phone or password' });
       return;
     }
 
-    const secret = process.env.JWT_SECRET || 'rafeeque_super_secret_jwt_key_2026';
+    const secret = getJwtSecret();
     const token = jwt.sign(
       {
         id: user.id,
@@ -270,6 +291,10 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
         res.status(403).json({ success: false, message: 'Operators cannot promote users to Administrator.' });
         return;
       }
+      if (permissions !== undefined) {
+        res.status(403).json({ success: false, message: 'Operators cannot assign or modify user permissions. Only Admin can assign permissions.' });
+        return;
+      }
     }
 
     if (role === Role.ADMIN && existing.role !== Role.ADMIN) {
@@ -306,6 +331,8 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
       },
     });
 
+    clearUserAuthCache(id);
+
     await logAudit({
       userId: req.user?.id,
       action: 'USER_UPDATED',
@@ -338,8 +365,11 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
 
     // Determine target user
     let userIdToUpdate = req.user?.id;
-    const isPrivileged = req.user?.role === Role.ADMIN || req.user?.role === Role.OPERATOR;
-    if (isPrivileged && targetUserId) {
+    if (targetUserId && targetUserId !== req.user?.id) {
+      if (req.user?.role !== Role.ADMIN) {
+        res.status(403).json({ success: false, message: 'Only Administrators can reset credentials for other users.' });
+        return;
+      }
       userIdToUpdate = targetUserId;
     }
 
@@ -354,14 +384,8 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    // Security Guard: Operator cannot change Admin password
-    if (req.user?.role === Role.OPERATOR && user.role === Role.ADMIN) {
-      res.status(403).json({ success: false, message: 'Operators cannot change Administrator credentials.' });
-      return;
-    }
-
-    // If changing their own password, verify current password (unless privileged admin/operator resetting another user)
-    const isResettingOtherStaff = isPrivileged && userIdToUpdate !== req.user?.id;
+    // If changing their own password, verify current password (unless privileged admin resetting another user)
+    const isResettingOtherStaff = req.user?.role === Role.ADMIN && userIdToUpdate !== req.user?.id;
     if (!isResettingOtherStaff) {
       if (!currentPassword) {
         res.status(400).json({ success: false, message: 'Current password is required.' });
@@ -379,6 +403,8 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
       where: { id: userIdToUpdate },
       data: { passwordHash: newHash }
     });
+
+    clearUserAuthCache(userIdToUpdate);
 
     await logAudit({
       userId: req.user?.id,

@@ -19,31 +19,73 @@ import ownerBrandRoutes from './routes/ownerBrandRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import employeeRoutes from './routes/employeeRoutes';
 
-dotenv.config();
+import { getAllowedCorsOrigins } from './utils/security';
+import { apiLimiter } from './middlewares/rateLimiter';
 
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Security & Utility Middlewares
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow serving uploaded images
-}));
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-owner-token'],
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Hardening: Disable information-disclosing Express header
+app.disable('x-powered-by');
 
-// Static file serving for uploaded product images
+// Security & Utility Middlewares: Helmet
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow serving uploaded images
+    frameguard: { action: 'sameorigin' }, // Clickjacking defense
+    xContentTypeOptions: true, // Prevent MIME sniffing
+  })
+);
+
+// Restricted CORS configuration: Whitelist valid origins only
+const allowedOrigins = getAllowedCorsOrigins();
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow mobile apps, curl, postman, and server-to-server requests without origin header
+      if (!origin) return callback(null, true);
+
+      const isAllowed = allowedOrigins.some((allowed) => {
+        if (typeof allowed === 'string') return allowed === origin;
+        if (allowed instanceof RegExp) return allowed.test(origin);
+        return false;
+      });
+
+      if (isAllowed || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS policy rejection: Origin ${origin} is unauthorized.`));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-owner-token'],
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+// Static file serving for uploaded product images with security protections
 const uploadsPath = path.join(__dirname, '..', 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+app.use(
+  '/uploads',
+  express.static(uploadsPath, {
+    dotfiles: 'ignore',
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
+  })
+);
 
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
+
+// Global API Rate Limiter
+app.use('/api', apiLimiter);
 
 // Root and health check endpoints
 app.get('/', (_req, res) => {
@@ -78,10 +120,10 @@ app.get('/', (_req, res) => {
     <span class="badge">● Central Server Online (Port 5000)</span>
     <h1>RAFIQ AUTO & OIL TRADERS</h1>
     <div class="subtitle">رفیق آٹو اینڈ آئل ٹریڈرز - اوکاڑہ</div>
-    <p>The backend REST API and database engine are running properly. Use the buttons below to open the frontend user interface or test endpoints.</p>
+    <p>The backend REST API and database engine are running securely. Authorized operators and administrators can access the system via the secure web interface.</p>
     
     <div class="btn-group">
-      <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/login" class="btn btn-primary" target="_blank">Open POS & ERP App (5173) ↗</a>
+      <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/login" class="btn btn-primary" target="_blank">Open POS & ERP App ↗</a>
       <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/website" class="btn btn-secondary" target="_blank">Public Website Catalog ↗</a>
       <a href="/api/public/products" class="btn btn-secondary">Public Products JSON</a>
     </div>
@@ -100,8 +142,8 @@ app.get('/', (_req, res) => {
         <span class="meta-val">0306-9258573 / 0327-7497457</span>
       </div>
       <div class="meta-item">
-        <span class="meta-label">Admin Login:</span>
-        <span class="meta-val" style="color: #fbbf24;">admin / Admin@123</span>
+        <span class="meta-label">Security Status:</span>
+        <span class="meta-val" style="color: #10b981;">● Endpoints Hardened &amp; Rate-Limited</span>
       </div>
     </div>
   </div>
@@ -119,7 +161,7 @@ app.get(['/health', '/api/health'], (_req, res) => {
 });
 
 // Register API Routes
-app.use('/api/public', publicRoutes); // Public website catalog & inquiries (No Auth)
+app.use('/api/public', publicRoutes); // Public website catalog & inquiries (No Auth, Rate Limited)
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/partners', partnerRoutes);
@@ -133,13 +175,20 @@ app.use('/api/owner-brand', ownerBrandRoutes); // Confidential Admin-only owner 
 app.use('/api/expenses', expenseRoutes); // Small business cashbook & expenses
 app.use('/api/hr', employeeRoutes); // Employees, Attendance & Payroll
 
-
-// Global Error Handler
+// Global Error Handler (Sanitizes errors in production to avoid leaking database details)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled Server Error:', err);
-  res.status(err.status || 500).json({
+  const isProd = process.env.NODE_ENV === 'production';
+  const status = typeof err.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+
+  let message = err.message || 'Internal Server Error';
+  if (isProd && status === 500) {
+    message = 'An unexpected internal server error occurred. Please contact the administrator.';
+  }
+
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message,
   });
 });
 
@@ -152,6 +201,7 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     console.log(` RAFIQ AUTO & OIL TRADERS API running on port ${port}`);
     console.log(` Local:   http://localhost:${port}`);
     console.log(` Network: http://0.0.0.0:${port} (Accessible from Mobile/Laptop)`);
+    console.log(` Security: Rate Limiting & Whitelist CORS Active`);
     console.log(`=======================================================`);
   });
 }

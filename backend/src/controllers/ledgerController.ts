@@ -3,7 +3,7 @@ import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { logAudit } from '../services/auditService';
-import { PaymentMethod, TransactionType } from '../types/enums';
+import { PaymentMethod, TransactionType, Role } from '../types/enums';
 import { Prisma } from '@prisma/client';
 import { clearDashboardCache } from './reportController';
 
@@ -129,6 +129,11 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
 
     if (!data.customerId && !data.supplierId) {
       res.status(400).json({ success: false, message: 'Either customerId or supplierId must be provided' });
+      return;
+    }
+
+    if (data.supplierId && req.user?.role !== Role.ADMIN && req.user?.role !== Role.OPERATOR) {
+      res.status(403).json({ success: false, message: 'Forbidden: Only Administrators or Operators can record supplier disbursements' });
       return;
     }
 

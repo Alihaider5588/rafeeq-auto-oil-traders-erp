@@ -455,18 +455,24 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
           }
         }
 
-        // Batch create all stock movements in 1 single query
-        await tx.stockMovement.createMany({
-          data: itemDetails.map((it) => ({
-            productId: it.productId,
-            movementType: MovementType.SALE,
-            quantity: new Prisma.Decimal(it.baseQuantity),
-            previousStock: new Prisma.Decimal(it.currentStock),
-            newStock: new Prisma.Decimal(it.currentStock - it.baseQuantity),
-            referenceId: sale.id,
-            description: `Sale Inv #${invoiceNumber} (${it.quantity} ${it.unitType})`,
-          })),
-        });
+        // Batch create all stock movements
+        const stockMovementsData = itemDetails.map((it) => ({
+          productId: it.productId,
+          movementType: MovementType.SALE,
+          quantity: new Prisma.Decimal(it.baseQuantity),
+          previousStock: new Prisma.Decimal(it.currentStock),
+          newStock: new Prisma.Decimal(it.currentStock - it.baseQuantity),
+          referenceId: sale.id,
+          description: `Sale Inv #${invoiceNumber} (${it.quantity} ${it.unitType})`,
+        }));
+
+        if (typeof (tx.stockMovement as any).createMany === 'function') {
+          await tx.stockMovement.createMany({ data: stockMovementsData });
+        } else {
+          for (const sm of stockMovementsData) {
+            await tx.stockMovement.create({ data: sm });
+          }
+        }
 
         // 4. Update Customer Ledger & Current Receivable
         const currentReceivable = Number(customer.currentReceivable);

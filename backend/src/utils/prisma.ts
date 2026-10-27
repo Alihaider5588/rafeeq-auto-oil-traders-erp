@@ -1,6 +1,6 @@
 import { PrismaClient as SqliteClient } from '@prisma/client';
 
-const isPostgresRequested = process.env.USE_POSTGRES === 'true';
+const isPostgresRequested = process.env.NODE_ENV !== 'test' && process.env.USE_POSTGRES === 'true';
 
 let prismaInstance: any;
 
