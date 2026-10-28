@@ -54,11 +54,11 @@ app.use(
         return false;
       });
 
-      if (isAllowed || process.env.NODE_ENV !== 'production') {
+      if (isAllowed || process.env.NODE_ENV !== 'production' || origin.endsWith('.vercel.app')) {
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS policy rejection: Origin ${origin} is unauthorized.`));
+      return callback(null, false);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-owner-token'],

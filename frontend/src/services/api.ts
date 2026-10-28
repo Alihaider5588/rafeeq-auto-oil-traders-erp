@@ -1,16 +1,26 @@
 import axios from 'axios';
 
-// Automatically use the device's hostname (e.g. 192.168.1.147 or localhost)
+const LIVE_BACKEND_HOST = 'https://rafeeq-auto-oil-traders-erp.vercel.app';
+const LIVE_BACKEND_URL = `${LIVE_BACKEND_HOST}/api`;
+
+// Automatically use the device's hostname (e.g. 192.168.1.147 or localhost) or cloud backend
 const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
+    return import.meta.env.VITE_API_URL.trim();
   }
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  return `http://${host}:5000/api`;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // When running in production on Vercel or any HTTPS cloud domain
+    if (host.includes('vercel.app') || window.location.protocol === 'https:') {
+      return LIVE_BACKEND_URL;
+    }
+    return `http://${host}:5000/api`;
+  }
+  return LIVE_BACKEND_URL;
 };
 
 export const getBackendHost = () => {
-  if (import.meta.env.VITE_API_URL) {
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
     try {
       const url = new URL(import.meta.env.VITE_API_URL);
       return `${url.protocol}//${url.host}`;
@@ -18,8 +28,14 @@ export const getBackendHost = () => {
       // fallback
     }
   }
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  return `http://${host}:5000`;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('vercel.app') || window.location.protocol === 'https:') {
+      return LIVE_BACKEND_HOST;
+    }
+    return `http://${host}:5000`;
+  }
+  return LIVE_BACKEND_HOST;
 };
 
 export const getMediaUrl = (url?: string | null): string => {

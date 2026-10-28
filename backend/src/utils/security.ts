@@ -30,8 +30,10 @@ export const getJwtSecret = (): string => {
  */
 export const getAllowedCorsOrigins = (): (string | RegExp)[] => {
   const origins: (string | RegExp)[] = [
-    // Production frontend on Vercel
+    // Production frontends on Vercel
     'https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app',
+    'https://rafeeq-auto-oil-traders-erp.vercel.app',
+    /\.vercel\.app$/,
     // Local development servers
     'http://localhost:5173',
     'http://127.0.0.1:5173',
