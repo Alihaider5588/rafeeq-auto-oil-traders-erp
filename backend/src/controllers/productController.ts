@@ -38,10 +38,10 @@ export const clearProductsCache = () => {
 
 export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '2000' } = req.query;
+    const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '10000' } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(2000, Math.max(1, parseInt(limit as string, 10) || 2000));
+    const limitNum = Math.min(10000, Math.max(1, parseInt(limit as string, 10) || 10000));
     const skip = (pageNum - 1) * limitNum;
 
     const isDefaultRequest = !search && !categoryId && !brand && !lowStock && !showOnWebsite && !showInCatalog && pageNum === 1;
@@ -66,9 +66,11 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
     if (showOnWebsite === 'true') where.showOnWebsite = true;
     if (showInCatalog === 'true') where.showInCatalog = true;
 
-    const [total, products] = await Promise.all([
-      prisma.product.count({ where }),
-      prisma.product.findMany({
+    let filteredProducts: any[] = [];
+    let totalCount = 0;
+
+    if (lowStock === 'true') {
+      const allMatching = await prisma.product.findMany({
         where,
         include: {
           category: true,
@@ -76,26 +78,39 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
           primaryUnit: true,
         },
         orderBy: { name: 'asc' },
-        skip,
-        take: limitNum,
-      }),
-    ]);
-
-    let filteredProducts = products;
-    if (lowStock === 'true') {
-      filteredProducts = products.filter(
+      });
+      const lowStockList = allMatching.filter(
         (p) => Number(p.currentStock) <= Number(p.minimumStockLevel)
       );
+      totalCount = lowStockList.length;
+      filteredProducts = lowStockList.slice(skip, skip + limitNum);
+    } else {
+      const [cnt, prods] = await Promise.all([
+        prisma.product.count({ where }),
+        prisma.product.findMany({
+          where,
+          include: {
+            category: true,
+            unit: true,
+            primaryUnit: true,
+          },
+          orderBy: { name: 'asc' },
+          skip,
+          take: limitNum,
+        }),
+      ]);
+      totalCount = cnt;
+      filteredProducts = prods;
     }
 
     const responseData = {
       success: true,
       data: filteredProducts,
       pagination: {
-        total,
+        total: totalCount,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages: Math.ceil(totalCount / limitNum),
       },
     };
 

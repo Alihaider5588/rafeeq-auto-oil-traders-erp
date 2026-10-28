@@ -87,7 +87,7 @@ export const SalesmanPortal: React.FC = () => {
   // Category & Full Bill Discount States
   const [discountScope, setDiscountScope] = useState<'FULL_BILL' | 'CATEGORY'>('FULL_BILL');
   const [discountCategory, setDiscountCategory] = useState<string>('');
-  const [discountPercent, setDiscountPercent] = useState<string>('4');
+  const [discountPercent, setDiscountPercent] = useState<string>('0');
   const [appliedDiscountSummary, setAppliedDiscountSummary] = useState<string>('');
 
   // Post-Sync Generated Invoice Receipt Modal
@@ -136,7 +136,7 @@ export const SalesmanPortal: React.FC = () => {
     try {
       const [cRes, pRes, sRes] = await Promise.all([
         api.get('/partners/customers'),
-        api.get('/products'),
+        api.get('/products?limit=10000'),
         api.get('/settings').catch(() => null),
       ]);
       setCustomers(cRes.data.customers || []);
@@ -218,15 +218,33 @@ export const SalesmanPortal: React.FC = () => {
     const item = cart[index];
     const conv = Number(item.product.conversionFactor) || 1;
     const standardBase = Number(item.product.salePrice);
-    const fallbackPrice = newUnit === 'PRIMARY' ? standardBase * conv : standardBase;
+    const newStandardRate = newUnit === 'PRIMARY' ? standardBase * conv : standardBase;
 
     const isWalkIn = !selectedCustomer || selectedCustomer.id === 'walk-in' || selectedCustomer.phone === '00000000000' || selectedCustomer.shopName.toLowerCase().includes('walk-in');
     const cacheKey = selectedCustomer ? `${selectedCustomer.id}:${item.product.id}:${newUnit}` : '';
     const cachedRate = cacheKey ? rateCacheRef.current[cacheKey] : null;
-    const targetPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : fallbackPrice;
+
+    let targetPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : 0;
+    if (!targetPrice) {
+      if (item.unitType !== newUnit) {
+        if (newUnit === 'PRIMARY') {
+          targetPrice = item.unitPrice > 0 ? Math.round(item.unitPrice * conv) : newStandardRate;
+        } else {
+          targetPrice = item.unitPrice > 0 ? Math.round(item.unitPrice / conv) : newStandardRate;
+        }
+      } else {
+        targetPrice = newStandardRate;
+      }
+    }
 
     const updated = [...cart];
-    updated[index] = { ...item, unitType: newUnit, unitPrice: targetPrice, rateInfo: cachedRate || undefined };
+    updated[index] = {
+      ...item,
+      unitType: newUnit,
+      unitPrice: targetPrice,
+      standardRate: newStandardRate,
+      rateInfo: cachedRate || undefined,
+    };
     setCart(updated);
 
     if (!isWalkIn && selectedCustomer && !cachedRate) {
@@ -509,9 +527,10 @@ export const SalesmanPortal: React.FC = () => {
 
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(searchProduct.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchProduct.toLowerCase()) ||
-      p.brand.toLowerCase().includes(searchProduct.toLowerCase())
+      (p.name || '').toLowerCase().includes(searchProduct.toLowerCase()) ||
+      (p.sku || '').toLowerCase().includes(searchProduct.toLowerCase()) ||
+      (p.brand || '').toLowerCase().includes(searchProduct.toLowerCase()) ||
+      (p.category?.name || '').toLowerCase().includes(searchProduct.toLowerCase())
   );
 
   return (
@@ -987,12 +1006,12 @@ export const SalesmanPortal: React.FC = () => {
                 <div style={{ position: 'relative' }}>
                   <input
                     type="number"
-                    min="0.5"
+                    min="0"
                     max="100"
                     step="0.5"
                     className="form-control"
                     style={{ fontSize: '0.85rem', padding: '6px 26px 6px 8px', fontWeight: 700, backgroundColor: '#ffffff' }}
-                    placeholder="e.g. 4"
+                    placeholder="0"
                     value={discountPercent}
                     onChange={(e) => setDiscountPercent(e.target.value)}
                   />
@@ -1009,7 +1028,7 @@ export const SalesmanPortal: React.FC = () => {
                   onClick={handleApplyDiscount}
                   style={{
                     flex: 1,
-                    backgroundColor: '#16a34a',
+                    backgroundColor: parseFloat(discountPercent) > 0 ? '#16a34a' : '#64748b',
                     color: '#ffffff',
                     border: 'none',
                     padding: '8px 12px',
@@ -1020,7 +1039,7 @@ export const SalesmanPortal: React.FC = () => {
                     whiteSpace: 'nowrap'
                   }}
                 >
-                  Apply {discountPercent || '0'}%
+                  {parseFloat(discountPercent) > 0 ? `Apply ${discountPercent}%` : 'Apply (% darj karein)'}
                 </button>
 
                 {appliedDiscountSummary && (
@@ -1056,6 +1075,12 @@ export const SalesmanPortal: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
               {cart.map((item, index) => {
                 const conv = Number(item.product.conversionFactor) || 1;
+                const primaryLabel = item.product.primaryUnit?.name || item.product.primaryUnit?.symbol || 'Carton';
+                const primarySymbol = item.product.primaryUnit?.symbol || primaryLabel;
+                const secondaryLabel = item.product.unit?.name || item.product.unit?.symbol || 'Piece';
+                const secondarySymbol = item.product.unit?.symbol || secondaryLabel;
+                const hasMultipleUnits = (!!item.product.primaryUnit || !!item.product.primaryUnitId) && conv > 1;
+                const currentUnitSymbol = item.unitType === 'PRIMARY' ? primarySymbol : secondarySymbol;
                 return (
                   <div
                     key={`${item.product.id}-${index}`}
@@ -1139,51 +1164,72 @@ export const SalesmanPortal: React.FC = () => {
 
                     {/* Unit Selector, Editable Rate, and Quantity */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px', alignItems: 'center' }}>
-                      {/* Unit Type (Carton vs Bottle) */}
+                      {/* Unit Type (Primary vs Secondary) */}
                       <div>
-                        {conv > 1 ? (
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '2px', fontWeight: 600 }}>Unit / Packaging</div>
+                        {hasMultipleUnits ? (
                           <select
                             className="form-control"
-                            style={{ fontSize: '0.8rem', padding: '6px 8px' }}
+                            style={{
+                              fontSize: '0.8rem',
+                              padding: '6px 8px',
+                              fontWeight: 700,
+                              backgroundColor: '#ffffff',
+                              borderColor: item.unitType === 'PRIMARY' ? '#d97706' : '#cbd5e1'
+                            }}
                             value={item.unitType}
                             onChange={(e) => handleUnitChange(index, e.target.value as any)}
                           >
-                            <option value="SECONDARY">Bottle / Pcs</option>
-                            <option value="PRIMARY">Carton ({conv} pcs)</option>
+                            <option value="SECONDARY">{secondaryLabel} ({secondarySymbol})</option>
+                            <option value="PRIMARY">{primaryLabel} ({primarySymbol} = {conv} {secondarySymbol})</option>
                           </select>
                         ) : (
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
-                            {item.product.unit?.symbol || 'Unit'}
-                          </span>
+                          <div style={{
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            color: '#334155',
+                            padding: '6px 8px',
+                            backgroundColor: '#f1f5f9',
+                            borderRadius: '6px',
+                            border: '1px solid #e2e8f0',
+                            textAlign: 'center'
+                          }}>
+                            {secondaryLabel} ({secondarySymbol})
+                          </div>
                         )}
                       </div>
 
                       {/* Quantity Selector */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(index, -1)}
-                          className="btn btn-outline"
-                          style={{ padding: '4px 8px' }}
-                        >
-                          <Minus size={12} />
-                        </button>
-                        <span style={{ fontWeight: 800, minWidth: '24px', textAlign: 'center', fontSize: '0.9rem' }}>
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(index, 1)}
-                          className="btn btn-outline"
-                          style={{ padding: '4px 8px' }}
-                        >
-                          <Plus size={12} />
-                        </button>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '2px', fontWeight: 600 }}>Quantity ({currentUnitSymbol})</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(index, -1)}
+                            className="btn btn-outline"
+                            style={{ padding: '4px 8px' }}
+                          >
+                            <Minus size={12} />
+                          </button>
+                          <span style={{ fontWeight: 800, minWidth: '24px', textAlign: 'center', fontSize: '0.9rem' }}>
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(index, 1)}
+                            className="btn btn-outline"
+                            style={{ padding: '4px 8px' }}
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Editable Rate */}
                       <div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '2px' }}>Unit Rate (Rs.)</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '2px', fontWeight: 600 }}>
+                          Rate per {currentUnitSymbol} (Rs.)
+                        </div>
                         <input
                           type="number"
                           className="form-control"
@@ -1207,8 +1253,10 @@ export const SalesmanPortal: React.FC = () => {
                       </div>
 
                       {/* Line Total */}
-                      <div style={{ textAlign: 'right', minWidth: '90px' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Line Total</div>
+                      <div style={{ textAlign: 'right', minWidth: '95px' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                          {item.quantity} {currentUnitSymbol} Total
+                        </div>
                         <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
                           Rs. {(item.unitPrice * item.quantity).toLocaleString()}
                         </div>

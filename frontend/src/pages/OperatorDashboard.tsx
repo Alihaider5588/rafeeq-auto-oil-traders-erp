@@ -33,7 +33,7 @@ export const OperatorDashboard: React.FC = () => {
     try {
       setLoadingAlerts(true);
       const res = await api.get('/products', {
-        params: { lowStock: 'true', limit: 100 },
+        params: { lowStock: 'true', limit: 5000 },
       });
       setLowStockProducts(res.data.data || []);
     } catch (e) {

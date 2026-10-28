@@ -3,16 +3,23 @@ import rateLimit from 'express-rate-limit';
 /**
  * Strict rate limiter for authentication & confidential endpoints.
  * Protects against brute-force password cracking and credential stuffing.
- * Allows maximum 10 requests per 15 minutes per IP.
+ * Allows maximum 30 failed attempts per 15 minutes per IP.
+ * Crucial Safeguard: Successful logins are NEVER blocked, and local POS terminals are whitelisted.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // Limit each IP to 15 login / verification attempts per window
+  max: 30, // Limit each IP to 30 failed attempts per window
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  skipSuccessfulRequests: true, // Legitimate successful logins NEVER consume attempts
+  skip: (req) => {
+    // Whitelist localhost & loopback so shop counter terminal never gets locked out
+    const ip = req.ip || req.socket?.remoteAddress || '';
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  },
   message: {
     success: false,
-    message: 'Too many authentication attempts from this IP address. Please try again after 15 minutes.',
+    message: 'Too many failed login attempts from this IP address. Please wait 15 minutes before retrying.',
   },
 });
 

@@ -21,6 +21,7 @@ import employeeRoutes from './routes/employeeRoutes';
 
 import { getAllowedCorsOrigins } from './utils/security';
 import { apiLimiter } from './middlewares/rateLimiter';
+import { sanitizeRequest } from './middlewares/sanitizer';
 
 dotenv.config();
 
@@ -67,6 +68,7 @@ app.use(
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(sanitizeRequest);
 
 // Static file serving for uploaded product images with security protections
 const uploadsPath = path.join(__dirname, '..', 'uploads');

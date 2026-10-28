@@ -466,39 +466,86 @@ export const AdminDashboard: React.FC = () => {
       {(alerts?.lowStockCount > 0 || alerts?.outOfStockCount > 0) && (
         <div style={{
           backgroundColor: '#fffbeb',
-          border: '1px solid #fde68a',
+          border: '1.5px solid #fde68a',
           borderRadius: '12px',
           padding: '18px 20px',
           marginBottom: '24px',
+          boxShadow: '0 2px 10px rgba(217, 119, 6, 0.08)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <AlertTriangle size={24} color="#d97706" />
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                backgroundColor: '#fee2e2',
+                color: '#dc2626',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <AlertTriangle size={20} />
+              </div>
               <div>
-                <div style={{ fontWeight: 800, color: '#92400e', fontSize: '1rem' }}>
-                  Critical Stock Replenishment Alert (کم اسٹاک کی فوری اطلاع)
+                <div style={{ fontWeight: 800, color: '#991b1b', fontSize: '1.02rem' }}>
+                  Critical Minimum Stock & Reorder Alerts (کم اسٹاک کی الرٹ لسٹ)
                 </div>
                 <div style={{ fontSize: '0.82rem', color: '#b45309' }}>
-                  {alerts?.outOfStockCount} items completely out of stock; {alerts?.lowStockCount} items below minimum safety threshold.
+                  <b>{alerts?.outOfStockCount || 0}</b> items completely out of stock; <b>{alerts?.lowStockCount || 0}</b> items below minimum safety threshold.
                 </div>
               </div>
             </div>
-            <Link to="/products" className="btn btn-primary btn-sm" style={{ backgroundColor: '#d97706', borderColor: '#b45309' }}>
-              Manage Inventory →
-            </Link>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Link to="/purchases" className="btn btn-primary btn-sm" style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', fontWeight: 700 }}>
+                + Record Purchase Inward
+              </Link>
+              <Link to="/products" className="btn btn-outline btn-sm" style={{ fontWeight: 700 }}>
+                Manage Stock in Products →
+              </Link>
+            </div>
           </div>
 
           {/* Quick list of low stock items */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
             {(alerts?.outOfStockProducts || []).map((p: any) => (
-              <span key={p.id} style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>
-                ⚠️ {p.name}: 0 Left (OUT OF STOCK)
-              </span>
+              <div key={p.id} style={{
+                backgroundColor: '#fee2e2',
+                color: '#991b1b',
+                border: '1.5px solid #fca5a5',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.84rem' }}>{p.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#b91c1c' }}>SKU: {p.sku} | Min Alert: {p.minimumStockLevel}</div>
+                </div>
+                <span style={{ backgroundColor: '#dc2626', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 900 }}>
+                  0 OUT OF STOCK
+                </span>
+              </div>
             ))}
             {(alerts?.lowStockProducts || []).map((p: any) => (
-              <span key={p.id} style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600 }}>
-                ⚡ {p.name}: {p.currentStock} {p.unit?.symbol || 'Pcs'} (Min: {p.minimumStockLevel})
-              </span>
+              <div key={p.id} style={{
+                backgroundColor: '#fff1f2',
+                color: '#991b1b',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>{p.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>SKU: {p.sku} | Min Alert: <b>{p.minimumStockLevel}</b></div>
+                </div>
+                <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #f87171', padding: '3px 8px', borderRadius: '4px', fontSize: '0.76rem', fontWeight: 800 }}>
+                  ⚠️ {p.currentStock} {p.unit?.symbol || 'Pcs'} left
+                </span>
+              </div>
             ))}
           </div>
         </div>

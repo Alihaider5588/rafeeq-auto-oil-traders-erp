@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api, { getMediaUrl } from '../services/api';
 import { Product, Category, Unit } from '../types';
 import { 
-  Package, Plus, Search, AlertCircle, Check, Edit2, Sliders, 
+  Package, Plus, Search, AlertCircle, AlertTriangle, Check, Edit2, Sliders, 
   FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw, Trash2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -65,6 +65,7 @@ export const ProductsPage: React.FC = () => {
   // Top Page Operation Notification Banners
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
+  const [showLowStockOnly, setShowLowStockOnly] = useState<boolean>(false);
 
   const triggerOperationError = (msg: string) => {
     setOperationError(msg);
@@ -446,6 +447,9 @@ export const ProductsPage: React.FC = () => {
   const totalCatalogCost = products.reduce((acc, p) => acc + (Number(p.currentStock || 0) * Number(p.purchasePrice || 0)), 0);
   const totalCatalogUnits = products.reduce((acc, p) => acc + Number(p.currentStock || 0), 0);
   const lowStockCount = products.filter((p) => Number(p.currentStock || 0) <= Number(p.minimumStockLevel || 0)).length;
+  const displayedProducts = showLowStockOnly
+    ? products.filter((p) => Number(p.currentStock || 0) <= Number(p.minimumStockLevel || 0))
+    : products;
 
   return (
     <div>
@@ -556,50 +560,97 @@ export const ProductsPage: React.FC = () => {
           <div className="stat-sub">Live valuation at purchase cost price</div>
         </div>
 
-        <div className="stat-card amber" style={{ borderLeft: '4px solid #f59e0b' }}>
-          <div className="stat-label">Low Stock / Reorder Needed</div>
-          <div className="stat-value" style={{ color: lowStockCount > 0 ? '#d97706' : '#059669' }}>
+        <div
+          className="stat-card amber"
+          onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+          style={{
+            borderLeft: '4px solid #ef4444',
+            cursor: 'pointer',
+            backgroundColor: showLowStockOnly ? '#fef2f2' : undefined,
+            border: showLowStockOnly ? '2px solid #ef4444' : undefined,
+            transition: 'all 0.15s ease'
+          }}
+          title="Click to toggle only low stock products"
+        >
+          <div className="stat-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ color: lowStockCount > 0 ? '#b91c1c' : undefined, fontWeight: 700 }}>
+              Low Stock / Reorder Needed (کم اسٹاک الرٹ)
+            </span>
+            {showLowStockOnly && (
+              <span style={{ fontSize: '0.68rem', backgroundColor: '#ef4444', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                ACTIVE FILTER
+              </span>
+            )}
+          </div>
+          <div className="stat-value" style={{ color: lowStockCount > 0 ? '#dc2626' : '#059669' }}>
             {lowStockCount} Items
           </div>
-          <div className="stat-sub">
-            {lowStockCount > 0 ? 'Urgent purchase inward required' : 'All stock levels healthy'}
+          <div className="stat-sub" style={{ color: lowStockCount > 0 ? '#991b1b' : undefined, fontWeight: 600 }}>
+            {lowStockCount > 0 ? (showLowStockOnly ? '✓ Showing only low stock (Click to reset)' : '⚠️ Click to filter urgent minimum stock list') : 'All stock levels healthy'}
           </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
       <div className="card" style={{ marginBottom: '20px', padding: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '14px', alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: '10px', flex: '1 1 400px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 200px' }}>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search by product name, SKU or brand..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loadProducts()}
+              />
+            </div>
+
+            <select
               className="form-control"
-              placeholder="Search by product name, SKU or brand..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && loadProducts()}
-            />
+              style={{ flex: '0 1 180px' }}
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <button onClick={loadProducts} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+              <Search size={16} /> Filter
+            </button>
+
+            <button onClick={() => { setSearch(''); setSelectedCategory(''); setShowLowStockOnly(false); }} className="btn btn-outline" title="Reset Filters">
+              <RefreshCw size={16} />
+            </button>
           </div>
 
-          <select
-            className="form-control"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+          {/* Quick Low Stock Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              borderRadius: '8px',
+              border: showLowStockOnly ? '2px solid #ef4444' : '1.5px solid #fca5a5',
+              backgroundColor: showLowStockOnly ? '#ef4444' : '#fff1f2',
+              color: showLowStockOnly ? '#ffffff' : '#991b1b',
+              fontWeight: 800,
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: showLowStockOnly ? '0 2px 8px rgba(239,68,68,0.3)' : 'none'
+            }}
           >
-            <option value="">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          <button onClick={loadProducts} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-            <Search size={16} /> Filter
-          </button>
-
-          <button onClick={() => { setSearch(''); setSelectedCategory(''); }} className="btn btn-outline" title="Reset Filters">
-            <RefreshCw size={16} />
+            <AlertTriangle size={15} />
+            {showLowStockOnly ? `Showing Low Stock Only (${lowStockCount}) - Reset` : `⚠️ Minimum Stock Alerts (${lowStockCount})`}
           </button>
         </div>
       </div>
@@ -629,14 +680,14 @@ export const ProductsPage: React.FC = () => {
                   Loading product catalog...
                 </td>
               </tr>
-            ) : products.length === 0 ? (
+            ) : displayedProducts.length === 0 ? (
               <tr>
                 <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                   No products found. Add products to get started.
                 </td>
               </tr>
             ) : (
-              products.map((p) => {
+              displayedProducts.map((p) => {
                 const cost = Number(p.purchasePrice);
                 const price = Number(p.salePrice);
                 const stock = Number(p.currentStock);
@@ -644,9 +695,11 @@ export const ProductsPage: React.FC = () => {
                 const conv = Number(p.conversionFactor) || 1;
                 const cartons = conv > 1 ? Math.floor(stock / conv) : 0;
                 const remBottles = conv > 1 ? stock % conv : stock;
+                const isOutOfStock = stock <= 0;
+                const isLowStock = stock <= minStock;
 
                 return (
-                  <tr key={p.id}>
+                  <tr key={p.id} style={{ backgroundColor: isOutOfStock ? '#fff1f2' : isLowStock ? '#fff5f5' : undefined }}>
                     <td>
                       {p.imageUrl ? (
                         <img 
@@ -701,12 +754,57 @@ export const ProductsPage: React.FC = () => {
                         </div>
                       ) : null}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 800 }}>
-                      <div style={{ color: stock <= 0 ? '#dc2626' : stock <= minStock ? '#d97706' : '#059669' }}>
+                    {/* CURRENT STOCK COLUMN - HIGHLIGHTED IN RED ON MINIMUM ALERT */}
+                    <td style={{
+                      textAlign: 'right',
+                      fontWeight: 800,
+                      backgroundColor: isOutOfStock ? '#fee2e2' : isLowStock ? '#fef2f2' : undefined,
+                      borderLeft: isOutOfStock ? '3px solid #dc2626' : isLowStock ? '3px solid #ef4444' : undefined,
+                      borderRight: isLowStock ? '1px solid #fecaca' : undefined,
+                      padding: '8px 12px'
+                    }}>
+                      <div style={{
+                        color: isOutOfStock ? '#dc2626' : isLowStock ? '#b91c1c' : '#059669',
+                        fontSize: isLowStock ? '0.98rem' : '0.92rem',
+                        fontWeight: 900
+                      }}>
                         {stock} {p.unit?.symbol || ''}
                       </div>
+
+                      {isOutOfStock ? (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          backgroundColor: '#dc2626',
+                          color: '#ffffff',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.68rem',
+                          fontWeight: 900,
+                          marginTop: '3px'
+                        }}>
+                          ⛔ OUT OF STOCK
+                        </div>
+                      ) : isLowStock ? (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          marginTop: '3px'
+                        }}>
+                          ⚠️ MIN ALERT ({stock}/{minStock})
+                        </div>
+                      ) : null}
+
                       {conv > 1 && p.primaryUnit && stock > 0 && (
-                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>
+                        <div style={{ fontSize: '0.7rem', color: isLowStock ? '#991b1b' : '#64748b', fontWeight: 600, marginTop: '2px' }}>
                           ({cartons} {p.primaryUnit.symbol} {remBottles > 0 ? `+ ${remBottles} ${p.unit?.symbol}` : ''})
                         </div>
                       )}
