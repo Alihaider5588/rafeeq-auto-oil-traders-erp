@@ -523,7 +523,7 @@ table.data-table tbody tr:hover {
 
 @media print {
   @page {
-    margin: 0;
+    margin: 8mm;
     size: auto;
   }
   
@@ -534,15 +534,18 @@ table.data-table tbody tr:hover {
     padding: 0 !important;
     height: auto !important;
     overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Hide absolutely everything by default */
+  /* Hide absolutely all screen UI elements by default */
   body * {
     visibility: hidden !important;
   }
 
   /* Make printable area and its children visible and isolated */
-  .printable-area, .printable-area * {
+  .printable-area, 
+  .printable-area * {
     visibility: visible !important;
   }
 
@@ -551,12 +554,38 @@ table.data-table tbody tr:hover {
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Thermal POS Receipt Format (80mm width) */
+  .printable-area.thermal-receipt {
     max-width: 80mm !important;
     margin: 0 auto !important;
     padding: 4mm !important;
-    border: none !important;
-    box-shadow: none !important;
-    background: #ffffff !important;
+    font-family: 'Courier New', Courier, monospace !important;
+  }
+
+  /* Standard A4 / Executive Financial Report Format */
+  .printable-area.a4-report,
+  .printable-area:not(.thermal-receipt) {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 6mm 10mm !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+
+  /* Print table borders and clean page breaks */
+  .printable-area table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .printable-area tr {
+    page-break-inside: avoid !important;
   }
 
   /* Hide all modal backdrops, overlays, sidebars, headers, and UI elements */
@@ -567,7 +596,8 @@ table.data-table tbody tr:hover {
   nav,
   footer,
   .wa-floating-btn,
-  .scroll-top-btn {
+  .scroll-top-btn,
+  .floating-actions-container {
     display: none !important;
   }
 }

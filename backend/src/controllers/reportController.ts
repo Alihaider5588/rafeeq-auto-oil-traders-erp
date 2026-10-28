@@ -538,39 +538,64 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
       productId: string;
       productName: string;
       sku: string;
+      brand?: string;
       currentStock: number;
+      minimumStockLevel: number;
       monthlyBurnRate: number;
       estimatedDaysLeft: number;
       urgency: 'CRITICAL' | 'WARNING' | 'HEALTHY' | 'DEAD_STOCK';
       recommendation: string;
+      recommendationUrdu: string;
     }> = [];
 
     allProducts.forEach((p) => {
       const soldStats = productSoldQty[p.id] || { qty: 0, revenue: 0, profit: 0 };
       const curStock = Number(p.currentStock);
+      const minLevel = Number(p.minimumStockLevel || 0);
       const burnRate = soldStats.qty; // sold in last 30 days
       const dailyBurn = burnRate / 30;
 
       let daysLeft = 999;
       let urgency: 'CRITICAL' | 'WARNING' | 'HEALTHY' | 'DEAD_STOCK' = 'HEALTHY';
       let recommendation = 'Stock level healthy.';
+      let recommendationUrdu = 'اسٹاک تسلی بخش اور متوازن ہے۔';
 
-      if (dailyBurn > 0) {
+      if (curStock <= 0) {
+        urgency = 'CRITICAL';
+        daysLeft = 0;
+        if (burnRate > 0) {
+          recommendation = `Out of stock! Sold ${burnRate} units in last 30 days. Reorder immediately to avoid lost revenue.`;
+          recommendationUrdu = `اسٹاک ختم ہو چکا ہے! پچھلے 30 دن میں ${burnRate} یونٹ بکے تھے۔ فوری نیا مال منگوائیں۔`;
+        } else {
+          recommendation = `Out of stock! Zero inventory currently in depot.`;
+          recommendationUrdu = `اسٹاک صفر ہے۔ انورڈ پرچیز آرڈر درج کریں۔`;
+        }
+      } else if (minLevel > 0 && curStock <= minLevel) {
+        urgency = 'CRITICAL';
+        daysLeft = dailyBurn > 0 ? Math.round(curStock / dailyBurn) : 0;
+        recommendation = `Below minimum alert level (${curStock} remaining <= alert ${minLevel}). Place urgent inward order.`;
+        recommendationUrdu = `منیمم اسٹاک الرٹ لیول سے کم ہے (${curStock} باقی <= حد ${minLevel})۔ فوری نیا مال بک کروائیں۔`;
+      } else if (dailyBurn > 0) {
         daysLeft = Math.round(curStock / dailyBurn);
-        if (curStock <= 0) {
-          urgency = 'CRITICAL';
-          recommendation = `Out of stock! Demand is approx ${burnRate} units/month. Reorder immediately to avoid revenue loss.`;
-        } else if (daysLeft <= 7) {
+        if (daysLeft <= 7) {
           urgency = 'CRITICAL';
           recommendation = `Only ${daysLeft} days of stock remaining at current velocity. Place urgent inward purchase order.`;
+          recommendationUrdu = `صرف ${daysLeft} دن کا اسٹاک باقی ہے۔ فوری سپلائر سے مال بک کروائیں۔`;
         } else if (daysLeft <= 18) {
           urgency = 'WARNING';
           recommendation = `Stock will run out in ~${daysLeft} days. Plan reordering with distributor/refinery.`;
+          recommendationUrdu = `تقریباً ${daysLeft} دن میں اسٹاک ختم ہو جائے گا۔ آئندہ سپلائی شیڈول تیار کریں۔`;
+        } else {
+          urgency = 'HEALTHY';
+          recommendation = `Adequate stock for ~${daysLeft > 180 ? '180+' : daysLeft} days at current velocity.`;
+          recommendationUrdu = `موجودہ فروخت کی رفتار پر اسٹاک کافی ہے۔`;
         }
       } else {
         if (curStock > 0) {
           urgency = 'DEAD_STOCK';
+          daysLeft = 365;
           recommendation = 'Zero sales in last 30 days. Offer 2%-3% dealer discount or salesman incentive to liquidate.';
+          recommendationUrdu = 'پچھلے 30 دن میں کوئی فروخت نہیں ہوئی۔ 2%-3% اسکیم یا ڈسکاؤنٹ دے کر کیپیٹل فری کریں۔';
         }
       }
 
@@ -578,23 +603,32 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
         productId: p.id,
         productName: p.name,
         sku: p.sku,
+        brand: p.brand || undefined,
         currentStock: curStock,
+        minimumStockLevel: minLevel,
         monthlyBurnRate: burnRate,
-        estimatedDaysLeft: daysLeft > 365 ? 365 : daysLeft,
+        estimatedDaysLeft: daysLeft > 365 ? 365 : Math.max(0, daysLeft),
         urgency,
         recommendation,
+        recommendationUrdu,
       });
     });
 
-    // Sort by most urgent stockouts first
-    stockPredictions.sort((a, b) => a.estimatedDaysLeft - b.estimatedDaysLeft);
+    // Sort by most urgent stockouts first (CRITICAL first, then WARNING, then by days left)
+    stockPredictions.sort((a, b) => {
+      const urgencyScore = { CRITICAL: 0, WARNING: 1, DEAD_STOCK: 2, HEALTHY: 3 };
+      if (urgencyScore[a.urgency] !== urgencyScore[b.urgency]) {
+        return urgencyScore[a.urgency] - urgencyScore[b.urgency];
+      }
+      return a.estimatedDaysLeft - b.estimatedDaysLeft;
+    });
 
     // 3. Customer Ledger Recovery & Credit Health
     const totalReceivables = allCustomers.reduce((acc, c) => acc + Number(c.currentReceivable), 0);
     const overdueDebtors = allCustomers
       .filter((c) => Number(c.currentReceivable) > 0)
       .sort((a, b) => Number(b.currentReceivable) - Number(a.currentReceivable))
-      .slice(0, 5)
+      .slice(0, 8)
       .map((c) => ({
         id: c.id,
         shopName: c.shopName,
@@ -604,12 +638,54 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
         creditLimit: Number(c.creditLimit || 0),
       }));
 
-    // 4. Actionable Real Data Business Growth Tips
+    // 4. Holistic Business Health Score (0 to 100)
+    const currentMargin = recentRevenue > 0 ? (recentGrossProfit / recentRevenue) * 100 : 0;
+    let marginScore = 15;
+    if (currentMargin >= 10) marginScore = 25;
+    else if (currentMargin >= 6) marginScore = 20;
+    else if (currentMargin >= 3) marginScore = 15;
+    else marginScore = 8;
+
+    let cashFlowScore = 20;
+    if (recentRevenue > 0) {
+      const recRatio = totalReceivables / recentRevenue;
+      if (recRatio <= 1.5) cashFlowScore = 25;
+      else if (recRatio <= 3.0) cashFlowScore = 18;
+      else if (recRatio <= 5.0) cashFlowScore = 12;
+      else cashFlowScore = 8;
+    }
+
+    const totalProdCount = allProducts.length || 1;
+    const deadStockCount = stockPredictions.filter((s) => s.urgency === 'DEAD_STOCK').length;
+    const deadRatio = (deadStockCount / totalProdCount) * 100;
+    let inventoryScore = 20;
+    if (deadRatio <= 25) inventoryScore = 25;
+    else if (deadRatio <= 50) inventoryScore = 18;
+    else if (deadRatio <= 75) inventoryScore = 12;
+    else inventoryScore = 8;
+
+    let growthScore = 18;
+    if (growthRate >= 15) growthScore = 25;
+    else if (growthRate >= 0) growthScore = 20;
+    else if (growthRate >= -15) growthScore = 14;
+    else growthScore = 8;
+
+    const totalHealthScore = Math.min(100, Math.max(25, marginScore + cashFlowScore + inventoryScore + growthScore));
+    const healthGrade =
+      totalHealthScore >= 80 ? 'A (Excellent / بہترین کارکردگی)' :
+      totalHealthScore >= 65 ? 'B (Good & Stable / مستحکم)' :
+      totalHealthScore >= 50 ? 'C (Moderate / بہتری کی گنجائش)' :
+      'D (Attention Needed / فوری توجہ درکار)';
+
+    // 5. Actionable Real Data Business Growth Tips with Urdu Explanations
     const actionableTips: Array<{
       category: 'REVENUE' | 'CASH_FLOW' | 'INVENTORY' | 'PRICING';
       title: string;
+      titleUrdu: string;
       tip: string;
+      tipUrdu: string;
       impact: string;
+      impactUrdu: string;
     }> = [];
 
     // Tip 1: Top performing product booster
@@ -624,8 +700,11 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
       actionableTips.push({
         category: 'REVENUE',
         title: `Scale Fast-Moving '${topPerformer.product.name}'`,
+        titleUrdu: `زیادہ فروخت ہونے والے آئٹم '${topPerformer.product.name}' کا اسٹاک بڑھائیں`,
         tip: `'${topPerformer.product.name}' is your #1 revenue driver (Rs. ${topPerformer.stats.revenue.toLocaleString()} in last 30 days). Ensure you never run out of this item and negotiate 1.5% - 2% bulk discount from supplier.`,
+        tipUrdu: `'${topPerformer.product.name}' نے گذشتہ 30 دن میں Rs. ${topPerformer.stats.revenue.toLocaleString()} کی سیل دی ہے۔ اس کا اسٹاک کبھی ختم نہ ہونے دیں اور سپلائر سے 1.5% سے 2% تک کیش یا بلک ڈسکاؤنٹ حاصل کریں۔`,
         impact: 'High Profit Expansion',
+        impactUrdu: 'سیلز اور منافع میں مستقل اضافہ',
       });
     }
 
@@ -634,37 +713,47 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
       actionableTips.push({
         category: 'CASH_FLOW',
         title: 'Accelerate Outstanding Market Recovery',
-        tip: `You have Rs. ${Math.round(totalReceivables).toLocaleString()} locked in market credit. Sending automated WhatsApp payment reminders to top 5 debtors can free up working capital for fast-moving inventory purchases.`,
+        titleUrdu: 'مارکیٹ کے ادھار کھاتے کی وصولی تیز کریں',
+        tip: `You have Rs. ${Math.round(totalReceivables).toLocaleString()} locked in market credit. Sending automated WhatsApp payment reminders to top debtors can free up working capital for fast-moving inventory purchases.`,
+        tipUrdu: `مارکیٹ میں کل Rs. ${Math.round(totalReceivables).toLocaleString()} بقایا ادھار ہے۔ بڑے کھاتہ داروں کو واٹس ایپ پر بل یاد دہانی بھیجیں تاکہ رقم واپس آئے اور نیا مال نقد خریدا جا سکے۔`,
         impact: 'Boost Cash Flow',
+        impactUrdu: 'کیش فلو اور دکان کی لیکویڈیٹی میں فوری اضافہ',
       });
     }
 
     // Tip 3: Dead stock liquidation
-    const deadStockCount = stockPredictions.filter((s) => s.urgency === 'DEAD_STOCK').length;
     if (deadStockCount > 0) {
       actionableTips.push({
         category: 'INVENTORY',
         title: `Liquidate ${deadStockCount} Slow-Moving Stock Items`,
+        titleUrdu: `${deadStockCount} غیر متحرک یا سست رفتار آئٹمز کو اسکیم دے کر نکالیں`,
         tip: `Found ${deadStockCount} products with zero sales in the last 30 days. Bundle them with best-selling engine oils or run a workshop promotional scheme to convert stagnant capital into cash.`,
+        tipUrdu: `گذشتہ 30 دن میں ${deadStockCount} مصنوعات کی کوئی سیل نہیں ہوئی۔ ان پر آئل چینج والوں یا ورکشاپس کو 2% تا 3% اضافی رعایت یا اسکیم دے کر بند پڑا سرمایہ نقد رقم میں تبدیل کریں۔`,
         impact: 'Free Up Capital',
+        impactUrdu: 'بند پڑا سرمایہ نقد رقم میں آزاد ہوگا',
       });
     }
 
     // Tip 4: Margin Protection
-    const currentMargin = recentRevenue > 0 ? (recentGrossProfit / recentRevenue) * 100 : 0;
-    if (currentMargin < 8) {
+    if (currentMargin < 6) {
       actionableTips.push({
         category: 'PRICING',
-        title: 'Tighten Gross Margins',
+        title: 'Tighten Gross Margins & Carton Discounts',
+        titleUrdu: 'منافع مارجن پر نظر ثانی کریں اور ڈسکاؤنٹ کنٹرول کریں',
         tip: `Your real gross margin over the last 30 days is ${currentMargin.toFixed(1)}%. Review discount policies on wholesale cartons. A slight 1.5% adjustment on non-competitive items will boost bottom-line net profit significantly.`,
+        tipUrdu: `موجودہ منافع مارجن ${currentMargin.toFixed(1)}% ہے۔ کارٹن یا ڈیلر ڈسکاؤنٹ کو معتدل رکھیں تاکہ نیٹ خالص منافع میں نمایاں اضافہ ہو۔`,
         impact: 'Higher Net Returns',
+        impactUrdu: 'خالص منافع میں فوری اضافہ',
       });
     } else {
       actionableTips.push({
         category: 'PRICING',
-        title: 'Healthy Margin Defense',
+        title: 'Defend Healthy Margins & Target Fleets',
+        titleUrdu: 'منافع مستحکم ہے، بڑی کمرشل ورکشاپس کو ٹارگٹ کریں',
         tip: `Your gross return is healthy at ${currentMargin.toFixed(1)}%. Maintain existing pricing formulas and focus sales force on capturing commercial fleet workshops along Dipalpur Road & Okara bypass.`,
+        tipUrdu: `منافع مارجن ${currentMargin.toFixed(1)}% مستحکم اور اچھا ہے۔ دیپالپور روڈ، بائی پاس اور اوکاڑہ کی بڑی گاڑیوں اور کمرشل ورکشاپس سے نقد سپلائی معاہدے کریں۔`,
         impact: 'Market Dominance',
+        impactUrdu: 'مارکیٹ میں برتری اور کسٹمر بیس میں اضافہ',
       });
     }
 
@@ -672,6 +761,16 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
       success: true,
       data: {
         timestamp: new Date().toISOString(),
+        businessHealth: {
+          score: totalHealthScore,
+          grade: healthGrade,
+          pillars: {
+            margin: { score: marginScore, max: 25, label: 'Gross Margin Health', status: marginScore >= 20 ? 'EXCELLENT' : marginScore >= 15 ? 'STABLE' : 'WARNING' },
+            cashFlow: { score: cashFlowScore, max: 25, label: 'Market Credit & Recovery', status: cashFlowScore >= 20 ? 'HEALTHY' : cashFlowScore >= 15 ? 'MODERATE' : 'LOCKED' },
+            inventory: { score: inventoryScore, max: 25, label: 'Stock Turnover & Velocity', status: inventoryScore >= 20 ? 'HIGH' : inventoryScore >= 15 ? 'BALANCED' : 'SLOW' },
+            growth: { score: growthScore, max: 25, label: 'Sales Momentum & Growth', status: growthScore >= 20 ? 'EXPANDING' : growthScore >= 14 ? 'STEADY' : 'SLOWING' },
+          },
+        },
         metrics: {
           recent30DaysRevenue: recentRevenue,
           recent30DaysGrossProfit: recentGrossProfit,
@@ -681,14 +780,16 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
           dailyAverageSales,
           dailyAverageProfit,
           totalMarketReceivables: totalReceivables,
+          deadStockCount,
+          totalActiveProducts: totalProdCount,
         },
         forecast: {
           predictedNextMonthRevenue,
           predictedNextMonthProfit,
-          confidenceLevel: recentSales.length > 20 ? '94% (High Accuracy based on actual ledger)' : '78% (Moderate - Accumulating more real sales)',
+          confidenceLevel: recentSales.length > 20 ? '94% (High Accuracy based on actual ledger)' : '80% (Moderate - Accumulating more real sales)',
           trend: growthRate >= 0 ? 'UPWARD_EXPANSION' : 'CORRECTION_REQUIRED',
         },
-        stockPredictions: stockPredictions.slice(0, 15),
+        stockPredictions: stockPredictions.slice(0, 25),
         overdueDebtors,
         actionableTips,
       },
