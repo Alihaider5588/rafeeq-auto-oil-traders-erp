@@ -10,8 +10,13 @@ const getApiBaseUrl = () => {
   }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    // When running in production on Vercel or any HTTPS cloud domain
-    if (host.includes('vercel.app') || window.location.protocol === 'https:') {
+    // When running in production on Vercel or custom domain or any HTTPS cloud domain
+    if (
+      host.includes('rafiqautoandoiltraders.com') ||
+      host.includes('rafeeqautoandoiltraders.com') ||
+      host.includes('vercel.app') ||
+      window.location.protocol === 'https:'
+    ) {
       return LIVE_BACKEND_URL;
     }
     return `http://${host}:5000/api`;
@@ -30,7 +35,12 @@ export const getBackendHost = () => {
   }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    if (host.includes('vercel.app') || window.location.protocol === 'https:') {
+    if (
+      host.includes('rafiqautoandoiltraders.com') ||
+      host.includes('rafeeqautoandoiltraders.com') ||
+      host.includes('vercel.app') ||
+      window.location.protocol === 'https:'
+    ) {
       return LIVE_BACKEND_HOST;
     }
     return `http://${host}:5000`;

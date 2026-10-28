@@ -28,6 +28,9 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Enable trust proxy for Vercel / reverse proxy deployment
+app.set('trust proxy', 1);
+
 // Hardening: Disable information-disclosing Express header
 app.disable('x-powered-by');
 
@@ -54,13 +57,20 @@ app.use(
         return false;
       });
 
-      if (isAllowed || process.env.NODE_ENV !== 'production' || origin.endsWith('.vercel.app')) {
+      const isDomainMatch =
+        origin.includes('rafiqautoandoiltraders.com') ||
+        origin.includes('rafeeqautoandoiltraders.com') ||
+        origin.endsWith('.vercel.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1');
+
+      if (isAllowed || isDomainMatch || process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
 
       return callback(null, false);
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-owner-token'],
     credentials: true,
   })

@@ -30,10 +30,19 @@ export const getJwtSecret = (): string => {
  */
 export const getAllowedCorsOrigins = (): (string | RegExp)[] => {
   const origins: (string | RegExp)[] = [
+    // Production custom domain & subdomains (Live Website & POS)
+    'https://rafiqautoandoiltraders.com',
+    'https://www.rafiqautoandoiltraders.com',
+    'http://rafiqautoandoiltraders.com',
+    'http://www.rafiqautoandoiltraders.com',
+    /^(https?:\/\/)?([a-z0-9-]+\.)*rafiqautoandoiltraders\.com(:[0-9]+)?$/i,
+    /^(https?:\/\/)?([a-z0-9-]+\.)*rafeeqautoandoiltraders\.com(:[0-9]+)?$/i,
+
     // Production frontends on Vercel
     'https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app',
     'https://rafeeq-auto-oil-traders-erp.vercel.app',
     /\.vercel\.app$/,
+
     // Local development servers
     'http://localhost:5173',
     'http://127.0.0.1:5173',
@@ -41,6 +50,7 @@ export const getAllowedCorsOrigins = (): (string | RegExp)[] => {
     'http://127.0.0.1:5000',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+
     // Local Area Network (Wi-Fi / LAN IP addresses for mobile devices & terminals)
     /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/,
   ];

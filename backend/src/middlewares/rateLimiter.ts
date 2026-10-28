@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each IP to 30 failed attempts per window
+  max: 60, // Limit each IP to 60 failed attempts per window
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   skipSuccessfulRequests: true, // Legitimate successful logins NEVER consume attempts
@@ -19,22 +19,22 @@ export const authLimiter = rateLimit({
   },
   message: {
     success: false,
-    message: 'Too many failed login attempts from this IP address. Please wait 15 minutes before retrying.',
+    message: 'Too many failed login attempts from this IP address. Please wait a few minutes before retrying.',
   },
 });
 
 /**
  * Password change rate limiter.
- * Allows maximum 6 attempts per 15 minutes per IP.
+ * Allows maximum 20 attempts per 15 minutes per IP.
  */
 export const passwordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 6,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many password update requests. Please wait 15 minutes before retrying.',
+    message: 'Too many password update requests. Please wait a few minutes before retrying.',
   },
 });
 
@@ -42,11 +42,11 @@ export const passwordLimiter = rateLimit({
  * Public form submission rate limiter.
  * Protects public inquiries (/contact) and public order placement (/orders)
  * against automated spam bots, flooding, and resource exhaustion.
- * Allows 20 requests per 15 minutes per IP.
+ * Allows 50 requests per 15 minutes per IP.
  */
 export const publicSubmissionsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -58,11 +58,11 @@ export const publicSubmissionsLimiter = rateLimit({
 /**
  * General API rate limiter.
  * Protects the entire application against scraping, automated probing, and DoS attacks.
- * Allows up to 600 requests per 15 minutes per IP.
+ * Allows up to 1500 requests per 15 minutes per IP.
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 600,
+  max: 1500,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
