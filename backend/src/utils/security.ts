@@ -31,12 +31,18 @@ export const getJwtSecret = (): string => {
 export const getAllowedCorsOrigins = (): (string | RegExp)[] => {
   const origins: (string | RegExp)[] = [
     // Production custom domain & subdomains (Live Website & POS)
+    'https://rafiquautoandoiltraders.com',
+    'https://www.rafiquautoandoiltraders.com',
+    'http://rafiquautoandoiltraders.com',
+    'http://www.rafiquautoandoiltraders.com',
     'https://rafiqautoandoiltraders.com',
     'https://www.rafiqautoandoiltraders.com',
     'http://rafiqautoandoiltraders.com',
     'http://www.rafiqautoandoiltraders.com',
+    /^(https?:\/\/)?([a-z0-9-]+\.)*rafiquautoandoiltraders\.com(:[0-9]+)?$/i,
     /^(https?:\/\/)?([a-z0-9-]+\.)*rafiqautoandoiltraders\.com(:[0-9]+)?$/i,
     /^(https?:\/\/)?([a-z0-9-]+\.)*rafeeqautoandoiltraders\.com(:[0-9]+)?$/i,
+    /^(https?:\/\/)?([a-z0-9-]+\.)*rafeequeautoandoiltraders\.com(:[0-9]+)?$/i,
 
     // Production frontends on Vercel
     'https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app',

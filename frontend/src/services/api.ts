@@ -12,6 +12,7 @@ const getApiBaseUrl = () => {
     const host = window.location.hostname;
     // When running in production on Vercel or custom domain or any HTTPS cloud domain
     if (
+      host.includes('rafiquautoandoiltraders.com') ||
       host.includes('rafiqautoandoiltraders.com') ||
       host.includes('rafeeqautoandoiltraders.com') ||
       host.includes('vercel.app') ||
@@ -36,6 +37,7 @@ export const getBackendHost = () => {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (
+      host.includes('rafiquautoandoiltraders.com') ||
       host.includes('rafiqautoandoiltraders.com') ||
       host.includes('rafeeqautoandoiltraders.com') ||
       host.includes('vercel.app') ||
