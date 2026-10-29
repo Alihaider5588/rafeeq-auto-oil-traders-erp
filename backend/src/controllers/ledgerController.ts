@@ -367,3 +367,236 @@ export const deleteLedgerEntry = async (req: AuthenticatedRequest, res: Response
     res.status(500).json({ success: false, message: error.message || 'Failed to delete ledger entry.' });
   }
 };
+
+// ============================================================================
+// DUAL PARTNER (MUTUAL / CONTRA) LEDGER & OFFSET SETTLEMENTS
+// ============================================================================
+
+export const getDualPartnerLedger = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    let customer = await prisma.customer.findUnique({
+      where: { id },
+      include: { salesman: true },
+    });
+
+    let supplierId = '';
+    if (customer) {
+      const match = customer.notes?.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/);
+      supplierId = match ? match[1] : '';
+    } else {
+      const supplier = await prisma.supplier.findUnique({ where: { id } });
+      if (supplier) {
+        supplierId = supplier.id;
+        const match = supplier.notes?.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/);
+        const custId = match ? match[1] : '';
+        if (custId) {
+          customer = await prisma.customer.findUnique({
+            where: { id: custId },
+            include: { salesman: true },
+          });
+        }
+      }
+    }
+
+    if (!customer || !supplierId) {
+      res.status(404).json({ success: false, message: 'Dual partner relationship not found for this entity' });
+      return;
+    }
+
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+    if (!supplier) {
+      res.status(404).json({ success: false, message: 'Linked supplier record not found' });
+      return;
+    }
+
+    const [customerEntries, supplierEntries] = await Promise.all([
+      prisma.customerLedger.findMany({
+        where: { customerId: customer.id },
+        orderBy: { date: 'asc' },
+      }),
+      prisma.supplierLedger.findMany({
+        where: { supplierId: supplier.id },
+        orderBy: { date: 'asc' },
+      }),
+    ]);
+
+    let totalSales = 0;
+    let totalCustomerReceived = 0;
+    customerEntries.forEach((e) => {
+      totalSales += Number(e.debit);
+      totalCustomerReceived += Number(e.credit);
+    });
+
+    let totalPurchases = 0;
+    let totalSupplierPaid = 0;
+    supplierEntries.forEach((e) => {
+      totalPurchases += Number(e.credit);
+      totalSupplierPaid += Number(e.debit);
+    });
+
+    const currentReceivable = Number(customer.currentReceivable);
+    const currentPayable = Number(supplier.currentPayable);
+    const netMutualBalance = currentReceivable - currentPayable;
+
+    // Timeline merge
+    const timeline = [
+      ...customerEntries.map((e) => ({
+        id: e.id,
+        date: e.date,
+        type: e.transactionType,
+        source: 'CUSTOMER_ACCOUNT',
+        sourceLabel: 'فروخت / کسٹمر کھاتہ (Sale / Receivable)',
+        description: e.description,
+        referenceId: e.referenceId,
+        debit: Number(e.debit),
+        credit: Number(e.credit),
+        runningBalance: Number(e.runningBalance),
+      })),
+      ...supplierEntries.map((e) => ({
+        id: e.id,
+        date: e.date,
+        type: e.transactionType,
+        source: 'SUPPLIER_ACCOUNT',
+        sourceLabel: 'خریداری / سپلائر کھاتہ (Purchase / Payable)',
+        description: e.description,
+        referenceId: e.referenceId,
+        debit: Number(e.debit),
+        credit: Number(e.credit),
+        runningBalance: Number(e.runningBalance),
+      })),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    res.json({
+      success: true,
+      partner: {
+        customerId: customer.id,
+        supplierId: supplier.id,
+        name: customer.shopName,
+        ownerName: customer.ownerName,
+        phone: customer.phone,
+        address: customer.address,
+        area: customer.area,
+        salesman: customer.salesman,
+      },
+      summary: {
+        totalSales,
+        totalPurchases,
+        totalCustomerReceived,
+        totalSupplierPaid,
+        currentReceivable,
+        currentPayable,
+        netMutualBalance,
+        status: netMutualBalance > 0 ? 'RECEIVABLE' : netMutualBalance < 0 ? 'PAYABLE' : 'CLEARED',
+      },
+      timeline,
+      customerEntries,
+      supplierEntries,
+    });
+  } catch (error: any) {
+    console.error('getDualPartnerLedger error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch dual partner ledger' });
+  }
+};
+
+export const recordContraOffset = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { customerId, supplierId, amount, notes } = req.body;
+    const offsetAmount = Number(amount);
+    if (!offsetAmount || offsetAmount <= 0) {
+      res.status(400).json({ success: false, message: 'Valid positive offset amount is required.' });
+      return;
+    }
+
+    const [customer, supplier] = await Promise.all([
+      prisma.customer.findUnique({ where: { id: customerId } }),
+      prisma.supplier.findUnique({ where: { id: supplierId } }),
+    ]);
+
+    if (!customer || !supplier) {
+      res.status(404).json({ success: false, message: 'Customer or Supplier record not found.' });
+      return;
+    }
+
+    const curRec = Number(customer.currentReceivable);
+    const curPay = Number(supplier.currentPayable);
+
+    const voucherNumber = `CONTRA-${Date.now().toString().slice(-8)}`;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const newRec = curRec - offsetAmount;
+      const newPay = curPay - offsetAmount;
+
+      // 1. Credit customer ledger
+      await tx.customer.update({
+        where: { id: customer.id },
+        data: { currentReceivable: new Prisma.Decimal(newRec) },
+      });
+
+      await tx.customerLedger.create({
+        data: {
+          customerId: customer.id,
+          date: new Date(),
+          transactionType: TransactionType.ADJUSTMENT,
+          referenceId: voucherNumber,
+          description: `Mutual Contra Settlement #${voucherNumber} (آپسی کٹائی with Supplier: ${supplier.companyName})${notes ? ` - ${notes}` : ''}`,
+          debit: new Prisma.Decimal(0),
+          credit: new Prisma.Decimal(offsetAmount),
+          runningBalance: new Prisma.Decimal(newRec),
+        },
+      });
+
+      // 2. Debit supplier ledger
+      await tx.supplier.update({
+        where: { id: supplier.id },
+        data: { currentPayable: new Prisma.Decimal(newPay) },
+      });
+
+      await tx.supplierLedger.create({
+        data: {
+          supplierId: supplier.id,
+          date: new Date(),
+          transactionType: TransactionType.ADJUSTMENT,
+          referenceId: voucherNumber,
+          description: `Mutual Contra Settlement #${voucherNumber} (آپسی کٹائی with Customer: ${customer.shopName})${notes ? ` - ${notes}` : ''}`,
+          debit: new Prisma.Decimal(offsetAmount),
+          credit: new Prisma.Decimal(0),
+          runningBalance: new Prisma.Decimal(newPay),
+        },
+      });
+
+      return {
+        voucherNumber,
+        newReceivable: newRec,
+        newPayable: newPay,
+        netMutualBalance: newRec - newPay,
+      };
+    });
+
+    clearDashboardCache();
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'CONTRA_SETTLEMENT_RECORDED',
+      entityType: 'LEDGER',
+      entityId: result.voucherNumber,
+      details: {
+        customer: customer.shopName,
+        supplier: supplier.companyName,
+        offsetAmount,
+        netRemaining: result.netMutualBalance,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Contra clearance of Rs. ${offsetAmount.toLocaleString()} posted successfully!`,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('recordContraOffset error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to record contra offset' });
+  }
+};

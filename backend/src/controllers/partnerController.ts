@@ -47,7 +47,16 @@ export const getSuppliers = async (req: AuthenticatedRequest, res: Response): Pr
       orderBy: { companyName: 'asc' },
     });
 
-    res.json({ success: true, suppliers });
+    const enrichedSuppliers = suppliers.map((s) => {
+      const match = s.notes ? s.notes.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/) : null;
+      return {
+        ...s,
+        isDualPartner: Boolean(match),
+        linkedCustomerId: match ? match[1] : null,
+      };
+    });
+
+    res.json({ success: true, suppliers: enrichedSuppliers });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to retrieve suppliers' });
   }
@@ -198,12 +207,21 @@ export const getCustomers = async (req: AuthenticatedRequest, res: Response): Pr
       orderBy: { shopName: 'asc' },
     });
 
+    const enrichedCustomers = customers.map((c) => {
+      const match = c.notes ? c.notes.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/) : null;
+      return {
+        ...c,
+        isDualPartner: Boolean(match),
+        linkedSupplierId: match ? match[1] : null,
+      };
+    });
+
     if (isUnfiltered) {
-      cachedAllCustomers = customers;
+      cachedAllCustomers = enrichedCustomers;
       cachedAllCustomersTime = Date.now();
     }
 
-    res.json({ success: true, customers });
+    res.json({ success: true, customers: enrichedCustomers });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to retrieve customers' });
   }
@@ -432,6 +450,261 @@ export const deleteSupplier = async (req: AuthenticatedRequest, res: Response): 
   } catch (error: any) {
     console.error('deleteSupplier error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to delete supplier' });
+  }
+};
+
+// ============================================================================
+// DUAL PARTNERS (Customer + Supplier Both / مشترکہ پارٹنرز)
+// ============================================================================
+
+const dualPartnerSchema = z.object({
+  name: z.string().min(2, 'Shop or Company name is required'),
+  ownerName: z.string().min(2, 'Contact person or owner name is required'),
+  phone: z.string().min(6, 'Valid phone number is required'),
+  address: z.string().optional(),
+  area: z.string().optional(),
+  salesmanId: z.string().min(1).optional().nullable(),
+  openingReceivable: z.number().default(0),
+  openingPayable: z.number().default(0),
+  creditLimit: z.number().default(100000),
+  notes: z.string().optional(),
+});
+
+export const createDualPartner = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const parsed = dualPartnerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, errors: parsed.error.flatten() });
+      return;
+    }
+
+    const data = parsed.data;
+
+    // Check if customer with same phone already exists
+    const existingCust = await prisma.customer.findFirst({ where: { phone: data.phone } });
+    if (existingCust) {
+      res.status(400).json({
+        success: false,
+        message: `A customer with phone number ${data.phone} already exists (${existingCust.shopName}). You can link them instead.`,
+      });
+      return;
+    }
+
+    let supplierName = data.name;
+    const existingSupp = await prisma.supplier.findUnique({ where: { companyName: supplierName } });
+    if (existingSupp) {
+      supplierName = `${data.name} (Supplier)`;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create Supplier first
+      const supplier = await tx.supplier.create({
+        data: {
+          companyName: supplierName,
+          contactPerson: data.ownerName,
+          phone: data.phone,
+          address: data.address,
+          openingBalance: new Prisma.Decimal(data.openingPayable),
+          currentPayable: new Prisma.Decimal(data.openingPayable),
+          notes: `[DUAL_PARTNER_PENDING] ${data.notes || ''}`.trim(),
+        },
+      });
+
+      // 2. Create Customer with link to Supplier
+      const customer = await tx.customer.create({
+        data: {
+          shopName: data.name,
+          ownerName: data.ownerName,
+          phone: data.phone,
+          address: data.address,
+          area: data.area,
+          salesmanId: data.salesmanId,
+          openingBalance: new Prisma.Decimal(data.openingReceivable),
+          currentReceivable: new Prisma.Decimal(data.openingReceivable),
+          creditLimit: new Prisma.Decimal(data.creditLimit),
+          notes: `[DUAL_PARTNER:${supplier.id}] ${data.notes || ''}`.trim(),
+        },
+      });
+
+      // 3. Update Supplier notes with link to Customer
+      await tx.supplier.update({
+        where: { id: supplier.id },
+        data: {
+          notes: `[DUAL_PARTNER:${customer.id}] ${data.notes || ''}`.trim(),
+        },
+      });
+
+      // 4. Create opening ledgers if balance > 0
+      if (data.openingReceivable !== 0) {
+        await tx.customerLedger.create({
+          data: {
+            customerId: customer.id,
+            transactionType: TransactionType.OPENING_BALANCE,
+            description: 'Opening Balance (Receivable / لینا ہے)',
+            debit: new Prisma.Decimal(data.openingReceivable),
+            credit: new Prisma.Decimal(0),
+            runningBalance: new Prisma.Decimal(data.openingReceivable),
+          },
+        });
+      }
+
+      if (data.openingPayable !== 0) {
+        await tx.supplierLedger.create({
+          data: {
+            supplierId: supplier.id,
+            transactionType: TransactionType.OPENING_BALANCE,
+            description: 'Opening Balance (Payable / دینا ہے)',
+            credit: new Prisma.Decimal(data.openingPayable),
+            debit: new Prisma.Decimal(0),
+            runningBalance: new Prisma.Decimal(data.openingPayable),
+          },
+        });
+      }
+
+      return { customer, supplier };
+    });
+
+    cachedAllCustomers = null;
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'DUAL_PARTNER_CREATED',
+      entityType: 'PARTNER',
+      entityId: result.customer.id,
+      details: { name: data.name, phone: data.phone, supplierId: result.supplier.id },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Dual Partner "${data.name}" (Customer + Supplier Both) created successfully!`,
+      partner: {
+        id: result.customer.id,
+        customerId: result.customer.id,
+        supplierId: result.supplier.id,
+        name: data.name,
+        ownerName: data.ownerName,
+        phone: data.phone,
+        currentReceivable: data.openingReceivable,
+        currentPayable: data.openingPayable,
+        netBalance: data.openingReceivable - data.openingPayable,
+      },
+    });
+  } catch (error: any) {
+    console.error('createDualPartner error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to create dual partner' });
+  }
+};
+
+export const getDualPartners = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { search } = req.query;
+
+    const customers = await prisma.customer.findMany({
+      where: {
+        notes: { contains: '[DUAL_PARTNER:' },
+        ...(search ? {
+          OR: [
+            { shopName: { contains: search as string } },
+            { ownerName: { contains: search as string } },
+            { phone: { contains: search as string } },
+          ]
+        } : {})
+      },
+      include: {
+        salesman: { select: { id: true, fullName: true, username: true } },
+      },
+      orderBy: { shopName: 'asc' },
+    });
+
+    const supplierIds = customers
+      .map((c) => {
+        const match = c.notes?.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/);
+        return match ? match[1] : null;
+      })
+      .filter(Boolean) as string[];
+
+    const suppliers = await prisma.supplier.findMany({
+      where: { id: { in: supplierIds } },
+    });
+
+    const supplierMap = new Map(suppliers.map((s) => [s.id, s]));
+
+    const dualPartners = customers.map((c) => {
+      const match = c.notes?.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/);
+      const supplierId = match ? match[1] : '';
+      const supplier = supplierMap.get(supplierId);
+
+      const receivable = Number(c.currentReceivable || 0);
+      const payable = Number(supplier?.currentPayable || 0);
+      const netBalance = receivable - payable;
+
+      return {
+        id: c.id,
+        customerId: c.id,
+        supplierId,
+        name: c.shopName,
+        ownerName: c.ownerName,
+        phone: c.phone,
+        address: c.address,
+        area: c.area,
+        salesman: c.salesman,
+        currentReceivable: receivable,
+        currentPayable: payable,
+        netBalance,
+        status: netBalance > 0 ? 'RECEIVABLE' : netBalance < 0 ? 'PAYABLE' : 'CLEARED',
+        notes: c.notes?.replace(/\[DUAL_PARTNER:[^\]]+\]/, '').trim(),
+      };
+    });
+
+    res.json({ success: true, dualPartners });
+  } catch (error: any) {
+    console.error('getDualPartners error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve dual partners' });
+  }
+};
+
+export const linkExistingPartners = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { customerId, supplierId } = req.body;
+    if (!customerId || !supplierId) {
+      res.status(400).json({ success: false, message: 'customerId and supplierId are required' });
+      return;
+    }
+
+    const [customer, supplier] = await Promise.all([
+      prisma.customer.findUnique({ where: { id: customerId } }),
+      prisma.supplier.findUnique({ where: { id: supplierId } }),
+    ]);
+
+    if (!customer || !supplier) {
+      res.status(404).json({ success: false, message: 'Customer or Supplier not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const cleanCustNotes = (customer.notes || '').replace(/\[DUAL_PARTNER:[^\]]+\]/g, '').trim();
+      const cleanSuppNotes = (supplier.notes || '').replace(/\[DUAL_PARTNER:[^\]]+\]/g, '').trim();
+
+      await tx.customer.update({
+        where: { id: customer.id },
+        data: { notes: `[DUAL_PARTNER:${supplier.id}] ${cleanCustNotes}`.trim() },
+      });
+
+      await tx.supplier.update({
+        where: { id: supplier.id },
+        data: { notes: `[DUAL_PARTNER:${customer.id}] ${cleanSuppNotes}`.trim() },
+      });
+    });
+
+    cachedAllCustomers = null;
+
+    res.json({
+      success: true,
+      message: `Linked "${customer.shopName}" and "${supplier.companyName}" as Dual Partner!`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to link partners' });
   }
 };
 

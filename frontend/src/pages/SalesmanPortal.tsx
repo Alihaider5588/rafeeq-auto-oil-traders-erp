@@ -19,7 +19,8 @@ import {
   Store,
   Printer,
   Percent,
-  X
+  X,
+  Search
 } from 'lucide-react';
 
 interface ExtendedProduct extends Product {
@@ -82,6 +83,7 @@ export const SalesmanPortal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [searchProduct, setSearchProduct] = useState('');
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const rateCacheRef = useRef<Record<string, any>>({});
 
   // Category & Full Bill Discount States
@@ -525,6 +527,17 @@ export const SalesmanPortal: React.FC = () => {
     }
   };
 
+  const filteredCustomers = customers.filter((c) => {
+    if (!customerSearchTerm.trim()) return true;
+    const term = customerSearchTerm.toLowerCase();
+    return (
+      (c.shopName && c.shopName.toLowerCase().includes(term)) ||
+      (c.ownerName && c.ownerName.toLowerCase().includes(term)) ||
+      (c.phone && c.phone.includes(term)) ||
+      (c.area && c.area.toLowerCase().includes(term))
+    );
+  });
+
   const filteredProducts = products.filter(
     (p) =>
       (p.name || '').toLowerCase().includes(searchProduct.toLowerCase()) ||
@@ -534,7 +547,7 @@ export const SalesmanPortal: React.FC = () => {
   );
 
   return (
-    <div style={{ maxWidth: '850px', margin: '0 auto', paddingBottom: '60px' }}>
+    <div style={{ maxWidth: '850px', width: '100%', margin: '0 auto', paddingBottom: '60px', overflowX: 'hidden' }}>
       {/* Mobile-First Header */}
       <div style={{
         backgroundColor: '#1e293b',
@@ -637,93 +650,174 @@ export const SalesmanPortal: React.FC = () => {
           <h3 className="card-title" style={{ margin: 0 }}>
             1. Select Customer / Shop (For Negotiated Rate History)
           </h3>
-          <button
-            type="button"
-            onClick={() => {
-              const walkIn = customers.find(c => c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in'));
-              if (walkIn) {
-                setSelectedCustomer(walkIn);
-              } else {
-                setSelectedCustomer({
-                  id: 'walk-in',
-                  shopName: 'Walk-in Customer / Counter Sale',
-                  ownerName: 'Direct Cash Customer',
-                  phone: '00000000000',
-                  address: 'Shop Counter',
-                  area: 'Okara Local',
-                  currentReceivable: 0,
-                  creditLimit: 0,
-                  openingBalance: 0,
-                  createdAt: new Date().toISOString(),
-                } as any);
-              }
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: (selectedCustomer?.phone === '00000000000' || selectedCustomer?.shopName?.toLowerCase().includes('walk-in')) ? '#16a34a' : '#0f172a',
-              color: '#ffffff',
-              border: 'none',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <UserCheck size={16} /> Walk-in Customer (Shop Counter)
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFieldErrors((prev) => ({ ...prev, customer: '' }));
-              setShowAddCustomerModal(true);
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#0284c7',
-              color: '#ffffff',
-              border: 'none',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <UserPlus size={16} /> + Add New Customer
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                const walkIn = customers.find(c => c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in'));
+                if (walkIn) {
+                  setSelectedCustomer(walkIn);
+                } else {
+                  setSelectedCustomer({
+                    id: 'walk-in',
+                    shopName: 'Walk-in Customer / Counter Sale',
+                    ownerName: 'Direct Cash Customer',
+                    phone: '00000000000',
+                    address: 'Shop Counter',
+                    area: 'Okara Local',
+                    currentReceivable: 0,
+                    creditLimit: 0,
+                    openingBalance: 0,
+                    createdAt: new Date().toISOString(),
+                  } as any);
+                }
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: (selectedCustomer?.phone === '00000000000' || selectedCustomer?.shopName?.toLowerCase().includes('walk-in')) ? '#16a34a' : '#0f172a',
+                color: '#ffffff',
+                border: 'none',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <UserCheck size={16} /> Walk-in Customer (Shop Counter)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFieldErrors((prev) => ({ ...prev, customer: '' }));
+                setShowAddCustomerModal(true);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#0284c7',
+                color: '#ffffff',
+                border: 'none',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <UserPlus size={16} /> + Add New Customer
+            </button>
+          </div>
         </div>
 
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <select
-            className="form-control"
-            style={{
-              fontSize: '1rem',
-              padding: '12px',
-              ...(fieldErrors.customer ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
-            }}
-            value={selectedCustomer?.id || ''}
-            onChange={(e) => {
-              if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
-              const cust = customers.find((c) => c.id === e.target.value);
-              setSelectedCustomer(cust || null);
-            }}
-          >
-            <option value="">-- Choose Assigned Shop / Garage --</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.shopName} ({c.ownerName}) - Balance: Rs. {Number(c.currentReceivable).toLocaleString()}
-              </option>
-            ))}
-          </select>
-          {renderFieldErrorTag('customer')}
+        {/* Quick Search & Select Controls */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', alignItems: 'end', width: '100%' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label" style={{ fontWeight: 700, fontSize: '0.83rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Search size={14} style={{ color: '#0284c7' }} /> Quick Search Customer
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search shop, owner, phone..."
+                value={customerSearchTerm}
+                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                style={{ paddingRight: customerSearchTerm ? '30px' : '10px', fontSize: '0.92rem' }}
+              />
+              {customerSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setCustomerSearchTerm('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '1rem',
+                    lineHeight: 1
+                  }}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label" style={{ fontWeight: 700, fontSize: '0.83rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Choose Customer / Shop</span>
+              {customerSearchTerm && (
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0284c7' }}>
+                  ({filteredCustomers.length} matches found)
+                </span>
+              )}
+            </label>
+            <select
+              className="form-control"
+              style={{
+                fontSize: '0.95rem',
+                padding: '9px 12px',
+                ...(fieldErrors.customer ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+              }}
+              value={selectedCustomer?.id || ''}
+              onChange={(e) => {
+                if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
+                const cust = customers.find((c) => c.id === e.target.value);
+                setSelectedCustomer(cust || null);
+              }}
+            >
+              <option value="">-- Choose Assigned Shop / Garage --</option>
+              {filteredCustomers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.shopName} ({c.ownerName}) - Balance: Rs. {Number(c.currentReceivable).toLocaleString()}
+                </option>
+              ))}
+            </select>
+            {renderFieldErrorTag('customer')}
+          </div>
         </div>
+
+        {/* Quick Pick Chips for Fast Selection */}
+        {customerSearchTerm && filteredCustomers.length > 0 && filteredCustomers.length <= 6 && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Quick Pick:</span>
+            {filteredCustomers.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCustomer(c);
+                  if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
+                }}
+                style={{
+                  padding: '3px 10px',
+                  fontSize: '0.8rem',
+                  borderRadius: '16px',
+                  backgroundColor: selectedCustomer?.id === c.id ? '#0284c7' : '#f1f5f9',
+                  color: selectedCustomer?.id === c.id ? '#ffffff' : '#334155',
+                  border: selectedCustomer?.id === c.id ? '1px solid #0284c7' : '1px solid #cbd5e1',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                ✓ {c.shopName}
+              </button>
+            ))}
+          </div>
+        )}
 
         {selectedCustomer && (
           <div style={{
@@ -1563,7 +1657,9 @@ export const SalesmanPortal: React.FC = () => {
             borderRadius: '16px',
             width: '100%',
             maxWidth: '520px',
-            padding: '24px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            padding: '20px',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>

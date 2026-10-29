@@ -61,6 +61,8 @@ export interface Supplier {
   currentPayable: string | number;
   notes?: string;
   isActive: boolean;
+  isDualPartner?: boolean;
+  linkedCustomerId?: string;
 }
 
 export interface Customer {
@@ -77,6 +79,25 @@ export interface Customer {
   creditLimit: string | number;
   notes?: string;
   isActive: boolean;
+  isDualPartner?: boolean;
+  linkedSupplierId?: string;
+}
+
+export interface DualPartner {
+  id: string;
+  customerId: string;
+  supplierId: string;
+  name: string;
+  ownerName: string;
+  phone: string;
+  address?: string;
+  area?: string;
+  salesman?: { id: string; fullName: string; username: string };
+  currentReceivable: number;
+  currentPayable: number;
+  netBalance: number;
+  status: 'RECEIVABLE' | 'PAYABLE' | 'CLEARED';
+  notes?: string;
 }
 
 export interface SaleItem {

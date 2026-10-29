@@ -160,8 +160,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </button>
         </div>
 
-        {/* Navigation list */}
-        <nav style={{ padding: '16px 12px', flex: 1, overflowY: 'auto' }}>
+        {/* Navigation list - auto closes on mobile tap */}
+        <nav
+          style={{ padding: '16px 12px', flex: 1, overflowY: 'auto' }}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('a')) {
+              setMobileMenuOpen(false);
+            }
+          }}
+        >
           {/* Role-specific home links (Can also be granted to other users by Admin) */}
           {canAccessTab('/admin', ['ADMIN']) && (
             <NavLink to="/admin" style={navItemStyle}>
