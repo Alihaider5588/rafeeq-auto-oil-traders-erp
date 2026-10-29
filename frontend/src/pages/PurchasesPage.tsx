@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Supplier, Product } from '../types';
-import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2 } from 'lucide-react';
+import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2, Eye, Printer, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const PurchasesPage: React.FC = () => {
@@ -12,6 +12,7 @@ export const PurchasesPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
 
   // New purchase state
   const [supplierId, setSupplierId] = useState('');
@@ -359,8 +360,25 @@ export const PurchasesPage: React.FC = () => {
             ) : (
               purchases.map((p) => (
                 <tr key={p.id}>
-                  <td className="font-mono" style={{ fontWeight: 700, color: '#d97706' }}>
-                    {p.invoiceNumber}
+                  <td className="font-mono" style={{ fontWeight: 700 }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPurchase(p)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        color: '#d97706',
+                        fontWeight: 800,
+                        textDecoration: 'underline',
+                        fontFamily: 'inherit',
+                        fontSize: '0.95rem'
+                      }}
+                      title="Click to view full purchase voucher & items / تفصیل دیکھیں"
+                    >
+                      {p.invoiceNumber}
+                    </button>
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{new Date(p.purchaseDate).toLocaleDateString()}</div>
@@ -380,27 +398,46 @@ export const PurchasesPage: React.FC = () => {
                   </td>
                   <td>{p.createdBy?.fullName}</td>
                   <td style={{ textAlign: 'center' }}>
-                    {isAdmin ? (
+                    <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
                       <button
-                        onClick={() => handleDeletePurchase(p.id, p.invoiceNumber)}
-                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => setSelectedPurchase(p)}
+                        className="btn btn-sm btn-outline"
                         style={{
                           padding: '4px 8px',
-                          backgroundColor: '#fee2e2',
-                          color: '#b91c1c',
-                          border: '1px solid #fca5a5',
-                          fontWeight: 600,
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#0284c7',
+                          borderColor: '#bae6fd',
+                          backgroundColor: '#f0f9ff'
                         }}
-                        title="Permanently Delete Purchase from DB & POS"
+                        title="View Full Purchase Invoice / مال کی تفصیل"
                       >
-                        <Trash2 size={13} /> Delete
+                        <Eye size={13} /> View
                       </button>
-                    ) : (
-                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</span>
-                    )}
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeletePurchase(p.id, p.invoiceNumber)}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #fca5a5',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Permanently Delete Purchase from DB & POS"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -867,6 +904,381 @@ export const PurchasesPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* View & Print Purchase Invoice / Goods Received Note Modal */}
+      {selectedPurchase && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '820px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            {/* Top Bar (Screen only, hidden on print) */}
+            <div className="no-print" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid #e2e8f0',
+              paddingBottom: '14px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: '#fef3c7',
+                  color: '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                    Purchase Voucher / Goods Received Note
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    رسید انورڈ مال و تفصیل خریداری
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                >
+                  <Printer size={15} /> Print Voucher / پرنٹ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPurchase(null)}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontWeight: 700 }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Container */}
+            <div className="printable-area a4-report" style={{
+              backgroundColor: '#ffffff',
+              padding: '10px',
+              color: '#0f172a',
+              fontFamily: 'system-ui, -apple-system, sans-serif'
+            }}>
+              {/* Header Letterhead */}
+              <div style={{
+                textAlign: 'center',
+                borderBottom: '2px solid #0f172a',
+                paddingBottom: '12px',
+                marginBottom: '16px'
+              }}>
+                <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '0.5px', color: '#0f172a' }}>
+                  RAFIQ AUTO & OIL TRADERS
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#d97706', marginTop: '2px' }}>
+                  رفیق آٹو اینڈ آئل ٹریڈرز
+                </div>
+                <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
+                  54-Stop Near MCB Bank, Dipalpur Road, Okara &bull; Ph: 0306-9258573 | 0327-7497457
+                </div>
+                <div style={{
+                  display: 'inline-block',
+                  marginTop: '8px',
+                  padding: '3px 14px',
+                  backgroundColor: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  color: '#1e293b'
+                }}>
+                  GOODS RECEIVED NOTE &bull; انورڈ مال رسید
+                </div>
+              </div>
+
+              {/* Information Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 1fr',
+                gap: '12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                fontSize: '12px',
+                marginBottom: '16px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: '4px' }}>
+                    Supplier / Vendor Details (سپلائر)
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
+                    {selectedPurchase.supplier?.companyName || 'Unknown Supplier'}
+                  </div>
+                  {selectedPurchase.supplier?.contactPerson && (
+                    <div style={{ color: '#475569', marginTop: '2px' }}>
+                      Contact: <b>{selectedPurchase.supplier.contactPerson}</b>
+                    </div>
+                  )}
+                  {selectedPurchase.supplier?.phone && (
+                    <div style={{ color: '#475569', marginTop: '2px' }}>
+                      Phone: <b>{selectedPurchase.supplier.phone}</b>
+                    </div>
+                  )}
+                  {selectedPurchase.supplier?.address && (
+                    <div style={{ color: '#64748b', fontSize: '11px', marginTop: '2px' }}>
+                      {selectedPurchase.supplier.address}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                    <span style={{ color: '#64748b' }}>Supplier Invoice #:</span>
+                    <span style={{ fontWeight: 800, color: '#d97706', fontFamily: 'monospace', fontSize: '13px' }}>
+                      {selectedPurchase.invoiceNumber}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                    <span style={{ color: '#64748b' }}>Received Date:</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {new Date(selectedPurchase.purchaseDate).toLocaleDateString()} {new Date(selectedPurchase.purchaseDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                    <span style={{ color: '#64748b' }}>Payment Mode:</span>
+                    <span style={{ fontWeight: 700, color: '#0284c7' }}>
+                      {selectedPurchase.paymentMethod}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Recorded By:</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {selectedPurchase.createdBy?.fullName || 'Admin'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Received Table */}
+              <div style={{ marginBottom: '16px' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '11.5px',
+                  border: '1px solid #cbd5e1'
+                }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
+                      <th style={{ padding: '7px 8px', textAlign: 'center', width: '35px', borderRight: '1px solid #334155' }}>#</th>
+                      <th style={{ padding: '7px 10px', textAlign: 'left', borderRight: '1px solid #334155' }}>Product / Description (آئٹم نام)</th>
+                      <th style={{ padding: '7px 8px', textAlign: 'center', width: '90px', borderRight: '1px solid #334155' }}>Unit / پیکنگ</th>
+                      <th style={{ padding: '7px 8px', textAlign: 'center', width: '80px', borderRight: '1px solid #334155' }}>Qty Recv (تعداد)</th>
+                      <th style={{ padding: '7px 10px', textAlign: 'right', width: '100px', borderRight: '1px solid #334155' }}>Unit Rate</th>
+                      <th style={{ padding: '7px 10px', textAlign: 'right', width: '110px' }}>Total Cost (Rs.)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPurchase.items && selectedPurchase.items.length > 0 ? (
+                      selectedPurchase.items.map((it: any, idx: number) => {
+                        const unitName = it.product?.unit?.symbol || it.product?.unit?.name || 'Unit';
+                        return (
+                          <tr key={it.id || idx} style={{
+                            borderBottom: '1px solid #e2e8f0',
+                            backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                          }}>
+                            <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748b', borderRight: '1px solid #e2e8f0' }}>
+                              {idx + 1}
+                            </td>
+                            <td style={{ padding: '7px 10px', borderRight: '1px solid #e2e8f0' }}>
+                              <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                                {it.product?.name || 'Product'}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                {it.product?.brand ? `Brand: ${it.product.brand}` : ''}
+                                {it.product?.sku ? ` | SKU: ${it.product.sku}` : ''}
+                              </div>
+                            </td>
+                            <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 600, color: '#475569', borderRight: '1px solid #e2e8f0' }}>
+                              {unitName}
+                            </td>
+                            <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 800, color: '#0f172a', fontSize: '12px', borderRight: '1px solid #e2e8f0' }}>
+                              {Number(it.quantity).toLocaleString()}
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, borderRight: '1px solid #e2e8f0' }}>
+                              Rs. {Number(it.unitCost).toLocaleString()}
+                            </td>
+                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                              Rs. {Number(it.totalCost || (it.quantity * it.unitCost)).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>
+                          No item details recorded for this purchase invoice.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {selectedPurchase.items && selectedPurchase.items.length > 0 && (
+                    <tfoot>
+                      <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
+                        <td colSpan={3} style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid #e2e8f0' }}>
+                          Total Items / کل موصول شدہ تعداد:
+                        </td>
+                        <td style={{ padding: '7px 8px', textAlign: 'center', color: '#0284c7', fontSize: '13px', borderRight: '1px solid #e2e8f0' }}>
+                          {selectedPurchase.items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 0), 0)}
+                        </td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid #e2e8f0' }}>
+                          Gross Total:
+                        </td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', color: '#0f172a', fontSize: '12px' }}>
+                          Rs. {Number(selectedPurchase.totalAmount || selectedPurchase.netAmount).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              {/* Financial Breakdown & Notes */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
+                <div>
+                  {selectedPurchase.notes ? (
+                    <div style={{
+                      backgroundColor: '#fffbeb',
+                      border: '1px dashed #f59e0b',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '11px'
+                    }}>
+                      <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '2px' }}>
+                        Notes / کمنٹس:
+                      </div>
+                      <div style={{ color: '#78350f', whiteSpace: 'pre-wrap' }}>
+                        {selectedPurchase.notes}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#f8fafc',
+                      border: '1px dashed #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '11px',
+                      color: '#64748b'
+                    }}>
+                      ✓ Stock automatically updated in warehouse inventory upon receipt.
+                    </div>
+                  )}
+                </div>
+
+                <div style={{
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748b' }}>Total Bill / کل بل:</span>
+                    <span style={{ fontWeight: 700 }}>
+                      Rs. {Number(selectedPurchase.netAmount).toLocaleString()}
+                    </span>
+                  </div>
+                  {Number(selectedPurchase.discount) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#16a34a' }}>
+                      <span>Discount (رعایت):</span>
+                      <span>- Rs. {Number(selectedPurchase.discount).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {Number(selectedPurchase.tax) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: '#64748b' }}>Tax:</span>
+                      <span>+ Rs. {Number(selectedPurchase.tax).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    borderTop: '1px dashed #cbd5e1',
+                    paddingTop: '6px',
+                    marginBottom: '4px'
+                  }}>
+                    <span style={{ fontWeight: 700, color: '#15803d' }}>Paid Amount (ادا شدہ):</span>
+                    <span style={{ fontWeight: 800, color: '#15803d' }}>
+                      Rs. {Number(selectedPurchase.paidAmount).toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid #cbd5e1',
+                    paddingTop: '6px',
+                    fontSize: '13px'
+                  }}>
+                    <span style={{ fontWeight: 800, color: Number(selectedPurchase.remainingAmount) > 0 ? '#dc2626' : '#15803d' }}>
+                      Payable Balance (بقایا):
+                    </span>
+                    <span style={{ fontWeight: 900, color: Number(selectedPurchase.remainingAmount) > 0 ? '#dc2626' : '#15803d' }}>
+                      Rs. {Number(selectedPurchase.remainingAmount).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signatures & Verification */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '40px',
+                paddingTop: '20px',
+                borderTop: '1px dashed #cbd5e1',
+                fontSize: '11px',
+                textAlign: 'center'
+              }}>
+                <div>
+                  <div style={{ borderBottom: '1px solid #64748b', height: '35px', marginBottom: '6px' }}></div>
+                  <div style={{ fontWeight: 700, color: '#334155' }}>Stock Received & Inspected By</div>
+                  <div style={{ fontSize: '10px', color: '#64748b' }}>مال موصول کنندہ دستخط</div>
+                </div>
+                <div>
+                  <div style={{ borderBottom: '1px solid #64748b', height: '35px', marginBottom: '6px' }}></div>
+                  <div style={{ fontWeight: 700, color: '#334155' }}>Authorized Signature & Stamp</div>
+                  <div style={{ fontSize: '10px', color: '#64748b' }}>مجاز دستخط و مہر</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
