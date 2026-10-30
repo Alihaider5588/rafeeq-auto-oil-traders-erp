@@ -53,6 +53,7 @@ export const getCustomerLedger = async (req: AuthenticatedRequest, res: Response
       totalCredit += Number(e.credit);
     });
 
+    res.setHeader('Cache-Control', 'private, max-age=15, stale-while-revalidate=45');
     res.json({
       success: true,
       customer,
@@ -101,6 +102,7 @@ export const getSupplierLedger = async (req: AuthenticatedRequest, res: Response
       totalCredit += Number(e.credit);
     });
 
+    res.setHeader('Cache-Control', 'private, max-age=15, stale-while-revalidate=45');
     res.json({
       success: true,
       supplier,

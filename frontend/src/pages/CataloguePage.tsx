@@ -96,7 +96,7 @@ export const CataloguePage: React.FC = () => {
     setLoading(true);
     try {
       const [prodRes, catRes, setRes] = await Promise.all([
-        api.get('/products?limit=10000'),
+        api.get('/products?limit=1500'),
         api.get('/products/meta/categories'),
         api.get('/settings'),
       ]);

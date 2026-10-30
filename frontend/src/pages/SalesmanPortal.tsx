@@ -144,7 +144,7 @@ export const SalesmanPortal: React.FC = () => {
     try {
       const [cRes, pRes, sRes] = await Promise.all([
         api.get('/partners/customers'),
-        api.get('/products?limit=10000'),
+        api.get('/products?limit=1500'),
         api.get('/settings').catch(() => null),
       ]);
       setCustomers(cRes.data.customers || []);

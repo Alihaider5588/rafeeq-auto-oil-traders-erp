@@ -62,9 +62,14 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
           items: {
             include: {
               product: {
-                include: {
-                  unit: true,
-                  primaryUnit: true,
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  brand: true,
+                  salePrice: true,
+                  unit: { select: { id: true, name: true, symbol: true } },
+                  primaryUnit: { select: { id: true, name: true, symbol: true } },
                 },
               },
             },
@@ -76,6 +81,7 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
       }),
     ]);
 
+    res.setHeader('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
     res.json({
       success: true,
       data: sales,

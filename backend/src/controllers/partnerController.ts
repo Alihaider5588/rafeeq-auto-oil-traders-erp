@@ -28,10 +28,22 @@ const customerSchema = z.object({
   notes: z.string().optional(),
 });
 
+let cachedAllSuppliers: any = null;
+let cachedAllSuppliersTime = 0;
+const SUPPLIERS_CACHE_TTL = 60 * 1000;
+
 // SUPPLIERS
 export const getSuppliers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { search } = req.query;
+
+    const isUnfiltered = !search;
+    if (isUnfiltered && cachedAllSuppliers && Date.now() - cachedAllSuppliersTime < SUPPLIERS_CACHE_TTL) {
+      res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
+      res.json({ success: true, suppliers: cachedAllSuppliers });
+      return;
+    }
+
     const where: Prisma.SupplierWhereInput = {};
 
     if (search) {
@@ -44,6 +56,19 @@ export const getSuppliers = async (req: AuthenticatedRequest, res: Response): Pr
 
     const suppliers = await prisma.supplier.findMany({
       where,
+      select: {
+        id: true,
+        companyName: true,
+        contactPerson: true,
+        phone: true,
+        address: true,
+        ntnTaxNumber: true,
+        openingBalance: true,
+        currentPayable: true,
+        notes: true,
+        isActive: true,
+        createdAt: true,
+      },
       orderBy: { companyName: 'asc' },
     });
 
@@ -56,6 +81,12 @@ export const getSuppliers = async (req: AuthenticatedRequest, res: Response): Pr
       };
     });
 
+    if (isUnfiltered) {
+      cachedAllSuppliers = enrichedSuppliers;
+      cachedAllSuppliersTime = Date.now();
+    }
+
+    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
     res.json({ success: true, suppliers: enrichedSuppliers });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to retrieve suppliers' });
@@ -144,7 +175,7 @@ export const createSupplier = async (req: AuthenticatedRequest, res: Response): 
 let isWalkInCustomerEnsured = false;
 let cachedAllCustomers: any = null;
 let cachedAllCustomersTime = 0;
-const CUSTOMERS_CACHE_TTL = 30 * 1000;
+const CUSTOMERS_CACHE_TTL = 60 * 1000;
 
 // CUSTOMERS
 export const getCustomers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -195,14 +226,28 @@ export const getCustomers = async (req: AuthenticatedRequest, res: Response): Pr
 
     const isUnfiltered = !search && !area && !salesmanId;
     if (isUnfiltered && cachedAllCustomers && Date.now() - cachedAllCustomersTime < CUSTOMERS_CACHE_TTL) {
+      res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
       res.json({ success: true, customers: cachedAllCustomers });
       return;
     }
 
     const customers = await prisma.customer.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        shopName: true,
+        ownerName: true,
+        phone: true,
+        address: true,
+        area: true,
+        salesmanId: true,
         salesman: { select: { id: true, fullName: true, username: true } },
+        openingBalance: true,
+        currentReceivable: true,
+        creditLimit: true,
+        notes: true,
+        isActive: true,
+        createdAt: true,
       },
       orderBy: { shopName: 'asc' },
     });
@@ -221,6 +266,7 @@ export const getCustomers = async (req: AuthenticatedRequest, res: Response): Pr
       cachedAllCustomersTime = Date.now();
     }
 
+    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
     res.json({ success: true, customers: enrichedCustomers });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to retrieve customers' });

@@ -54,9 +54,14 @@ export const getPurchases = async (req: AuthenticatedRequest, res: Response): Pr
           items: {
             include: {
               product: {
-                include: {
-                  unit: true,
-                  primaryUnit: true,
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                  brand: true,
+                  purchasePrice: true,
+                  unit: { select: { id: true, name: true, symbol: true } },
+                  primaryUnit: { select: { id: true, name: true, symbol: true } },
                 },
               },
             },
@@ -68,6 +73,7 @@ export const getPurchases = async (req: AuthenticatedRequest, res: Response): Pr
       }),
     ]);
 
+    res.setHeader('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
     res.json({
       success: true,
       data: purchases,

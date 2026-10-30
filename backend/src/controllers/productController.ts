@@ -30,7 +30,7 @@ const productSchema = z.object({
 
 let cachedAllProducts: any = null;
 let cachedAllProductsTime = 0;
-const PRODUCTS_CACHE_TTL = 30 * 1000;
+const PRODUCTS_CACHE_TTL = 60 * 1000;
 
 export const clearProductsCache = () => {
   cachedAllProducts = null;
@@ -38,14 +38,16 @@ export const clearProductsCache = () => {
 
 export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '10000' } = req.query;
+    const { search, categoryId, brand, lowStock, showOnWebsite, showInCatalog, page = '1', limit = '1500', includeImages } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(10000, Math.max(1, parseInt(limit as string, 10) || 10000));
+    const limitNum = Math.min(2500, Math.max(1, parseInt(limit as string, 10) || 1500));
     const skip = (pageNum - 1) * limitNum;
+    const shouldIncludeImages = includeImages === 'true';
 
-    const isDefaultRequest = !search && !categoryId && !brand && !lowStock && !showOnWebsite && !showInCatalog && pageNum === 1;
+    const isDefaultRequest = !search && !categoryId && !brand && !lowStock && !showOnWebsite && !showInCatalog && pageNum === 1 && !shouldIncludeImages;
     if (isDefaultRequest && cachedAllProducts && Date.now() - cachedAllProductsTime < PRODUCTS_CACHE_TTL) {
+      res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
       res.json(cachedAllProducts);
       return;
     }
@@ -66,17 +68,45 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
     if (showOnWebsite === 'true') where.showOnWebsite = true;
     if (showInCatalog === 'true') where.showInCatalog = true;
 
+    // Optimized column projection: Exclude heavy base64 images from standard bulk lists to save 95%+ network transfer
+    const productSelect: Prisma.ProductSelect = {
+      id: true,
+      name: true,
+      sku: true,
+      categoryId: true,
+      brand: true,
+      unitId: true,
+      primaryUnitId: true,
+      conversionFactor: true,
+      purchasePrice: true,
+      salePrice: true,
+      wholesalePrice: true,
+      minimumStockLevel: true,
+      openingStock: true,
+      currentStock: true,
+      showOnWebsite: true,
+      showInCatalog: true,
+      showPublicPrice: true,
+      isActive: true,
+      imageUrl: shouldIncludeImages,
+      category: {
+        select: { id: true, name: true, description: true },
+      },
+      unit: {
+        select: { id: true, name: true, symbol: true },
+      },
+      primaryUnit: {
+        select: { id: true, name: true, symbol: true },
+      },
+    };
+
     let filteredProducts: any[] = [];
     let totalCount = 0;
 
     if (lowStock === 'true') {
       const allMatching = await prisma.product.findMany({
         where,
-        include: {
-          category: true,
-          unit: true,
-          primaryUnit: true,
-        },
+        select: productSelect,
         orderBy: { name: 'asc' },
       });
       const lowStockList = allMatching.filter(
@@ -89,11 +119,7 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
         prisma.product.count({ where }),
         prisma.product.findMany({
           where,
-          include: {
-            category: true,
-            unit: true,
-            primaryUnit: true,
-          },
+          select: productSelect,
           orderBy: { name: 'asc' },
           skip,
           take: limitNum,
@@ -119,6 +145,7 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
       cachedAllProductsTime = Date.now();
     }
 
+    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
     res.json(responseData);
   } catch (error) {
     console.error('getProducts error:', error);
@@ -420,6 +447,7 @@ export const getCategories = async (_req: AuthenticatedRequest, res: Response): 
   try {
     const now = Date.now();
     if (cachedCategories && now - cachedCategoriesTime < CACHE_TTL) {
+      res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
       res.json({ success: true, categories: cachedCategories });
       return;
     }
@@ -432,6 +460,7 @@ export const getCategories = async (_req: AuthenticatedRequest, res: Response): 
     });
     cachedCategories = categories;
     cachedCategoriesTime = now;
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
     res.json({ success: true, categories });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to get categories' });
@@ -503,6 +532,7 @@ export const getUnits = async (_req: AuthenticatedRequest, res: Response): Promi
   try {
     const now = Date.now();
     if (cachedUnits && now - cachedUnitsTime < CACHE_TTL) {
+      res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
       res.json({ success: true, units: cachedUnits });
       return;
     }
@@ -510,6 +540,7 @@ export const getUnits = async (_req: AuthenticatedRequest, res: Response): Promi
     const units = await prisma.unit.findMany({ orderBy: { name: 'asc' } });
     cachedUnits = units;
     cachedUnitsTime = now;
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
     res.json({ success: true, units });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to get units' });

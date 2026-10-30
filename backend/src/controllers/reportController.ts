@@ -90,7 +90,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         _sum: { netAmount: true },
       }),
 
-      // Products inventory valuation & stock alerts
+      // Products inventory valuation & stock alerts (optimized lightweight projection)
       prisma.product.findMany({
         where: { isActive: true },
         select: {
@@ -101,9 +101,6 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           currentStock: true,
           minimumStockLevel: true,
           purchasePrice: true,
-          salePrice: true,
-          unit: { select: { name: true, symbol: true } },
-          category: { select: { name: true } },
         },
       }),
 
@@ -225,7 +222,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       },
     };
 
-    cachedDashboard = { payload: dashboardResponse, expiry: Date.now() + 15000 };
+    cachedDashboard = { payload: dashboardResponse, expiry: Date.now() + 60000 };
+    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     res.json(dashboardResponse);
   } catch (error) {
     console.error('getDashboardStats error:', error);
