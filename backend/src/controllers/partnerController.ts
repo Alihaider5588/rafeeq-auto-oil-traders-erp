@@ -454,6 +454,231 @@ export const deleteSupplier = async (req: AuthenticatedRequest, res: Response): 
 };
 
 // ============================================================================
+// UPDATE CUSTOMER & UPDATE SUPPLIER
+// ============================================================================
+
+const updateCustomerSchema = z.object({
+  shopName: z.string().min(2).optional(),
+  ownerName: z.string().min(2).optional(),
+  phone: z.string().min(6).optional(),
+  address: z.string().optional().nullable(),
+  area: z.string().optional().nullable(),
+  salesmanId: z.string().min(1).optional().nullable(),
+  creditLimit: z.coerce.number().min(0).optional(),
+  notes: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+export const updateCustomer = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const parsed = updateCustomerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, errors: parsed.error.flatten() });
+      return;
+    }
+
+    const data = parsed.data;
+
+    const currentCustomer = await prisma.customer.findUnique({
+      where: { id },
+    });
+
+    if (!currentCustomer) {
+      res.status(404).json({ success: false, message: 'Customer not found' });
+      return;
+    }
+
+    // Check phone uniqueness if phone is changing
+    if (data.phone && data.phone !== currentCustomer.phone) {
+      const existingPhone = await prisma.customer.findUnique({
+        where: { phone: data.phone },
+      });
+      if (existingPhone && existingPhone.id !== id) {
+        res.status(400).json({
+          success: false,
+          message: `A customer with phone number "${data.phone}" already exists (${existingPhone.shopName}).`,
+        });
+        return;
+      }
+    }
+
+    // Preserve dual partner link in notes if present
+    let finalNotes = data.notes !== undefined ? data.notes : currentCustomer.notes;
+    const dualTagMatch = currentCustomer.notes?.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/);
+    if (dualTagMatch) {
+      const tag = dualTagMatch[0];
+      const linkedSupplierId = dualTagMatch[1];
+      const cleanNewNotes = (finalNotes || '').replace(/\[DUAL_PARTNER:[^\]]+\]/g, '').trim();
+      finalNotes = `${tag} ${cleanNewNotes}`.trim();
+
+      // Synchronize linked supplier if basic contact details changed
+      if (data.shopName || data.phone || data.address || data.ownerName) {
+        await prisma.supplier.update({
+          where: { id: linkedSupplierId },
+          data: {
+            ...(data.shopName ? { companyName: data.shopName } : {}),
+            ...(data.ownerName ? { contactPerson: data.ownerName } : {}),
+            ...(data.phone ? { phone: data.phone } : {}),
+            ...(data.address !== undefined ? { address: data.address } : {}),
+          },
+        }).catch((e) => console.log('Dual supplier sync skipped:', e.message));
+      }
+    }
+
+    const updated = await prisma.customer.update({
+      where: { id },
+      data: {
+        ...(data.shopName ? { shopName: data.shopName } : {}),
+        ...(data.ownerName ? { ownerName: data.ownerName } : {}),
+        ...(data.phone ? { phone: data.phone } : {}),
+        ...(data.address !== undefined ? { address: data.address } : {}),
+        ...(data.area !== undefined ? { area: data.area } : {}),
+        ...(data.salesmanId !== undefined ? { salesmanId: data.salesmanId } : {}),
+        ...(data.creditLimit !== undefined ? { creditLimit: new Prisma.Decimal(data.creditLimit) } : {}),
+        ...(data.notes !== undefined ? { notes: finalNotes } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      },
+      include: {
+        salesman: { select: { id: true, fullName: true, username: true } },
+      },
+    });
+
+    cachedAllCustomers = null;
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'CUSTOMER_UPDATED',
+      entityType: 'CUSTOMER',
+      entityId: id,
+      details: { ...data },
+      ipAddress: req.ip,
+    });
+
+    const isDual = Boolean(updated.notes && updated.notes.includes('[DUAL_PARTNER:'));
+
+    res.json({
+      success: true,
+      message: `Customer "${updated.shopName}" details updated successfully!`,
+      customer: {
+        ...updated,
+        isDualPartner: isDual,
+        linkedSupplierId: dualTagMatch ? dualTagMatch[1] : null,
+      },
+    });
+  } catch (error: any) {
+    console.error('updateCustomer error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update customer' });
+  }
+};
+
+const updateSupplierSchema = z.object({
+  companyName: z.string().min(2).optional(),
+  contactPerson: z.string().optional().nullable(),
+  phone: z.string().min(6).optional(),
+  address: z.string().optional().nullable(),
+  ntnTaxNumber: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+export const updateSupplier = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const parsed = updateSupplierSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, errors: parsed.error.flatten() });
+      return;
+    }
+
+    const data = parsed.data;
+
+    const currentSupplier = await prisma.supplier.findUnique({
+      where: { id },
+    });
+
+    if (!currentSupplier) {
+      res.status(404).json({ success: false, message: 'Supplier not found' });
+      return;
+    }
+
+    // Check companyName uniqueness if companyName is changing
+    if (data.companyName && data.companyName !== currentSupplier.companyName) {
+      const existingName = await prisma.supplier.findUnique({
+        where: { companyName: data.companyName },
+      });
+      if (existingName && existingName.id !== id) {
+        res.status(400).json({
+          success: false,
+          message: `A supplier with company name "${data.companyName}" already exists.`,
+        });
+        return;
+      }
+    }
+
+    // Preserve dual partner link in notes if present
+    let finalNotes = data.notes !== undefined ? data.notes : currentSupplier.notes;
+    const dualTagMatch = currentSupplier.notes?.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/);
+    if (dualTagMatch) {
+      const tag = dualTagMatch[0];
+      const linkedCustId = dualTagMatch[1];
+      const cleanNewNotes = (finalNotes || '').replace(/\[DUAL_PARTNER:[^\]]+\]/g, '').trim();
+      finalNotes = `${tag} ${cleanNewNotes}`.trim();
+
+      // Synchronize linked customer if basic contact details changed
+      if (data.companyName || data.phone || data.address || data.contactPerson) {
+        await prisma.customer.update({
+          where: { id: linkedCustId },
+          data: {
+            ...(data.companyName ? { shopName: data.companyName } : {}),
+            ...(data.contactPerson ? { ownerName: data.contactPerson } : {}),
+            ...(data.phone ? { phone: data.phone } : {}),
+            ...(data.address !== undefined ? { address: data.address } : {}),
+          },
+        }).catch((e) => console.log('Dual customer sync skipped:', e.message));
+      }
+    }
+
+    const updated = await prisma.supplier.update({
+      where: { id },
+      data: {
+        ...(data.companyName ? { companyName: data.companyName } : {}),
+        ...(data.contactPerson !== undefined ? { contactPerson: data.contactPerson } : {}),
+        ...(data.phone ? { phone: data.phone } : {}),
+        ...(data.address !== undefined ? { address: data.address } : {}),
+        ...(data.ntnTaxNumber !== undefined ? { ntnTaxNumber: data.ntnTaxNumber } : {}),
+        ...(data.notes !== undefined ? { notes: finalNotes } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      },
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'SUPPLIER_UPDATED',
+      entityType: 'SUPPLIER',
+      entityId: id,
+      details: { ...data },
+      ipAddress: req.ip,
+    });
+
+    const isDual = Boolean(updated.notes && updated.notes.includes('[DUAL_PARTNER:'));
+
+    res.json({
+      success: true,
+      message: `Supplier "${updated.companyName}" details updated successfully!`,
+      supplier: {
+        ...updated,
+        isDualPartner: isDual,
+        linkedCustomerId: dualTagMatch ? dualTagMatch[1] : null,
+      },
+    });
+  } catch (error: any) {
+    console.error('updateSupplier error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update supplier' });
+  }
+};
+
+// ============================================================================
 // DUAL PARTNERS (Customer + Supplier Both / مشترکہ پارٹنرز)
 // ============================================================================
 

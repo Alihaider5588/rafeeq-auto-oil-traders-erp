@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, User } from '../types';
-import { Users, Building2, Plus, Phone, MapPin, Trash2, Search } from 'lucide-react';
+import { Users, Building2, Plus, Phone, MapPin, Trash2, Search, Edit2, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIERS' }> = ({ type }) => {
@@ -13,6 +13,32 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
   const [showModal, setShowModal] = useState(false);
   const [partnerMode, setPartnerMode] = useState<'STANDARD' | 'DUAL'>('STANDARD');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Edit states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    id: '',
+    shopName: '',
+    ownerName: '',
+    phone: '',
+    address: '',
+    area: '',
+    salesmanId: '',
+    creditLimit: '100000',
+    notes: '',
+  });
+
+  const [editSupplierForm, setEditSupplierForm] = useState({
+    id: '',
+    companyName: '',
+    contactPerson: '',
+    phone: '',
+    address: '',
+    ntnTaxNumber: '',
+    notes: '',
+  });
 
   // Form states
   const [formCustomer, setFormCustomer] = useState({
@@ -166,6 +192,79 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
       triggerOperationError(err.response?.data?.message || `${label} delete nahi ho saka. Barah-e-karam dobara koshish karein.`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenEdit = (item: any) => {
+    if (type === 'CUSTOMERS') {
+      setEditCustomerForm({
+        id: item.id,
+        shopName: item.shopName || '',
+        ownerName: item.ownerName || '',
+        phone: item.phone || '',
+        address: item.address || '',
+        area: item.area || '',
+        salesmanId: item.salesmanId || item.salesman?.id || '',
+        creditLimit: item.creditLimit !== undefined ? String(item.creditLimit) : '100000',
+        notes: (item.notes || '').replace(/\[DUAL_PARTNER:[^\]]+\]/g, '').trim(),
+      });
+    } else {
+      setEditSupplierForm({
+        id: item.id,
+        companyName: item.companyName || '',
+        contactPerson: item.contactPerson || '',
+        phone: item.phone || '',
+        address: item.address || '',
+        ntnTaxNumber: item.ntnTaxNumber || '',
+        notes: (item.notes || '').replace(/\[DUAL_PARTNER:[^\]]+\]/g, '').trim(),
+      });
+    }
+    setShowEditModal(true);
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEdit(true);
+    try {
+      await api.put(`/partners/customers/${editCustomerForm.id}`, {
+        shopName: editCustomerForm.shopName,
+        ownerName: editCustomerForm.ownerName,
+        phone: editCustomerForm.phone,
+        address: editCustomerForm.address,
+        area: editCustomerForm.area,
+        salesmanId: editCustomerForm.salesmanId || null,
+        creditLimit: parseFloat(editCustomerForm.creditLimit || '0'),
+        notes: editCustomerForm.notes,
+      });
+      setShowEditModal(false);
+      triggerOperationSuccess(`Customer "${editCustomerForm.shopName}" ki tafseelat kamyabi se update ho gayi hain!`);
+      loadData();
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Customer update nahi ho saka. Details check karein.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleUpdateSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEdit(true);
+    try {
+      await api.put(`/partners/suppliers/${editSupplierForm.id}`, {
+        companyName: editSupplierForm.companyName,
+        contactPerson: editSupplierForm.contactPerson,
+        phone: editSupplierForm.phone,
+        address: editSupplierForm.address,
+        ntnTaxNumber: editSupplierForm.ntnTaxNumber,
+        notes: editSupplierForm.notes,
+      });
+      setShowEditModal(false);
+      triggerOperationSuccess(`Supplier "${editSupplierForm.companyName}" ki tafseelat kamyabi se update ho gayi hain!`);
+      loadData();
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Supplier update nahi ho saka. Details check karein.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -335,6 +434,9 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
               <th style={{ textAlign: 'right' }}>
                 {type === 'CUSTOMERS' ? 'Outstanding Udhar' : 'Outstanding Payable'}
               </th>
+              {type === 'CUSTOMERS' && (
+                <th style={{ textAlign: 'right' }}>Credit Limit</th>
+              )}
               <th>Status</th>
               <th style={{ textAlign: 'center' }}>Action</th>
             </tr>
@@ -342,13 +444,13 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <td colSpan={type === 'CUSTOMERS' ? 9 : 8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   Loading directory...
                 </td>
               </tr>
             ) : filteredData.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '35px', color: '#94a3b8' }}>
+                <td colSpan={type === 'CUSTOMERS' ? 9 : 8} style={{ textAlign: 'center', padding: '35px', color: '#94a3b8' }}>
                   {searchTerm ? (
                     <div>
                       <p style={{ fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
@@ -391,31 +493,70 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   }}>
                     Rs. {Number(type === 'CUSTOMERS' ? item.currentReceivable : item.currentPayable).toLocaleString()}
                   </td>
+                  {type === 'CUSTOMERS' && (
+                    <td style={{ textAlign: 'right' }}>
+                      {Number(item.creditLimit) > 0 ? (
+                        <div>
+                          <span style={{ fontWeight: 700, color: '#334155' }}>
+                            Rs. {Number(item.creditLimit).toLocaleString()}
+                          </span>
+                          {Number(item.currentReceivable) >= Number(item.creditLimit) && (
+                            <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#dc2626' }}>
+                              ⚠️ Limit Reached
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#059669', fontSize: '0.78rem', fontWeight: 700 }}>
+                          Unlimited
+                        </span>
+                      )}
+                    </td>
+                  )}
                   <td>
                     <span className="badge badge-success">Active</span>
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    {isAdmin ? (
+                    <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
                       <button
-                        onClick={() => handleDeleteItem(item.id, type === 'CUSTOMERS' ? item.shopName : item.companyName)}
-                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => handleOpenEdit(item)}
+                        className="btn btn-sm btn-outline"
                         style={{
                           padding: '4px 8px',
-                          backgroundColor: '#fee2e2',
-                          color: '#b91c1c',
-                          border: '1px solid #fca5a5',
-                          fontWeight: 600,
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#4338ca',
+                          borderColor: '#c7d2fe',
+                          backgroundColor: '#eef2ff'
                         }}
-                        title={`Permanently Delete ${type === 'CUSTOMERS' ? 'Customer' : 'Supplier'} from DB & POS`}
+                        title={`Edit ${type === 'CUSTOMERS' ? 'Customer & Credit Limit' : 'Supplier'} Details`}
                       >
-                        <Trash2 size={13} /> Delete
+                        <Edit2 size={13} /> Edit
                       </button>
-                    ) : (
-                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</span>
-                    )}
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteItem(item.id, type === 'CUSTOMERS' ? item.shopName : item.companyName)}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #fca5a5',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title={`Permanently Delete ${type === 'CUSTOMERS' ? 'Customer' : 'Supplier'} from DB & POS`}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -766,6 +907,309 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary">Save Supplier</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Partner Modal */}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '620px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#eef2ff', color: '#4338ca', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Edit2 size={18} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                    {type === 'CUSTOMERS' ? 'Edit Customer & Credit Limit' : 'Edit Supplier Details'}
+                  </h2>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {type === 'CUSTOMERS' ? 'کسٹمر کی تفصیلات اور ادھار لمٹ میں ترمیم' : 'سپلائر کمپنی کی معلومات میں ترمیم'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#64748b', fontWeight: 700 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {type === 'CUSTOMERS' ? (
+              <form onSubmit={handleUpdateCustomer}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Shop / Business Name *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editCustomerForm.shopName}
+                      onChange={(e) => setEditCustomerForm({ ...editCustomerForm, shopName: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Owner / Contact Person *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editCustomerForm.ownerName}
+                      onChange={(e) => setEditCustomerForm({ ...editCustomerForm, ownerName: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Phone Number *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editCustomerForm.phone}
+                      onChange={(e) => setEditCustomerForm({ ...editCustomerForm, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Area / Route (علاقہ / روٹ)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Faisalabad Road, Okara"
+                      value={editCustomerForm.area}
+                      onChange={(e) => setEditCustomerForm({ ...editCustomerForm, area: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label">Shop Address</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Near MCB Bank, Dipalpur Road"
+                    value={editCustomerForm.address}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, address: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">Assigned Salesman / Order Booker</label>
+                  <select
+                    className="form-control"
+                    value={editCustomerForm.salesmanId}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, salesmanId: e.target.value })}
+                  >
+                    <option value="">-- No Salesman Assigned (Direct Counter) --</option>
+                    {salesmen.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.fullName} ({s.username})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* CREDIT LIMIT SECTION */}
+                <div style={{
+                  backgroundColor: '#f8fafc',
+                  border: '2px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  marginBottom: '16px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label className="form-label" style={{ marginBottom: 0, fontWeight: 800, color: '#0f172a', fontSize: '0.92rem' }}>
+                      ⚡ Customer Credit Limit / ادھار کی حد (Rs.)
+                    </label>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      (0 = Unlimited / بغیر کسی حد کے)
+                    </span>
+                  </div>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    className="form-control"
+                    style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0369a1', backgroundColor: '#ffffff' }}
+                    value={editCustomerForm.creditLimit}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, creditLimit: e.target.value })}
+                  />
+
+                  <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center', marginRight: '4px' }}>
+                      فوری اضافہ (Quick Boost):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditCustomerForm(prev => ({
+                        ...prev,
+                        creditLimit: String(Math.max(0, Number(prev.creditLimit || 0) + 20000))
+                      }))}
+                      className="btn btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                    >
+                      + Rs. 20,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditCustomerForm(prev => ({
+                        ...prev,
+                        creditLimit: String(Math.max(0, Number(prev.creditLimit || 0) + 50000))
+                      }))}
+                      className="btn btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                    >
+                      + Rs. 50,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditCustomerForm(prev => ({
+                        ...prev,
+                        creditLimit: String(Math.max(0, Number(prev.creditLimit || 0) + 100000))
+                      }))}
+                      className="btn btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                    >
+                      + Rs. 100,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditCustomerForm(prev => ({ ...prev, creditLimit: '0' }))}
+                      className="btn btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', fontWeight: 700 }}
+                    >
+                      No Limit (0)
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '6px' }}>
+                    💡 Agar customer ka sabqa udhar pura ho gaya ho to yahan se limit barha kar foran naya maal / supply de saktay hain.
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">Notes / Instructions</label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="e.g. Reliable customer, special payment term notes..."
+                    value={editCustomerForm.notes}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, notes: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-outline">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={savingEdit} className="btn btn-primary" style={{ fontWeight: 800 }}>
+                    {savingEdit ? 'Saving Changes...' : 'Save Customer Changes / محفوظ کریں'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleUpdateSupplier}>
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label">Company / Distributor Name *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={editSupplierForm.companyName}
+                    onChange={(e) => setEditSupplierForm({ ...editSupplierForm, companyName: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Contact Person</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editSupplierForm.contactPerson}
+                      onChange={(e) => setEditSupplierForm({ ...editSupplierForm, contactPerson: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Phone Number *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editSupplierForm.phone}
+                      onChange={(e) => setEditSupplierForm({ ...editSupplierForm, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Address / Office Location</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editSupplierForm.address}
+                      onChange={(e) => setEditSupplierForm({ ...editSupplierForm, address: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">NTN / Sales Tax Number</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. 1234567-8"
+                      value={editSupplierForm.ntnTaxNumber}
+                      onChange={(e) => setEditSupplierForm({ ...editSupplierForm, ntnTaxNumber: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">Notes</label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="e.g. Main supplier for Caltex, Havoline..."
+                    value={editSupplierForm.notes}
+                    onChange={(e) => setEditSupplierForm({ ...editSupplierForm, notes: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-outline">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={savingEdit} className="btn btn-primary" style={{ fontWeight: 800 }}>
+                    {savingEdit ? 'Saving Changes...' : 'Save Supplier Changes / محفوظ کریں'}
+                  </button>
                 </div>
               </form>
             )}

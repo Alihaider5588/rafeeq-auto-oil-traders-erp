@@ -109,6 +109,12 @@ export const SalesmanPortal: React.FC = () => {
     creditLimit: '100000',
   });
 
+  // Quick Adjust Credit Limit Modal
+  const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
+  const [newCreditLimitInput, setNewCreditLimitInput] = useState('');
+  const [updatingCreditLimit, setUpdatingCreditLimit] = useState(false);
+  const [creditLimitSuccessMsg, setCreditLimitSuccessMsg] = useState('');
+
   const renderFieldErrorTag = (fieldName: string) => {
     if (!fieldErrors[fieldName]) return null;
     return (
@@ -333,6 +339,46 @@ export const SalesmanPortal: React.FC = () => {
       alert(err.response?.data?.message || 'Customer shamil nahi ho saka.');
     } finally {
       setCreatingCustomer(false);
+    }
+  };
+
+  const openCreditLimitModal = (suggestedAmount?: number) => {
+    if (!selectedCustomer) return;
+    const def = suggestedAmount 
+      ? suggestedAmount 
+      : isCreditExceeded 
+        ? Math.max(Number(selectedCustomer.creditLimit || 0) + 50000, Math.ceil(netRemainingDebt / 5000) * 5000 + 10000)
+        : Number(selectedCustomer.creditLimit || 100000);
+    setNewCreditLimitInput(String(def));
+    setCreditLimitSuccessMsg('');
+    setShowCreditLimitModal(true);
+  };
+
+  const handleSaveCreditLimit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+    const num = parseFloat(newCreditLimitInput);
+    if (isNaN(num) || num < 0) {
+      alert('Valid credit limit amount enter karein');
+      return;
+    }
+
+    setUpdatingCreditLimit(true);
+    try {
+      const res = await api.put(`/partners/customers/${selectedCustomer.id}`, {
+        creditLimit: num,
+      });
+      if (res.data?.success) {
+        const updatedCust = { ...selectedCustomer, creditLimit: num };
+        setSelectedCustomer(updatedCust);
+        setCustomers((prev) => prev.map((c) => (c.id === selectedCustomer.id ? { ...c, creditLimit: num } : c)));
+        setCreditLimitSuccessMsg(`✓ Credit limit barha kar Rs. ${num.toLocaleString()} kar di gayi hai! Ab aap foran supply / bill bana saktay hain.`);
+        setShowCreditLimitModal(false);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Credit limit update karne me masla pesh aya');
+    } finally {
+      setUpdatingCreditLimit(false);
     }
   };
 
@@ -843,11 +889,28 @@ export const SalesmanPortal: React.FC = () => {
               <div style={{ fontSize: '1.05rem', fontWeight: 800, color: Number(selectedCustomer.currentReceivable) > 0 ? '#dc2626' : '#16a34a' }}>
                 Rs. {Number(selectedCustomer.currentReceivable).toLocaleString()}
               </div>
-              {!isWalkIn && customerCreditLimit > 0 && (
-                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                  Credit Limit: <b>Rs. {customerCreditLimit.toLocaleString()}</b>
-                  {previousDebt > customerCreditLimit && (
-                    <span style={{ color: '#dc2626', fontWeight: 700, display: 'block' }}>⚠️ Udhar limit se zyada hai</span>
+              {!isWalkIn && (
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
+                  Credit Limit: <b style={{ color: '#0f172a' }}>{customerCreditLimit > 0 ? `Rs. ${customerCreditLimit.toLocaleString()}` : 'Unlimited (No Limit)'}</b>
+                  <button
+                    type="button"
+                    onClick={() => openCreditLimitModal()}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#0284c7',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      textDecoration: 'underline',
+                      marginLeft: '6px',
+                      fontSize: '0.74rem'
+                    }}
+                    title="Change or Increase Customer Credit Limit"
+                  >
+                    ✏️ Adjust Limit
+                  </button>
+                  {customerCreditLimit > 0 && previousDebt > customerCreditLimit && (
+                    <span style={{ color: '#dc2626', fontWeight: 700, display: 'block' }}>⚠️ Sabqa udhar limit se zyada hai</span>
                   )}
                 </div>
               )}
@@ -1584,13 +1647,60 @@ export const SalesmanPortal: React.FC = () => {
                 }}>
                   <div style={{ fontWeight: 800, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <AlertCircle size={22} color="#dc2626" />
-                    ⛔ Credit Limit Exceeded! (Udhar Limit Se Zyada Ho Gaya Hai)
+                    ⛔ Credit Limit Exceeded! (Udhar Limit Pori Ho Gayi Hai)
                   </div>
                   <div style={{ fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
                     Is customer ka kul udhar (Rs. {netRemainingDebt.toLocaleString()}) iski manzoor shuda credit limit (Rs. {customerCreditLimit.toLocaleString()}) se barh chuka hai.
                     <br />
-                    <b>Bill creation disabled hai.</b> Agar invoice banani hai to Customers page se iski credit limit barhayein ya cash wasooli enter karein taake udhar limit ke andar aa jaye.
+                    <b>Agar is customer ko mazeed maal / supply deni hai to neeche diye gaye button par click kar ke foran credit limit barhayein:</b>
                   </div>
+                  <div style={{ marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => openCreditLimitModal(Math.max(customerCreditLimit + 50000, Math.ceil(netRemainingDebt / 5000) * 5000 + 10000))}
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: '#dc2626',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        padding: '8px 14px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)'
+                      }}
+                    >
+                      ⚡ Increase Credit Limit to Allow Supply (کریڈٹ لمٹ بڑھائیں اور سپلائی دیں)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {creditLimitSuccessMsg && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: '#ecfdf5',
+                  border: '1.5px solid #10b981',
+                  color: '#065f46',
+                  fontSize: '0.86rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>{creditLimitSuccessMsg}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCreditLimitSuccessMsg('')}
+                    style={{ background: 'none', border: 'none', color: '#065f46', cursor: 'pointer', fontWeight: 900 }}
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
             </div>
@@ -1766,6 +1876,164 @@ export const SalesmanPortal: React.FC = () => {
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
                 >
                   <UserPlus size={16} /> {creatingCustomer ? 'Saving...' : 'Add & Select Customer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Adjust / Increase Credit Limit Modal */}
+      {showCreditLimitModal && selectedCustomer && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                  ⚡ Increase Credit Limit / ادھار لمٹ میں اضافہ
+                </h3>
+                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  {selectedCustomer.shopName} ({selectedCustomer.ownerName})
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreditLimitModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#64748b', fontWeight: 700 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Financial summary breakdown */}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px',
+              fontSize: '0.85rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: '#64748b' }}>Previous Udhar (سابقہ ادھار):</span>
+                <span style={{ fontWeight: 700 }}>Rs. {previousDebt.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: '#64748b' }}>This Order Total (نیا بل):</span>
+                <span style={{ fontWeight: 700, color: '#2563eb' }}>+ Rs. {totalBill.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', borderTop: '1px dashed #cbd5e1', paddingTop: '4px' }}>
+                <span style={{ fontWeight: 800, color: '#0f172a' }}>Projected Debt (مجموعی مطلوبہ ادھار):</span>
+                <span style={{ fontWeight: 900, color: '#b91c1c' }}>Rs. {netRemainingDebt.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '4px', marginTop: '4px' }}>
+                <span style={{ color: '#64748b' }}>Current Credit Limit (موجودہ لمٹ):</span>
+                <span style={{ fontWeight: 800, color: '#475569' }}>
+                  {customerCreditLimit > 0 ? `Rs. ${customerCreditLimit.toLocaleString()}` : 'Unlimited (0)'}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCreditLimit}>
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" style={{ fontWeight: 800 }}>
+                  Enter New Credit Limit (نئی کریڈٹ لمٹ) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  className="form-control"
+                  style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0369a1' }}
+                  value={newCreditLimitInput}
+                  onChange={(e) => setNewCreditLimitInput(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginBottom: '6px' }}>
+                  فوری سلیکشن (Quick Presets):
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewCreditLimitInput(String(Math.ceil(netRemainingDebt / 5000) * 5000))}
+                    className="btn btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                  >
+                    Exact Bill Total (Rs. {(Math.ceil(netRemainingDebt / 5000) * 5000).toLocaleString()})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewCreditLimitInput(String(Math.max(customerCreditLimit, netRemainingDebt) + 20000))}
+                    className="btn btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                  >
+                    + Rs. 20,000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewCreditLimitInput(String(Math.max(customerCreditLimit, netRemainingDebt) + 50000))}
+                    className="btn btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                  >
+                    + Rs. 50,000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewCreditLimitInput(String(Math.max(customerCreditLimit, netRemainingDebt) + 100000))}
+                    className="btn btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}
+                  >
+                    + Rs. 100,000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewCreditLimitInput('0')}
+                    className="btn btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', fontWeight: 700 }}
+                  >
+                    Unlimited (0)
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreditLimitModal(false)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingCreditLimit}
+                  className="btn btn-primary"
+                  style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {updatingCreditLimit ? 'Updating...' : '✓ Update Limit & Allow Supply (لمٹ بڑھائیں)'}
                 </button>
               </div>
             </form>
