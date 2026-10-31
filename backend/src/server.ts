@@ -181,6 +181,7 @@ app.use('/api/purchases', purchaseRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/ledgers', ledgerRoutes);
 app.use('/api/logistics', deliveryRoutes);
+app.use('/api/delivery', deliveryRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/owner-brand', ownerBrandRoutes); // Confidential Admin-only owner brand module

@@ -58,7 +58,7 @@ export const DeliveryManagementPage: React.FC = () => {
     setReconData(null);
     setLoadingRecon(true);
     try {
-      const res = await api.get(`/delivery/reconciliation/${del.id}`);
+      const res = await api.get(`/logistics/reconciliation/${del.id}`);
       if (res.data?.success && res.data.reconciliation) {
         setReconData(res.data.reconciliation);
       }

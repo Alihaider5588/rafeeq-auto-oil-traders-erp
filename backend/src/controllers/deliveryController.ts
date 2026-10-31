@@ -341,15 +341,19 @@ export const deleteDelivery = async (req: AuthenticatedRequest, res: Response): 
 export const getActiveVanForSalesman = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    const userRole = req.user?.role;
 
+    // Look for active route dispatch within the last 36 hours (covering daytime, evening routes, and cross-timezone dispatches)
+    const thirtySixHoursAgo = new Date(Date.now() - 36 * 60 * 60 * 1000);
     const where: Prisma.DailyDeliveryWhereInput = {
-      date: { gte: startOfDay, lte: endOfDay }
+      createdAt: { gte: thirtySixHoursAgo }
     };
-    if (req.user?.role === 'SALESMAN') {
-      where.salesmanId = userId;
+
+    if (userRole === 'SALESMAN') {
+      where.OR = [
+        { salesmanId: userId },
+        { salesmanId: null }
+      ];
     }
 
     const delivery = await prisma.dailyDelivery.findFirst({
@@ -382,12 +386,16 @@ export const getActiveVanForSalesman = async (req: AuthenticatedRequest, res: Re
       return;
     }
 
-    // Find sales created by this salesman today since delivery was dispatched
+    // Find sales created since delivery was dispatched
+    const salesFilter: Prisma.SaleWhereInput = {
+      createdAt: { gte: delivery.createdAt }
+    };
+    if (delivery.salesmanId) {
+      salesFilter.salesmanId = delivery.salesmanId;
+    }
+
     const salesToday = await prisma.sale.findMany({
-      where: {
-        salesmanId: delivery.salesmanId || undefined,
-        createdAt: { gte: delivery.createdAt }
-      },
+      where: salesFilter,
       include: {
         items: true
       }
