@@ -920,7 +920,7 @@ export const SalesmanPortal: React.FC = () => {
       )}
 
       {/* ACTIVE VAN DISPATCH & LOADED INVENTORY BANNER */}
-      {activeVan ? (
+      {activeVan && (
         <div style={{
           backgroundColor: '#0f172a',
           border: '2px solid #f59e0b',
@@ -1107,56 +1107,6 @@ export const SalesmanPortal: React.FC = () => {
               </table>
             </div>
           )}
-        </div>
-      ) : (
-        <div style={{
-          backgroundColor: '#0f172a',
-          border: '1px dashed #334155',
-          borderRadius: '14px',
-          padding: '14px 18px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          color: '#ffffff'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ backgroundColor: '#1e293b', padding: '10px', borderRadius: '10px', color: '#f59e0b' }}>
-              <Truck size={22} />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#f8fafc' }}>
-                  🚐 Delivery Route Van Status:
-                </span>
-                <span style={{ backgroundColor: '#1e293b', border: '1px solid #475569', color: '#94a3b8', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>
-                  Filhal Koi Active Van Dispatch Nahi Hui
-                </span>
-              </div>
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '3px' }}>
-                Subah jab Delivery Management se van par maal dispatch hoga, to live loaded stock, sold stock aur baqi maal ka hisab yahan foran update ho jayega.
-              </div>
-            </div>
-          </div>
-          <a
-            href="/delivery"
-            style={{
-              backgroundColor: '#2563eb',
-              color: '#ffffff',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              textDecoration: 'none',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Truck size={14} /> Delivery Management Kholein
-          </a>
         </div>
       )}
 
