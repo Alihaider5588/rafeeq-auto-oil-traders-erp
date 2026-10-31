@@ -175,7 +175,7 @@ export const createSupplier = async (req: AuthenticatedRequest, res: Response): 
 let isWalkInCustomerEnsured = false;
 let cachedAllCustomers: any = null;
 let cachedAllCustomersTime = 0;
-const CUSTOMERS_CACHE_TTL = 60 * 1000;
+const CUSTOMERS_CACHE_TTL = 180 * 1000; // 3 minutes in-memory cache to minimize Neon egress
 
 // CUSTOMERS
 export const getCustomers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {

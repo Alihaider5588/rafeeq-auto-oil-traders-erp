@@ -154,11 +154,30 @@ export const DeliveryManagementPage: React.FC = () => {
 
   const loadMeta = async () => {
     try {
+      const now = Date.now();
+      const CACHE_TTL = 15 * 60 * 1000;
+      let cachedProds: any[] | null = null;
+      const cachedProdStr = sessionStorage.getItem('rot_cached_products');
+      if (cachedProdStr) {
+        try {
+          const parsed = JSON.parse(cachedProdStr);
+          if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+            cachedProds = parsed.data;
+            setProducts(parsed.data);
+          }
+        } catch (e) {}
+      }
+
       const [pRes, uRes] = await Promise.all([
-        api.get('/products'),
+        cachedProds ? Promise.resolve(null) : api.get('/products'),
         api.get('/auth/users'),
       ]);
-      setProducts(pRes.data.data || []);
+      if (pRes?.data?.data) {
+        setProducts(pRes.data.data);
+        try {
+          sessionStorage.setItem('rot_cached_products', JSON.stringify({ data: pRes.data.data, timestamp: now }));
+        } catch (e) {}
+      }
       setSalesmen((uRes.data.users || []).filter((u: any) => u.role === 'SALESMAN'));
     } catch (e) {
       console.error(e);

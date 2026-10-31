@@ -72,22 +72,40 @@ export const PurchasesPage: React.FC = () => {
 
   const loadMeta = async () => {
     try {
+      const now = Date.now();
+      const CACHE_TTL = 15 * 60 * 1000;
+      let cachedProds: any[] | null = null;
+      const cachedProdStr = sessionStorage.getItem('rot_cached_products');
+      if (cachedProdStr) {
+        try {
+          const parsed = JSON.parse(cachedProdStr);
+          if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+            cachedProds = parsed.data;
+            setProducts(parsed.data);
+          }
+        } catch (e) {}
+      }
+
       const [sRes, pRes, cRes, uRes] = await Promise.allSettled([
         api.get('/partners/suppliers'),
-        api.get('/products?limit=1000'),
+        cachedProds ? Promise.resolve(null) : api.get('/products?limit=1000'),
         api.get('/products/categories'),
         api.get('/products/units'),
       ]);
-      if (sRes.status === 'fulfilled' && sRes.value.data) {
+      if (sRes.status === 'fulfilled' && sRes.value?.data) {
         setSuppliers(sRes.value.data.suppliers || sRes.value.data.data || []);
       }
-      if (pRes.status === 'fulfilled' && pRes.value.data) {
-        setProducts(pRes.value.data.data || pRes.value.data.products || []);
+      if (pRes.status === 'fulfilled' && pRes.value?.data) {
+        const pData = pRes.value.data.data || pRes.value.data.products || [];
+        setProducts(pData);
+        try {
+          sessionStorage.setItem('rot_cached_products', JSON.stringify({ data: pData, timestamp: now }));
+        } catch (e) {}
       }
-      if (cRes.status === 'fulfilled' && cRes.value.data) {
+      if (cRes.status === 'fulfilled' && cRes.value?.data) {
         setCategories(cRes.value.data.categories || cRes.value.data.data || []);
       }
-      if (uRes.status === 'fulfilled' && uRes.value.data) {
+      if (uRes.status === 'fulfilled' && uRes.value?.data) {
         setUnits(uRes.value.data.units || uRes.value.data.data || []);
       }
     } catch (e) {

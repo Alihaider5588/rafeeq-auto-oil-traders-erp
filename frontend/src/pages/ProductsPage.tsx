@@ -88,13 +88,36 @@ export const ProductsPage: React.FC = () => {
     loadMetadata();
   }, [selectedCategory]);
 
-  const loadProducts = async () => {
+  const loadProducts = async (force: boolean = false) => {
     try {
+      const now = Date.now();
+      const CACHE_TTL = 15 * 60 * 1000;
+      const isDefault = !search && !selectedCategory && !showLowStockOnly;
+
+      if (!force && isDefault) {
+        const cachedStr = sessionStorage.getItem('rot_cached_products');
+        if (cachedStr) {
+          try {
+            const parsed = JSON.parse(cachedStr);
+            if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+              setProducts(parsed.data);
+              return;
+            }
+          } catch (e) {}
+        }
+      }
+
       setLoading(true);
       const res = await api.get('/products', {
         params: { search, categoryId: selectedCategory || undefined, limit: 2000 },
       });
-      setProducts(res.data.data || []);
+      const data = res.data.data || [];
+      setProducts(data);
+      if (isDefault) {
+        try {
+          sessionStorage.setItem('rot_cached_products', JSON.stringify({ data, timestamp: now }));
+        } catch (e) {}
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -286,7 +309,7 @@ export const ProductsPage: React.FC = () => {
       setLoading(true);
       const res = await api.delete(`/products/${prod.id}`);
       triggerOperationSuccess(res.data.message || `Product "${prod.name}" database aur POS se permanently delete ho chuka hai!`);
-      loadProducts();
+      loadProducts(true);
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Product delete nahi ho saka. Barah-e-karam dobara koshish karein.');
     } finally {
@@ -390,7 +413,7 @@ export const ProductsPage: React.FC = () => {
 
       setShowAddEditModal(false);
       triggerOperationSuccess(isEditing ? `Product "${formData.name}" kamyabi se update ho gaya!` : `Naya Product "${formData.name}" kamyabi se add ho gaya!`);
-      loadProducts();
+      loadProducts(true);
     } catch (err: any) {
       const resp = err.response?.data;
       let msg = resp?.message || resp?.error;
@@ -437,7 +460,7 @@ export const ProductsPage: React.FC = () => {
       setSelectedProductForStock(null);
       setStockAdjustData({ type: 'ADD', quantity: '', notes: '' });
       triggerOperationSuccess(`"${selectedProductForStock.name}" ka stock kamyabi se update ho gaya! (Naya Stock: ${newStock})`);
-      loadProducts();
+      loadProducts(true);
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Stock adjust nahi ho saka. Barah-e-karam dobara koshish karein.');
     }
@@ -659,11 +682,11 @@ export const ProductsPage: React.FC = () => {
               ))}
             </select>
 
-            <button onClick={loadProducts} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+            <button onClick={() => loadProducts()} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
               <Search size={16} /> Filter
             </button>
 
-            <button onClick={() => { setSearch(''); setSelectedCategory(''); setShowLowStockOnly(false); }} className="btn btn-outline" title="Reset Filters">
+            <button onClick={() => { setSearch(''); setSelectedCategory(''); setShowLowStockOnly(false); loadProducts(true); }} className="btn btn-outline" title="Reset Filters & Refresh">
               <RefreshCw size={16} />
             </button>
           </div>

@@ -4,9 +4,14 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { OrderStatus } from '../types/enums';
 
 let cachedDashboard: { payload: any; expiry: number } | null = null;
+let cachedAiPredictions: { payload: any; expiry: number } | null = null;
 
 export const clearDashboardCache = (): void => {
   cachedDashboard = null;
+};
+
+export const clearAiPredictionsCache = (): void => {
+  cachedAiPredictions = null;
 };
 
 export const getDashboardStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -222,8 +227,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       },
     };
 
-    cachedDashboard = { payload: dashboardResponse, expiry: Date.now() + 60000 };
-    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+    cachedDashboard = { payload: dashboardResponse, expiry: Date.now() + 180000 };
+    res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=180');
     res.json(dashboardResponse);
   } catch (error) {
     console.error('getDashboardStats error:', error);
@@ -424,6 +429,12 @@ export const getProfitLossReport = async (req: AuthenticatedRequest, res: Respon
 // ============================================================================
 export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    if (cachedAiPredictions && Date.now() < cachedAiPredictions.expiry) {
+      res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=900');
+      res.json(cachedAiPredictions.payload);
+      return;
+    }
+
     const now = new Date();
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(now.getDate() - 30);
@@ -755,7 +766,7 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
       });
     }
 
-    res.json({
+    const aiResponsePayload = {
       success: true,
       data: {
         timestamp: new Date().toISOString(),
@@ -791,7 +802,11 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
         overdueDebtors,
         actionableTips,
       },
-    });
+    };
+
+    cachedAiPredictions = { payload: aiResponsePayload, expiry: Date.now() + 15 * 60 * 1000 };
+    res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=900');
+    res.json(aiResponsePayload);
   } catch (error: any) {
     console.error('getAiPredictionsAndGrowthTips error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to generate AI predictions' });

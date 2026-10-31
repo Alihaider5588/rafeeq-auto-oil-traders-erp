@@ -30,7 +30,7 @@ const productSchema = z.object({
 
 let cachedAllProducts: any = null;
 let cachedAllProductsTime = 0;
-const PRODUCTS_CACHE_TTL = 60 * 1000;
+const PRODUCTS_CACHE_TTL = 180 * 1000; // 3 minutes in-memory cache to minimize Neon egress
 
 export const clearProductsCache = () => {
   cachedAllProducts = null;
