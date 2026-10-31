@@ -21,7 +21,11 @@ import {
   Percent,
   X,
   Search,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle,
+  Truck,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface ExtendedProduct extends Product {
@@ -97,6 +101,10 @@ export const SalesmanPortal: React.FC = () => {
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
   const [settings, setSettings] = useState<any>(null);
+
+  // Active Van Delivery Route & Loaded Stock State
+  const [activeVan, setActiveVan] = useState<any>(null);
+  const [showVanDetails, setShowVanDetails] = useState<boolean>(true);
 
   // Quick Add Customer Modal
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -175,6 +183,9 @@ export const SalesmanPortal: React.FC = () => {
         }
 
         if (hasValidProds && hasValidCusts) {
+          api.get('/delivery/active-van').then(r => {
+            if (r.data?.activeVan) setActiveVan(r.data.activeVan);
+          }).catch(() => {});
           const cachedSettings = sessionStorage.getItem('rot_cached_settings');
           if (cachedSettings) {
             try { setSettings(JSON.parse(cachedSettings)); return; } catch (e) {}
@@ -183,11 +194,16 @@ export const SalesmanPortal: React.FC = () => {
       }
 
       setSyncing(true);
-      const [cRes, pRes, sRes] = await Promise.all([
+      const [cRes, pRes, sRes, vanRes] = await Promise.all([
         api.get('/partners/customers'),
         api.get('/products?limit=1500'),
         api.get('/settings').catch(() => null),
+        api.get('/delivery/active-van').catch(() => null),
       ]);
+
+      if (vanRes?.data?.activeVan) {
+        setActiveVan(vanRes.data.activeVan);
+      }
 
       if (cRes?.data?.customers) {
         setCustomers(cRes.data.customers);
@@ -338,6 +354,12 @@ export const SalesmanPortal: React.FC = () => {
     } else {
       removeFromCart(index);
     }
+  };
+
+  const setDirectQuantity = (index: number, qty: number) => {
+    const updated = [...cart];
+    updated[index].quantity = qty;
+    setCart(updated);
   };
 
   const updatePrice = (index: number, newPrice: number) => {
@@ -565,6 +587,31 @@ export const SalesmanPortal: React.FC = () => {
       return;
     }
 
+    // Safety check: Prompt confirmation if any product is being sold below purchase cost
+    const belowCostItems = cart.filter((it) => {
+      const conv = Number(it.product.conversionFactor) || 1;
+      const cost = it.unitType === 'PRIMARY' ? (Number(it.product.purchasePrice || 0) * conv) : Number(it.product.purchasePrice || 0);
+      return cost > 0 && it.unitPrice > 0 && it.unitPrice < cost;
+    });
+
+    if (belowCostItems.length > 0) {
+      const itemsList = belowCostItems
+        .map(it => {
+          const conv = Number(it.product.conversionFactor) || 1;
+          const cost = it.unitType === 'PRIMARY' ? (Number(it.product.purchasePrice || 0) * conv) : Number(it.product.purchasePrice || 0);
+          const loss = cost - it.unitPrice;
+          return `• ${it.product.name}: Sale Rate Rs. ${it.unitPrice.toLocaleString()} (Khareed Rs. ${cost.toLocaleString()} → Nuksaan Rs. ${loss.toLocaleString()}/unit)`;
+        })
+        .join('\n');
+
+      const proceed = window.confirm(
+        `⚠️ ATTENTION / KHAREED QEEMAT REMINDER:\n\nMandarja zail items apni KHAREED QEEMAT (Purchase Cost) se kam rate par sale ho rahe hain:\n\n${itemsList}\n\nKya aap waqayi is rate par bill confirm karna chahte hain?`
+      );
+      if (!proceed) {
+        return;
+      }
+    }
+
     setSubmitting(true);
     setErrorMsg('');
     setFieldErrors({});
@@ -660,6 +707,28 @@ export const SalesmanPortal: React.FC = () => {
             return updated;
           });
         }
+
+        // Live update active van stock & financial counters locally
+        setActiveVan((prevVan: any) => {
+          if (!prevVan || !Array.isArray(prevVan.items)) return prevVan;
+          const updatedItems = prevVan.items.map((vi: any) => {
+            const sold = soldItems.find((s) => s.productId === vi.productId);
+            if (sold) {
+              const newSold = (vi.soldQty || 0) + sold.qtyBase;
+              const newRemaining = Math.max(0, (vi.loadedQty || 0) - newSold);
+              return { ...vi, soldQty: newSold, remainingInVan: newRemaining };
+            }
+            return vi;
+          });
+          const newFin = {
+            ...prevVan.financials,
+            totalSales: (prevVan.financials?.totalSales || 0) + totalBill,
+            totalCash: (prevVan.financials?.totalCash || 0) + Number(receivedPayment),
+            totalCredit: (prevVan.financials?.totalCredit || 0) + Math.max(0, totalBill - Number(receivedPayment)),
+            salesCount: (prevVan.financials?.salesCount || 0) + 1,
+          };
+          return { ...prevVan, items: updatedItems, financials: newFin };
+        });
 
         setCart([]);
         setReceivedPayment(0);
@@ -818,6 +887,169 @@ export const SalesmanPortal: React.FC = () => {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* ACTIVE VAN DISPATCH & LOADED INVENTORY BANNER */}
+      {activeVan && (
+        <div style={{
+          backgroundColor: '#0f172a',
+          border: '2px solid #f59e0b',
+          borderRadius: '16px',
+          padding: '16px 18px',
+          marginBottom: '20px',
+          color: '#ffffff',
+          boxShadow: '0 6px 20px -3px rgba(245, 158, 11, 0.25)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ backgroundColor: '#d97706', padding: '8px', borderRadius: '10px', color: '#fff' }}>
+                <Truck size={20} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fef3c7' }}>
+                    🚐 Active Route Van: {activeVan.vehicle?.vehicleNumber}
+                  </span>
+                  <span style={{ backgroundColor: '#1e293b', border: '1px solid #475569', color: '#cbd5e1', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>
+                    Route: {activeVan.routeArea}
+                  </span>
+                  <span style={{ backgroundColor: '#065f46', color: '#34d399', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    LIVE DISPATCH
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+                  Driver: <strong>{activeVan.vehicle?.driverName}</strong> | Loaded Value: <strong>Rs. {Number(activeVan.financials?.totalLoadedValue || 0).toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowVanDetails(!showVanDetails)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#1e293b',
+                color: '#f59e0b',
+                border: '1px solid #d97706',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              {showVanDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {showVanDetails ? 'Van Stock Chhupayein' : `Van Stock Dekhein (${activeVan.items?.length || 0} Items)`}
+            </button>
+          </div>
+
+          {/* Quick Route Financials Row */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '8px',
+            marginTop: '12px',
+            paddingTop: '12px',
+            borderTop: '1px solid #334155'
+          }}>
+            <div style={{ backgroundColor: '#1e293b', padding: '8px 10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Total Route Sales:</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38bdf8' }}>
+                Rs. {Number(activeVan.financials?.totalSales || 0).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', padding: '8px 10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Cash Wasooli:</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#4ade80' }}>
+                Rs. {Number(activeVan.financials?.totalCash || 0).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', padding: '8px 10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Udhar (Credit):</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#f87171' }}>
+                Rs. {Number(activeVan.financials?.totalCredit || 0).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', padding: '8px 10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Invoices Created:</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#fbbf24' }}>
+                {activeVan.financials?.salesCount || 0} Bills
+              </div>
+            </div>
+          </div>
+
+          {/* Expandable Loaded Items List */}
+          {showVanDetails && activeVan.items && activeVan.items.length > 0 && (
+            <div style={{ marginTop: '14px', backgroundColor: '#1e293b', borderRadius: '10px', padding: '10px', overflowX: 'auto' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#f59e0b', marginBottom: '8px' }}>
+                📦 Aaj Subah Ka Loaded Maal & Live Van Stock:
+              </div>
+              <table style={{ width: '100%', fontSize: '0.78rem', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ color: '#94a3b8', borderBottom: '1px solid #334155' }}>
+                    <th style={{ padding: '6px 8px' }}>Item Name</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center' }}>Loaded</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center' }}>Sold</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center' }}>Van Baqi</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeVan.items.map((vi: any) => {
+                    const prodInMain = products.find(p => p.id === vi.productId);
+                    return (
+                      <tr key={vi.id} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '6px 8px', fontWeight: 700, color: '#f8fafc' }}>
+                          {vi.product?.name}
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '6px' }}>({vi.product?.sku})</span>
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#94a3b8' }}>
+                          {vi.loadedQty}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#4ade80', fontWeight: 800 }}>
+                          {vi.soldQty || 0}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                          <span style={{
+                            backgroundColor: vi.remainingInVan > 0 ? '#1e3a8a' : '#450a0a',
+                            color: vi.remainingInVan > 0 ? '#93c5fd' : '#fca5a5',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontWeight: 800
+                          }}>
+                            {vi.remainingInVan} {vi.product?.unit?.symbol || 'Pcs'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                          {prodInMain && (
+                            <button
+                              type="button"
+                              onClick={() => addToCart(prodInMain)}
+                              style={{
+                                backgroundColor: '#d97706',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '3px 8px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              + Bill
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1369,6 +1601,11 @@ export const SalesmanPortal: React.FC = () => {
                 const secondarySymbol = item.product.unit?.symbol || secondaryLabel;
                 const hasMultipleUnits = (!!item.product.primaryUnit || !!item.product.primaryUnitId) && conv > 1;
                 const currentUnitSymbol = item.unitType === 'PRIMARY' ? primarySymbol : secondarySymbol;
+                const basePurchasePrice = Number(item.product.purchasePrice) || 0;
+                const effectivePurchasePrice = item.unitType === 'PRIMARY' ? (basePurchasePrice * conv) : basePurchasePrice;
+                const isBelowCost = effectivePurchasePrice > 0 && item.unitPrice > 0 && item.unitPrice < effectivePurchasePrice;
+                const lossPerUnit = Math.max(0, effectivePurchasePrice - item.unitPrice);
+                const totalLoss = lossPerUnit * item.quantity;
                 return (
                   <div
                     key={`${item.product.id}-${index}`}
@@ -1487,26 +1724,53 @@ export const SalesmanPortal: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Quantity Selector */}
+                      {/* Quantity Selector with Manual Input */}
                       <div>
                         <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '2px', fontWeight: 600 }}>Quantity ({currentUnitSymbol})</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <button
                             type="button"
                             onClick={() => updateQuantity(index, -1)}
                             className="btn btn-outline"
-                            style={{ padding: '4px 8px' }}
+                            style={{ padding: '4px 8px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            title="Minus 1"
                           >
                             <Minus size={12} />
                           </button>
-                          <span style={{ fontWeight: 800, minWidth: '24px', textAlign: 'center', fontSize: '0.9rem' }}>
-                            {item.quantity}
-                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            step="any"
+                            value={item.quantity === 0 ? '' : item.quantity}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                              setDirectQuantity(index, isNaN(val) ? 0 : val);
+                            }}
+                            onBlur={() => {
+                              if (!item.quantity || item.quantity <= 0) {
+                                setDirectQuantity(index, 1);
+                              }
+                            }}
+                            className="form-control"
+                            style={{
+                              width: '56px',
+                              height: '32px',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              fontSize: '0.95rem',
+                              padding: '2px 4px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #cbd5e1',
+                              backgroundColor: '#ffffff'
+                            }}
+                            title="Direct quantity type karein ya + / - use karein"
+                          />
                           <button
                             type="button"
                             onClick={() => updateQuantity(index, 1)}
                             className="btn btn-outline"
-                            style={{ padding: '4px 8px' }}
+                            style={{ padding: '4px 8px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            title="Add 1"
                           >
                             <Plus size={12} />
                           </button>
@@ -1525,7 +1789,11 @@ export const SalesmanPortal: React.FC = () => {
                             fontSize: '0.85rem',
                             padding: '4px 8px',
                             fontWeight: 700,
-                            ...(fieldErrors[`price_${index}`] ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
+                            ...(isBelowCost
+                              ? { border: '2px solid #f43f5e', backgroundColor: '#fff1f2', color: '#be123c' }
+                              : fieldErrors[`price_${index}`]
+                              ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' }
+                              : {})
                           }}
                           value={item.unitPrice === 0 ? '' : item.unitPrice}
                           placeholder="0"
@@ -1550,6 +1818,42 @@ export const SalesmanPortal: React.FC = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Below Purchase Cost Warning Banner */}
+                    {isBelowCost && (
+                      <div style={{
+                        marginTop: '10px',
+                        backgroundColor: '#fff1f2',
+                        border: '1.5px solid #f43f5e',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        color: '#9f1239',
+                        fontSize: '0.78rem',
+                        fontWeight: 700
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <AlertTriangle size={16} color="#e11d48" style={{ minWidth: '16px' }} />
+                          <span>
+                            <strong>⚠️ Khareed Qeemat (Purchase Cost) Reminder:</strong> Yeh item purchase rate (<strong>Rs. {effectivePurchasePrice.toLocaleString()}</strong>) se <strong>Rs. {lossPerUnit.toLocaleString()} kam</strong> rate par sale ho raha hai!
+                          </span>
+                        </div>
+                        <span style={{
+                          backgroundColor: '#e11d48',
+                          color: '#ffffff',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.74rem',
+                          fontWeight: 800
+                        }}>
+                          Loss: -Rs. {totalLoss.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

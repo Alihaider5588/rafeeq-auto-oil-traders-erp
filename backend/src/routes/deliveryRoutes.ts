@@ -10,6 +10,8 @@ import {
   getDeliveries,
   createDelivery,
   deleteDelivery,
+  getActiveVanForSalesman,
+  getDeliveryReconciliation,
 } from '../controllers/deliveryController';
 import { authenticate, authorize } from '../middlewares/auth';
 import { Role } from '../types/enums';
@@ -29,7 +31,9 @@ router.get('/route-schedules', getRouteSchedules);
 router.post('/route-schedules', authorize([Role.ADMIN, Role.OPERATOR]), upsertRouteSchedule);
 router.delete('/route-schedules/:id', authorize([Role.ADMIN]), deleteRouteSchedule);
 
-// Deliveries
+// Deliveries & Van Reconciliation
+router.get('/active-van', getActiveVanForSalesman);
+router.get('/reconciliation/:id', getDeliveryReconciliation);
 router.get('/deliveries', getDeliveries);
 router.post('/deliveries', authorize([Role.ADMIN, Role.OPERATOR]), createDelivery);
 router.delete('/deliveries/:id', authorize([Role.ADMIN]), deleteDelivery);

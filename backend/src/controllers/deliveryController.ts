@@ -336,3 +336,247 @@ export const deleteDelivery = async (req: AuthenticatedRequest, res: Response): 
     res.status(500).json({ success: false, message: error.message || 'Failed to delete delivery' });
   }
 };
+
+// ACTIVE VAN FOR LOGGED IN SALESMAN (Live Route Tracking in POS)
+export const getActiveVanForSalesman = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+    const where: Prisma.DailyDeliveryWhereInput = {
+      date: { gte: startOfDay, lte: endOfDay }
+    };
+    if (req.user?.role === 'SALESMAN') {
+      where.salesmanId = userId;
+    }
+
+    const delivery = await prisma.dailyDelivery.findFirst({
+      where,
+      include: {
+        vehicle: true,
+        salesman: { select: { id: true, fullName: true } },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                salePrice: true,
+                purchasePrice: true,
+                conversionFactor: true,
+                unit: { select: { name: true, symbol: true } },
+                primaryUnit: { select: { name: true, symbol: true } }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!delivery) {
+      res.json({ success: true, activeVan: null });
+      return;
+    }
+
+    // Find sales created by this salesman today since delivery was dispatched
+    const salesToday = await prisma.sale.findMany({
+      where: {
+        salesmanId: delivery.salesmanId || undefined,
+        createdAt: { gte: delivery.createdAt }
+      },
+      include: {
+        items: true
+      }
+    });
+
+    const soldQtyMap: Record<string, number> = {};
+    let totalCash = 0;
+    let totalCredit = 0;
+    let totalSales = 0;
+
+    for (const sale of salesToday) {
+      totalSales += Number(sale.netAmount || 0);
+      totalCash += Number(sale.receivedAmount || 0);
+      totalCredit += Number(sale.remainingBalance || 0);
+
+      for (const item of sale.items) {
+        const qty = Number(item.quantity || 0);
+        soldQtyMap[item.productId] = (soldQtyMap[item.productId] || 0) + qty;
+      }
+    }
+
+    const itemsSummary = delivery.items.map((it) => {
+      const loaded = Number(it.quantity || 0);
+      const sold = soldQtyMap[it.productId] || 0;
+      const remaining = Math.max(0, loaded - sold);
+      return {
+        id: it.id,
+        productId: it.productId,
+        product: it.product,
+        loadedQty: loaded,
+        soldQty: sold,
+        remainingInVan: remaining,
+        unitPrice: Number(it.unitPrice || 0),
+        totalPrice: Number(it.totalPrice || 0)
+      };
+    });
+
+    res.json({
+      success: true,
+      activeVan: {
+        deliveryId: delivery.id,
+        deliveryNumber: delivery.deliveryNumber,
+        routeArea: delivery.routeArea,
+        vehicle: delivery.vehicle,
+        salesman: delivery.salesman,
+        createdAt: delivery.createdAt,
+        items: itemsSummary,
+        financials: {
+          totalLoadedValue: Number(delivery.totalDelivered || 0),
+          totalSales,
+          totalCash,
+          totalCredit,
+          salesCount: salesToday.length
+        }
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch active van' });
+  }
+};
+
+// RECONCILIATION & RETURN HISAB REPORT FOR COMPLETED OR ACTIVE ROUTE
+export const getDeliveryReconciliation = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const delivery = await prisma.dailyDelivery.findUnique({
+      where: { id },
+      include: {
+        vehicle: true,
+        salesman: { select: { id: true, fullName: true, username: true } },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                salePrice: true,
+                purchasePrice: true,
+                conversionFactor: true,
+                unit: { select: { name: true, symbol: true } },
+                primaryUnit: { select: { name: true, symbol: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!delivery) {
+      res.status(404).json({ success: false, message: 'Delivery dispatch not found' });
+      return;
+    }
+
+    const deliveryDate = new Date(delivery.date);
+    const startOfDelivery = new Date(delivery.createdAt);
+    const endOfDelivery = new Date(deliveryDate.setHours(23, 59, 59, 999));
+
+    const sales = await prisma.sale.findMany({
+      where: {
+        salesmanId: delivery.salesmanId || undefined,
+        createdAt: { gte: startOfDelivery, lte: endOfDelivery }
+      },
+      include: {
+        customer: { select: { shopName: true } },
+        items: {
+          include: {
+            product: { select: { name: true, sku: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const productSalesMap: Record<string, { soldQty: number; totalAmount: number }> = {};
+    let totalCashCollected = 0;
+    let totalCreditGiven = 0;
+    let totalSalesAmount = 0;
+
+    for (const s of sales) {
+      totalSalesAmount += Number(s.netAmount || 0);
+      totalCashCollected += Number(s.receivedAmount || 0);
+      totalCreditGiven += Number(s.remainingBalance || 0);
+
+      for (const item of s.items) {
+        const qty = Number(item.quantity || 0);
+        const amt = Number(item.totalPrice || 0);
+        if (!productSalesMap[item.productId]) {
+          productSalesMap[item.productId] = { soldQty: 0, totalAmount: 0 };
+        }
+        productSalesMap[item.productId].soldQty += qty;
+        productSalesMap[item.productId].totalAmount += amt;
+      }
+    }
+
+    const itemsReconciliation = delivery.items.map((it) => {
+      const loaded = Number(it.quantity || 0);
+      const sold = productSalesMap[it.productId]?.soldQty || 0;
+      const returned = Math.max(0, loaded - sold);
+      const unitRate = Number(it.unitPrice || 0);
+      return {
+        productId: it.productId,
+        productName: it.product.name,
+        sku: it.product.sku,
+        unitSymbol: it.product.unit?.symbol || 'Pcs',
+        loadedQty: loaded,
+        loadedRate: unitRate,
+        loadedValue: loaded * unitRate,
+        soldQty: sold,
+        returnedQty: returned,
+        returnedValue: returned * unitRate
+      };
+    });
+
+    const totalLoadedValue = itemsReconciliation.reduce((sum, it) => sum + it.loadedValue, 0);
+    const totalReturnedValue = itemsReconciliation.reduce((sum, it) => sum + it.returnedValue, 0);
+
+    res.json({
+      success: true,
+      reconciliation: {
+        deliveryId: delivery.id,
+        deliveryNumber: delivery.deliveryNumber,
+        date: delivery.date,
+        createdAt: delivery.createdAt,
+        vehicleNumber: delivery.vehicle.vehicleNumber,
+        driverName: delivery.vehicle.driverName,
+        routeArea: delivery.routeArea,
+        salesmanName: delivery.salesman?.fullName || 'General Route Sales',
+        totalInvoicesCreated: sales.length,
+        items: itemsReconciliation,
+        financials: {
+          totalLoadedValue,
+          totalSalesAmount,
+          totalCashCollected,
+          totalCreditGiven,
+          totalReturnedValue
+        },
+        salesInvoices: sales.map(s => ({
+          invoiceNumber: s.invoiceNumber,
+          customerName: s.customer?.shopName || 'Walk-in',
+          netAmount: Number(s.netAmount),
+          receivedCash: Number(s.receivedAmount),
+          creditAmount: Number(s.remainingBalance),
+          time: s.createdAt
+        }))
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to generate reconciliation' });
+  }
+};

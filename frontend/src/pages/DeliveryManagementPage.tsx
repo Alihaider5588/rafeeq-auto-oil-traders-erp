@@ -50,6 +50,24 @@ export const DeliveryManagementPage: React.FC = () => {
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<DailyDelivery | null>(null);
+  const [reconData, setReconData] = useState<any>(null);
+  const [loadingRecon, setLoadingRecon] = useState<boolean>(false);
+
+  const handleOpenReconciliation = async (del: DailyDelivery) => {
+    setSelectedReport(del);
+    setReconData(null);
+    setLoadingRecon(true);
+    try {
+      const res = await api.get(`/delivery/reconciliation/${del.id}`);
+      if (res.data?.success && res.data.reconciliation) {
+        setReconData(res.data.reconciliation);
+      }
+    } catch (e) {
+      console.error('Failed to load dynamic reconciliation', e);
+    } finally {
+      setLoadingRecon(false);
+    }
+  };
 
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<RouteSchedule | null>(null);
@@ -690,11 +708,12 @@ export const DeliveryManagementPage: React.FC = () => {
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'inline-flex', gap: '6px' }}>
                             <button
-                              onClick={() => setSelectedReport(del)}
-                              className="btn btn-outline btn-sm"
-                              title="Print Evening Settlement Sheet"
+                              onClick={() => handleOpenReconciliation(del)}
+                              className="btn btn-primary btn-sm"
+                              style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#d97706', borderColor: '#b45309' }}
+                              title="Raat Ka Hisab / Evening Return & Reconciliation"
                             >
-                              <FileText size={14} /> Evening Sheet
+                              <Clock size={13} /> 🌙 Raat Ka Hisab
                             </button>
                             <button
                               onClick={() => handleDeleteDelivery(del.id, del.deliveryNumber)}
@@ -1552,19 +1571,31 @@ export const DeliveryManagementPage: React.FC = () => {
             backgroundColor: '#ffffff',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '680px',
-            maxHeight: '90vh',
+            maxWidth: '780px',
+            maxHeight: '92vh',
             overflowY: 'auto',
             padding: '28px'
           }}>
-            <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '14px' }}>
-              <button onClick={() => window.print()} className="btn btn-primary btn-sm" style={{ fontWeight: 800 }}>
-                <Printer size={16} /> Print Evening Sheet
-              </button>
-              <button onClick={() => setSelectedReport(null)} className="btn btn-outline btn-sm">
-                Close
-              </button>
+            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={18} color="#d97706" />
+                <span>🌙 Van Daily Closing & Evening Reconciliation (شام کا حساب)</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => window.print()} className="btn btn-primary btn-sm" style={{ fontWeight: 800, backgroundColor: '#d97706', borderColor: '#b45309' }}>
+                  <Printer size={16} /> Print Hisab Sheet
+                </button>
+                <button onClick={() => { setSelectedReport(null); setReconData(null); }} className="btn btn-outline btn-sm">
+                  Close
+                </button>
+              </div>
             </div>
+
+            {loadingRecon && (
+              <div style={{ textAlign: 'center', padding: '30px', color: '#64748b', fontWeight: 700 }}>
+                Loading dynamic sales & van reconciliation hisab...
+              </div>
+            )}
 
             <div className="printable-area" style={{ border: '2px solid #0f172a', padding: '24px', borderRadius: '8px' }}>
               <div style={{ textAlign: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '14px', marginBottom: '16px' }}>
@@ -1578,8 +1609,8 @@ export const DeliveryManagementPage: React.FC = () => {
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                   54-Stop Near MCB Bank, Dipalpur Road, Okara | 0306-9258573 / 0327-7497457
                 </div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#d97706', marginTop: '8px' }}>
-                  Daily Van Delivery & Evening Reconciliation Sheet
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#d97706', marginTop: '8px' }}>
+                  Van Delivery Closing & Return Reconciliation Sheet (شام کی واپسی رپورٹ)
                 </h3>
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                   Date: {new Date(selectedReport.date).toLocaleDateString()} | Run #{selectedReport.deliveryNumber}
@@ -1591,68 +1622,149 @@ export const DeliveryManagementPage: React.FC = () => {
                 <div><b>Route / Sector:</b> {selectedReport.routeArea}</div>
                 <div><b>Driver:</b> {selectedReport.vehicle?.driverName} ({selectedReport.vehicle?.driverPhone})</div>
                 <div><b>Supply Man:</b> {selectedReport.vehicle?.supplyManName}</div>
-                <div><b>Field Incharge:</b> {selectedReport.salesman?.fullName || 'N/A'}</div>
-                <div><b>Total Customers:</b> {selectedReport.totalCustomers}</div>
+                <div><b>Field Salesman:</b> {reconData?.salesmanName || selectedReport.salesman?.fullName || 'General Route Sales'}</div>
+                <div><b>Route Invoices Created:</b> {reconData ? `${reconData.totalInvoicesCreated} Bills` : `${selectedReport.totalCustomers} Customers`}</div>
               </div>
 
+              {/* Dynamic Loaded vs Sold vs Wapsi Table */}
               <div style={{ marginBottom: '18px' }}>
-                <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '8px', color: '#0f172a' }}>
-                  Items Carried On Van:
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '8px', color: '#0f172a', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>📦 Maal Hisab (Loaded vs Sold vs Wapsi):</span>
+                  {reconData && (
+                    <span style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700 }}>
+                      ✓ Auto-Calculated from Live Invoices
+                    </span>
+                  )}
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
-                    <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                    <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
                       <th style={{ textAlign: 'left', padding: '6px 8px' }}>Product</th>
-                      <th style={{ textAlign: 'center', padding: '6px 8px' }}>Type</th>
-                      <th style={{ textAlign: 'center', padding: '6px 8px' }}>Qty</th>
+                      <th style={{ textAlign: 'center', padding: '6px 8px' }}>Subah Loaded</th>
+                      <th style={{ textAlign: 'center', padding: '6px 8px', color: '#16a34a' }}>Bika (Sold)</th>
+                      <th style={{ textAlign: 'center', padding: '6px 8px', color: '#b45309' }}>Wapsi (Baqi)</th>
                       <th style={{ textAlign: 'right', padding: '6px 8px' }}>Rate</th>
-                      <th style={{ textAlign: 'right', padding: '6px 8px' }}>Total</th>
+                      <th style={{ textAlign: 'right', padding: '6px 8px' }}>Wapsi Value</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedReport.items || []).map((it, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '6px 8px', fontWeight: 600 }}>{it.product?.name || 'Item'}</td>
-                        <td style={{ textAlign: 'center', padding: '6px 8px' }}>
-                          {it.isAdditional ? (
-                            <span style={{ color: '#d97706', fontWeight: 800 }}>★ Extra Load</span>
-                          ) : (
-                            <span style={{ color: '#64748b' }}>Booked</span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 700 }}>{Number(it.quantity)}</td>
-                        <td style={{ textAlign: 'right', padding: '6px 8px' }}>Rs. {Number(it.unitPrice).toLocaleString()}</td>
-                        <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700 }}>Rs. {Number(it.totalPrice).toLocaleString()}</td>
-                      </tr>
-                    ))}
+                    {reconData?.items ? (
+                      reconData.items.map((it: any, i: number) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '6px 8px', fontWeight: 600 }}>
+                            {it.productName}
+                            <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: '6px' }}>({it.sku})</span>
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 700, color: '#334155' }}>
+                            {it.loadedQty} {it.unitSymbol}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 800, color: '#16a34a' }}>
+                            {it.soldQty}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '6px 8px' }}>
+                            <span style={{
+                              backgroundColor: it.returnedQty > 0 ? '#fef3c7' : '#f1f5f9',
+                              color: it.returnedQty > 0 ? '#b45309' : '#64748b',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontWeight: 800
+                            }}>
+                              {it.returnedQty} {it.unitSymbol}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', padding: '6px 8px' }}>Rs. {Number(it.loadedRate).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, color: '#b45309' }}>
+                            Rs. {Number(it.returnedValue).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      (selectedReport.items || []).map((it, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '6px 8px', fontWeight: 600 }}>{it.product?.name || 'Item'}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 700 }}>{Number(it.quantity)}</td>
+                          <td style={{ textAlign: 'center', padding: '6px 8px' }}>-</td>
+                          <td style={{ textAlign: 'center', padding: '6px 8px' }}>{Number(it.quantity)}</td>
+                          <td style={{ textAlign: 'right', padding: '6px 8px' }}>Rs. {Number(it.unitPrice).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', padding: '6px 8px' }}>Rs. {Number(it.totalPrice).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
 
-              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                  <span>Total Goods Dispatched:</span>
-                  <b>Rs. {Number(selectedReport.totalDelivered).toLocaleString()}</b>
+              {/* Financial Breakdown */}
+              <div style={{ backgroundColor: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.88rem', marginBottom: '10px', color: '#0f172a' }}>
+                  💵 Financial Summary (Mali Hisab Kitab):
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#16a34a' }}>
-                  <span>Payment Received (Cash):</span>
-                  <b>Rs. {Number(selectedReport.paymentReceived).toLocaleString()}</b>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#ea580c' }}>
-                  <span>Credit / Pending Amount:</span>
-                  <b>Rs. {Number(selectedReport.creditAmount).toLocaleString()}</b>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#dc2626' }}>
-                  <span>Returned Goods (Wapsi):</span>
-                  <b>Rs. {Number(selectedReport.returnedGoods).toLocaleString()}</b>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid #94a3b8', marginTop: '6px', fontSize: '1.05rem', fontWeight: 800 }}>
-                  <span>Net Valid Sales:</span>
-                  <span style={{ color: '#d97706' }}>Rs. {Number(selectedReport.netSales).toLocaleString()}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Subah Ka Total Loaded Maal:</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                      Rs. {Number(reconData?.financials?.totalLoadedValue ?? selectedReport.totalDelivered).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Din Bhar Ki Total Sales:</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0284c7' }}>
+                      Rs. {Number(reconData?.financials?.totalSalesAmount ?? selectedReport.netSales).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>💵 Cash Wasooli (Jama Shuda):</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#16a34a' }}>
+                      Rs. {Number(reconData?.financials?.totalCashCollected ?? selectedReport.paymentReceived).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#9a3412', fontWeight: 700 }}>📝 Udhar (Baqaya Credit):</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#ea580c' }}>
+                      Rs. {Number(reconData?.financials?.totalCreditGiven ?? selectedReport.creditAmount).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fecdd3' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#9f1239', fontWeight: 700 }}>📦 Wapsi Maal Ki Value:</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#e11d48' }}>
+                      Rs. {Number(reconData?.financials?.totalReturnedValue ?? selectedReport.returnedGoods).toLocaleString()}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginTop: '36px', textAlign: 'center', fontSize: '0.8rem' }}>
+              {/* Invoices List on this Route */}
+              {reconData?.salesInvoices && reconData.salesInvoices.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.85rem', marginBottom: '6px', color: '#0f172a' }}>
+                    🧾 Route Invoices Cut Today ({reconData.salesInvoices.length} Bills):
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                        <th style={{ textAlign: 'left', padding: '4px 6px' }}>Inv #</th>
+                        <th style={{ textAlign: 'left', padding: '4px 6px' }}>Customer / Shop</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Total Bill</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px', color: '#16a34a' }}>Cash Paid</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px', color: '#ea580c' }}>Udhar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reconData.salesInvoices.map((inv: any, idx: number) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '4px 6px', fontWeight: 700 }}>{inv.invoiceNumber}</td>
+                          <td style={{ padding: '4px 6px' }}>{inv.customerName}</td>
+                          <td style={{ textAlign: 'right', padding: '4px 6px', fontWeight: 700 }}>Rs. {inv.netAmount.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', padding: '4px 6px', color: '#16a34a', fontWeight: 700 }}>Rs. {inv.receivedCash.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', padding: '4px 6px', color: '#ea580c', fontWeight: 700 }}>Rs. {inv.creditAmount.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginTop: '30px', textAlign: 'center', fontSize: '0.8rem' }}>
                 <div>
                   <div style={{ borderTop: '1px dashed #64748b', paddingTop: '6px' }}>Driver / Supply Man Signature</div>
                 </div>
