@@ -370,13 +370,41 @@ export const SalesmanPortal: React.FC = () => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
+  const handleAddVanItemToBill = (vi: any) => {
+    const targetProduct: ExtendedProduct = products.find(p => p.id === vi.productId) || {
+      id: vi.productId,
+      name: vi.product?.name || 'Product',
+      sku: vi.product?.sku || '',
+      salePrice: Number(vi.product?.salePrice || vi.unitPrice || 0),
+      purchasePrice: Number(vi.product?.purchasePrice || 0),
+      conversionFactor: Number(vi.product?.conversionFactor) || 1,
+      unit: vi.product?.unit || { name: 'Pcs', symbol: 'Pcs' },
+      primaryUnit: vi.product?.primaryUnit,
+      currentStock: vi.remainingInVan,
+    } as ExtendedProduct;
+
+    addToCart(targetProduct);
+
+    setSuccessMsg(`✓ "${targetProduct.name}" bill basket mein shamil kar diya gaya hai!`);
+    setTimeout(() => setSuccessMsg(''), 4000);
+
+    setTimeout(() => {
+      const cartEl = document.getElementById('pos-order-cart-section');
+      if (cartEl) {
+        cartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
+  };
+
   const previousDebt = Number(selectedCustomer?.currentReceivable || 0);
   const customerCreditLimit = Number(selectedCustomer?.creditLimit || 0);
-  const isWalkIn =
-    !selectedCustomer ||
-    selectedCustomer?.phone === '00000000000' ||
-    selectedCustomer?.shopName?.toLowerCase().includes('walk-in') ||
-    selectedCustomer?.id === 'walk-in';
+  const isWalkIn = Boolean(
+    selectedCustomer && (
+      selectedCustomer?.phone === '00000000000' ||
+      selectedCustomer?.shopName?.toLowerCase().includes('walk-in') ||
+      selectedCustomer?.id === 'walk-in'
+    )
+  );
 
   const totalBill = cart.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
@@ -577,11 +605,14 @@ export const SalesmanPortal: React.FC = () => {
       setFieldErrors(errors);
       setErrorMsg(
         isWalkInCreditAttempt
-          ? `⛔ Walk-in Customer ko udhar / credit par saman dena sakht mana hai! Agar is customer ne udhar lena hai to pehle isay 'Customers' me add karein.`
+          ? `⛔ Walk-in Customer ko udhar / credit par saman dena sakht mana hai! Barahe karam poora cash wasool karein ya customer account banayein.`
           : isCreditExceeded
           ? `⛔ Credit Limit Exceeded! Customer ka udhar (Rs. ${netRemainingDebt.toLocaleString()}) credit limit se zyada hai.`
           : 'POS me entry me mistake ha! Neeche red box check karein.'
       );
+      if (errors.customer) {
+        document.getElementById('pos-customer-selection-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -922,26 +953,52 @@ export const SalesmanPortal: React.FC = () => {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowVanDetails(!showVanDetails)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                backgroundColor: '#1e293b',
-                color: '#f59e0b',
-                border: '1px solid #d97706',
-                borderRadius: '8px',
-                padding: '6px 12px',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              {showVanDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {showVanDetails ? 'Van Stock Chhupayein' : `Van Stock Dekhein (${activeVan.items?.length || 0} Items)`}
-            </button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {cart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    document.getElementById('pos-order-cart-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <ShoppingBag size={14} /> Bill Cart ({cart.reduce((s, i) => s + i.quantity, 0)} Items)
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowVanDetails(!showVanDetails)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#1e293b',
+                  color: '#f59e0b',
+                  border: '1px solid #d97706',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                {showVanDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {showVanDetails ? 'Van Stock Chhupayein' : `Van Stock Dekhein (${activeVan.items?.length || 0} Items)`}
+              </button>
+            </div>
           </div>
 
           {/* Quick Route Financials Row */}
@@ -1022,24 +1079,26 @@ export const SalesmanPortal: React.FC = () => {
                           </span>
                         </td>
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                          {prodInMain && (
-                            <button
-                              type="button"
-                              onClick={() => addToCart(prodInMain)}
-                              style={{
-                                backgroundColor: '#d97706',
-                                color: '#ffffff',
-                                border: 'none',
-                                borderRadius: '4px',
-                                padding: '3px 8px',
-                                fontSize: '0.72rem',
-                                fontWeight: 800,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              + Bill
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleAddVanItemToBill(vi)}
+                            style={{
+                              backgroundColor: '#f59e0b',
+                              color: '#0f172a',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                            }}
+                          >
+                            <Plus size={13} /> + Bill
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1102,7 +1161,7 @@ export const SalesmanPortal: React.FC = () => {
       )}
 
       {/* STEP 1: SELECT CUSTOMER */}
-      <div className="card" style={{ marginBottom: '20px' }}>
+      <div id="pos-customer-selection-section" className="card" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
           <h3 className="card-title" style={{ margin: 0 }}>
             1. Select Customer / Shop (For Negotiated Rate History)
@@ -1111,6 +1170,7 @@ export const SalesmanPortal: React.FC = () => {
             <button
               type="button"
               onClick={() => {
+                if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
                 const walkIn = customers.find(c => c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in'));
                 if (walkIn) {
                   setSelectedCustomer(walkIn);
@@ -1127,6 +1187,9 @@ export const SalesmanPortal: React.FC = () => {
                     openingBalance: 0,
                     createdAt: new Date().toISOString(),
                   } as any);
+                }
+                if (totalBill > 0 && receivedPayment === 0) {
+                  setReceivedPayment(totalBill);
                 }
               }}
               style={{
@@ -1473,7 +1536,7 @@ export const SalesmanPortal: React.FC = () => {
       </div>
 
       {/* STEP 3: ORDER ITEMS & PAYMENT */}
-      <div className="card" style={{ marginBottom: '24px' }}>
+      <div id="pos-order-cart-section" className="card" style={{ marginBottom: '24px' }}>
         <h3 className="card-title" style={{ marginBottom: '14px' }}>
           3. Order Basket & Negotiated Unit Rates
         </h3>
@@ -2199,9 +2262,48 @@ export const SalesmanPortal: React.FC = () => {
               />
             </div>
 
+            {isWalkInCreditAttempt && (
+              <div style={{
+                backgroundColor: '#fef2f2',
+                border: '1.5px solid #f87171',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                marginBottom: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <div style={{ fontSize: '0.84rem', color: '#991b1b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={18} />
+                  <span>⛔ Walk-in Customer ko udhar mana hai. Poora cash wasool karein.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReceivedPayment(totalBill);
+                    if (fieldErrors.receivedPayment) setFieldErrors(prev => ({ ...prev, receivedPayment: '' }));
+                  }}
+                  style={{
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✓ Fauri Poora Cash (Rs. {totalBill.toLocaleString()}) Darj Karein
+                </button>
+              </div>
+            )}
+
             <button
               type="button"
-              disabled={submitting || isCreditExceeded || isWalkInCreditAttempt}
+              disabled={submitting}
               onClick={handleSubmitOrder}
               className="btn btn-primary btn-lg"
               style={{
@@ -2210,18 +2312,19 @@ export const SalesmanPortal: React.FC = () => {
                 justifyContent: 'center',
                 alignItems: 'center',
                 gap: '10px',
-                ...(isCreditExceeded || isWalkInCreditAttempt ? { backgroundColor: '#ef4444', borderColor: '#ef4444', opacity: 0.85, cursor: 'not-allowed' } : {})
+                cursor: submitting ? 'wait' : 'pointer',
+                ...(isCreditExceeded || isWalkInCreditAttempt ? { backgroundColor: '#dc2626', borderColor: '#dc2626' } : {})
               }}
             >
               {submitting ? (
                 'Submitting Order to Server...'
               ) : isWalkInCreditAttempt ? (
                 <>
-                  <AlertCircle size={20} /> ⛔ Walk-in Udhar Mana Hai — Customer Add Karein Ya Cash Lein
+                  <AlertCircle size={20} /> ⚠️ Walk-in Poora Cash Wasool Karein (Click to Submit)
                 </>
               ) : isCreditExceeded ? (
                 <>
-                  <AlertCircle size={20} /> ⛔ Credit Limit Exceeded — Invoice Disabled (Limit Barhayein Ya Cash Lein)
+                  <AlertCircle size={20} /> ⚠️ Credit Limit Barhayein Ya Cash Lein (Click to View)
                 </>
               ) : (
                 <>
