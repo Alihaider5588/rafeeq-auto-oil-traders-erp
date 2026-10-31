@@ -417,6 +417,13 @@ export const handleImageUpload = (req: AuthenticatedRequest, res: Response): voi
 
   // On Vercel serverless, store as self-contained permanent base64 data URI (persists in DB forever)
   if (req.file.buffer) {
+    if (req.file.buffer.length > 100 * 1024) {
+      res.status(400).json({
+        success: false,
+        message: 'Image size too large for database storage. Must be under 100 KB.',
+      });
+      return;
+    }
     const mime = req.file.mimetype || 'image/png';
     const base64Data = req.file.buffer.toString('base64');
     imageUrl = `data:${mime};base64,${base64Data}`;

@@ -94,23 +94,54 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
     loadData();
   }, [type]);
 
-  const loadData = async () => {
+  const loadData = async (force: boolean = false) => {
     try {
       setLoading(true);
+      const now = Date.now();
+      const CACHE_TTL = 15 * 60 * 1000;
+
       if (type === 'CUSTOMERS') {
-        const [cRes, uRes] = await Promise.all([
-          api.get('/partners/customers'),
-          api.get('/auth/users'),
-        ]);
-        setData(cRes.data.customers || []);
-        setSalesmen((uRes.data.users || []).filter((u: any) => u.role === 'SALESMAN'));
+        let cachedCustomers = false;
+        if (!force) {
+          const cachedCustStr = sessionStorage.getItem('rot_cached_customers');
+          if (cachedCustStr) {
+            try {
+              const parsed = JSON.parse(cachedCustStr);
+              if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+                setData(parsed.data);
+                cachedCustomers = true;
+              }
+            } catch (e) {}
+          }
+        }
+
+        const promises: Promise<any>[] = [];
+        if (!cachedCustomers || force) {
+          promises.push(api.get('/partners/customers'));
+        } else {
+          promises.push(Promise.resolve(null));
+        }
+        promises.push(api.get('/auth/users').catch(() => null));
+
+        const [cRes, uRes] = await Promise.all(promises);
+        if (cRes?.data?.customers) {
+          setData(cRes.data.customers);
+          try {
+            sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: cRes.data.customers, timestamp: now }));
+          } catch (e) {}
+        }
+        if (uRes?.data?.users) {
+          setSalesmen((uRes.data.users || []).filter((u: any) => u.role === 'SALESMAN'));
+        }
       } else {
         const [sRes, uRes] = await Promise.all([
           api.get('/partners/suppliers'),
-          api.get('/auth/users'),
+          api.get('/auth/users').catch(() => null),
         ]);
         setData(sRes.data.suppliers || []);
-        setSalesmen((uRes.data.users || []).filter((u: any) => u.role === 'SALESMAN'));
+        if (uRes?.data?.users) {
+          setSalesmen((uRes.data.users || []).filter((u: any) => u.role === 'SALESMAN'));
+        }
       }
     } catch (e: any) {
       console.error(e);
@@ -130,7 +161,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
       });
       setShowModal(false);
       triggerOperationSuccess(`Customer "${formCustomer.shopName}" kamyabi se shamil ho gaya!`);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Customer shamil nahi ho saka. Barah-e-karam details check karein.');
     }
@@ -145,7 +176,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
       });
       setShowModal(false);
       triggerOperationSuccess(`Supplier "${formSupplier.companyName}" kamyabi se shamil ho gaya!`);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Supplier shamil nahi ho saka. Barah-e-karam details check karein.');
     }
@@ -238,7 +269,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
       });
       setShowEditModal(false);
       triggerOperationSuccess(`Customer "${editCustomerForm.shopName}" ki tafseelat kamyabi se update ho gayi hain!`);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Customer update nahi ho saka. Details check karein.');
     } finally {
@@ -260,7 +291,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
       });
       setShowEditModal(false);
       triggerOperationSuccess(`Supplier "${editSupplierForm.companyName}" ki tafseelat kamyabi se update ho gayi hain!`);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Supplier update nahi ho saka. Details check karein.');
     } finally {

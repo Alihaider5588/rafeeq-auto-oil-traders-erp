@@ -92,18 +92,45 @@ export const CataloguePage: React.FC = () => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (force: boolean = false) => {
     setLoading(true);
     try {
-      const [prodRes, catRes, setRes] = await Promise.all([
-        api.get('/products?limit=1500'),
-        api.get('/products/meta/categories'),
-        api.get('/settings'),
-      ]);
+      const now = Date.now();
+      const CACHE_TTL = 15 * 60 * 1000;
+      let hasCachedProducts = false;
 
-      if (prodRes.data?.success) setProducts(prodRes.data.data);
-      if (catRes.data?.success) setCategories(catRes.data.categories);
-      if (setRes.data?.settings) {
+      if (!force) {
+        const cachedProdStr = sessionStorage.getItem('rot_cached_products');
+        if (cachedProdStr) {
+          try {
+            const parsed = JSON.parse(cachedProdStr);
+            if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+              setProducts(parsed.data);
+              hasCachedProducts = true;
+            }
+          } catch (e) {}
+        }
+      }
+
+      const promises: Promise<any>[] = [];
+      if (!hasCachedProducts || force) {
+        promises.push(api.get('/products?limit=1500'));
+      } else {
+        promises.push(Promise.resolve(null));
+      }
+      promises.push(api.get('/products/meta/categories').catch(() => null));
+      promises.push(api.get('/settings').catch(() => null));
+
+      const [prodRes, catRes, setRes] = await Promise.all(promises);
+
+      if (prodRes?.data?.success && prodRes.data.data) {
+        setProducts(prodRes.data.data);
+        try {
+          sessionStorage.setItem('rot_cached_products', JSON.stringify({ data: prodRes.data.data, timestamp: now }));
+        } catch (e) {}
+      }
+      if (catRes?.data?.success && catRes.data.categories) setCategories(catRes.data.categories);
+      if (setRes?.data?.settings) {
         setCompanyName(setRes.data.settings.companyName || companyName);
         setContactPhone(setRes.data.settings.phone || contactPhone);
         setDepotAddress(setRes.data.settings.address || depotAddress);

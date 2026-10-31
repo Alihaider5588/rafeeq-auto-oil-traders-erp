@@ -20,7 +20,8 @@ import {
   Printer,
   Percent,
   X,
-  Search
+  Search,
+  RefreshCw
 } from 'lucide-react';
 
 interface ExtendedProduct extends Product {
@@ -136,24 +137,82 @@ export const SalesmanPortal: React.FC = () => {
     );
   };
 
+  const [syncing, setSyncing] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (force: boolean = false) => {
     try {
+      const now = Date.now();
+      const CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
+
+      if (!force) {
+        const cachedProdStr = sessionStorage.getItem('rot_cached_products');
+        const cachedCustStr = sessionStorage.getItem('rot_cached_customers');
+        let hasValidProds = false;
+        let hasValidCusts = false;
+
+        if (cachedProdStr) {
+          try {
+            const parsed = JSON.parse(cachedProdStr);
+            if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+              setProducts(parsed.data);
+              hasValidProds = true;
+            }
+          } catch (e) {}
+        }
+
+        if (cachedCustStr) {
+          try {
+            const parsed = JSON.parse(cachedCustStr);
+            if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+              setCustomers(parsed.data);
+              hasValidCusts = true;
+            }
+          } catch (e) {}
+        }
+
+        if (hasValidProds && hasValidCusts) {
+          const cachedSettings = sessionStorage.getItem('rot_cached_settings');
+          if (cachedSettings) {
+            try { setSettings(JSON.parse(cachedSettings)); return; } catch (e) {}
+          }
+        }
+      }
+
+      setSyncing(true);
       const [cRes, pRes, sRes] = await Promise.all([
         api.get('/partners/customers'),
         api.get('/products?limit=1500'),
         api.get('/settings').catch(() => null),
       ]);
-      setCustomers(cRes.data.customers || []);
-      setProducts(pRes.data.data || []);
+
+      if (cRes?.data?.customers) {
+        setCustomers(cRes.data.customers);
+        try {
+          sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: cRes.data.customers, timestamp: now }));
+        } catch (e) {}
+      }
+
+      if (pRes?.data?.data) {
+        setProducts(pRes.data.data);
+        try {
+          sessionStorage.setItem('rot_cached_products', JSON.stringify({ data: pRes.data.data, timestamp: now }));
+        } catch (e) {}
+      }
+
       if (sRes?.data?.settings) {
         setSettings(sRes.data.settings);
+        try {
+          sessionStorage.setItem('rot_cached_settings', JSON.stringify(sRes.data.settings));
+        } catch (e) {}
       }
     } catch (e) {
       console.error('Error loading salesman data', e);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -321,7 +380,13 @@ export const SalesmanPortal: React.FC = () => {
       });
       if (res.data?.success && res.data.customer) {
         const created = res.data.customer;
-        setCustomers((prev) => [created, ...prev]);
+        setCustomers((prev) => {
+          const updated = [created, ...prev];
+          try {
+            sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: updated, timestamp: Date.now() }));
+          } catch (e) {}
+          return updated;
+        });
         setSelectedCustomer(created);
         setShowAddCustomerModal(false);
         setQuickCustForm({
@@ -371,7 +436,13 @@ export const SalesmanPortal: React.FC = () => {
       if (res.data?.success) {
         const updatedCust = { ...selectedCustomer, creditLimit: num };
         setSelectedCustomer(updatedCust);
-        setCustomers((prev) => prev.map((c) => (c.id === selectedCustomer.id ? { ...c, creditLimit: num } : c)));
+        setCustomers((prev) => {
+          const updated = prev.map((c) => (c.id === selectedCustomer.id ? { ...c, creditLimit: num } : c));
+          try {
+            sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: updated, timestamp: Date.now() }));
+          } catch (e) {}
+          return updated;
+        });
         setCreditLimitSuccessMsg(`✓ Credit limit barha kar Rs. ${num.toLocaleString()} kar di gayi hai! Ab aap foran supply / bill bana saktay hain.`);
         setShowCreditLimitModal(false);
       }
@@ -554,13 +625,48 @@ export const SalesmanPortal: React.FC = () => {
           `Invoice ${createdSaleData?.invoiceNumber || ''} created successfully! Record Sales & POS me save ho chuka hai.`
         );
         setErrorMsg('');
+        // Optimistic local stock & debt update (completely eliminates heavy Neon re-fetch after sale)
+        const soldItems = cart.map((it) => ({
+          productId: it.product.id,
+          qtyBase: it.unitType === 'PRIMARY' ? it.quantity * (Number(it.product.conversionFactor) || 1) : it.quantity,
+        }));
+
+        setProducts((prevProducts) => {
+          const updated = prevProducts.map((p) => {
+            const sold = soldItems.find((s) => s.productId === p.id);
+            if (sold) {
+              const current = Number(p.currentStock || 0);
+              return { ...p, currentStock: Math.max(0, current - sold.qtyBase) };
+            }
+            return p;
+          });
+          try {
+            sessionStorage.setItem('rot_cached_products', JSON.stringify({ data: updated, timestamp: Date.now() }));
+          } catch (e) {}
+          return updated;
+        });
+
+        if (targetCustomerId && targetCustomerId !== 'walk-in') {
+          setCustomers((prevCusts) => {
+            const updated = prevCusts.map((c) => {
+              if (c.id === targetCustomerId) {
+                return { ...c, currentBalance: netRemainingDebt };
+              }
+              return c;
+            });
+            try {
+              sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: updated, timestamp: Date.now() }));
+            } catch (e) {}
+            return updated;
+          });
+        }
+
         setCart([]);
         setReceivedPayment(0);
         setNotes('');
         setSelectedCustomer(null);
         setAppliedDiscountSummary('');
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        loadData();
       }
     } catch (err: any) {
       setErrorMsg(
@@ -625,7 +731,32 @@ export const SalesmanPortal: React.FC = () => {
           </div>
         </div>
 
-        <PosLiveClock />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={syncing}
+            title="Refresh latest products & customer balances from database"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#334155',
+              color: '#f8fafc',
+              border: '1px solid #475569',
+              borderRadius: '10px',
+              padding: '8px 12px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: syncing ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+            {syncing ? 'Syncing...' : 'Sync Stock'}
+          </button>
+          <PosLiveClock />
+        </div>
       </div>
 
       {errorMsg && (

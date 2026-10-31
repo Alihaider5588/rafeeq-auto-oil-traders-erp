@@ -215,15 +215,54 @@ export const ProductsPage: React.FC = () => {
     setShowAddEditModal(true);
   };
 
+  const compressImageInBrowser = (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const maxDim = 320;
+          let width = img.width;
+          let height = img.height;
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else resolve(file);
+            },
+            'image/webp',
+            0.75
+          );
+        };
+        img.onerror = () => resolve(file);
+      };
+      reader.onerror = () => resolve(file);
+    });
+  };
+
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const data = new FormData();
-    data.append('image', file);
-
     try {
       setImageUploading(true);
+      const compressedBlob = await compressImageInBrowser(file);
+      const data = new FormData();
+      data.append('image', compressedBlob, file.name.replace(/\.[^.]+$/, '.webp'));
+
       const res = await api.post('/products/upload-image', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
