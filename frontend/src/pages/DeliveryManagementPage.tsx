@@ -35,6 +35,8 @@ import { useAuth } from '../context/AuthContext';
 export const DeliveryManagementPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const canEditDelivery = isAdmin || Boolean(user?.permissions?.includes('action:edit_delivery'));
+  const canDeleteDelivery = isAdmin || Boolean(user?.permissions?.includes('action:delete_delivery'));
   const [activeTab, setActiveTab] = useState<'DISPATCHES' | 'WEEKLY_SCHEDULES' | 'VEHICLES'>('DISPATCHES');
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
@@ -734,14 +736,16 @@ export const DeliveryManagementPage: React.FC = () => {
                             >
                               <Clock size={13} /> 🌙 Raat Ka Hisab
                             </button>
-                            <button
-                              onClick={() => handleDeleteDelivery(del.id, del.deliveryNumber)}
-                              className="btn btn-outline btn-sm"
-                              style={{ color: '#ef4444', borderColor: '#fca5a5' }}
-                              title="Delete Run"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {canDeleteDelivery && (
+                              <button
+                                onClick={() => handleDeleteDelivery(del.id, del.deliveryNumber)}
+                                className="btn btn-outline btn-sm"
+                                style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                                title="Delete Run"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -872,14 +876,16 @@ export const DeliveryManagementPage: React.FC = () => {
                                 >
                                   <Edit2 size={13} />
                                 </button>
-                                <button
-                                  onClick={() => handleDeleteSchedule(daySched.id)}
-                                  className="btn btn-outline btn-sm"
-                                  style={{ padding: '4px 8px', color: '#ef4444', borderColor: '#fca5a5' }}
-                                  title="Remove Day Route"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                                {canDeleteDelivery && (
+                                  <button
+                                    onClick={() => handleDeleteSchedule(daySched.id)}
+                                    className="btn btn-outline btn-sm"
+                                    style={{ padding: '4px 8px', color: '#ef4444', borderColor: '#fca5a5' }}
+                                    title="Remove Day Route"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
                               </div>
                             ) : (
                               <button
@@ -1013,19 +1019,21 @@ export const DeliveryManagementPage: React.FC = () => {
                         <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{v.notes || '—'}</td>
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'inline-flex', gap: '6px' }}>
-                            <button
-                              onClick={() => openEditVehicleModal(v)}
-                              className="btn btn-outline btn-sm"
-                              title="Edit Vehicle & Driver"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            {isAdmin && (
+                            {canEditDelivery && (
+                              <button
+                                onClick={() => openEditVehicleModal(v)}
+                                className="btn btn-outline btn-sm"
+                                title="Edit Vehicle & Driver"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                            )}
+                            {canDeleteDelivery && (
                               <button
                                 onClick={() => handleDeleteVehicle(v.id, v.vehicleNumber)}
                                 className="btn btn-outline btn-sm"
                                 style={{ color: '#ef4444', borderColor: '#fca5a5' }}
-                                title="Delete Vehicle (Admin only)"
+                                title="Delete Vehicle"
                               >
                                 <Trash2 size={14} />
                               </button>

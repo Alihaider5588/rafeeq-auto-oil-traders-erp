@@ -9,6 +9,6 @@ router.use(authenticate);
 
 router.get('/', getPurchases);
 router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createPurchase);
-router.delete('/:id', authorize([Role.ADMIN]), deletePurchase);
+router.delete('/:id', authorize([Role.ADMIN], 'action:delete_purchase'), deletePurchase);
 
 export default router;

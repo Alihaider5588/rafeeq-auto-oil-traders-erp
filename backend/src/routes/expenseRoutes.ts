@@ -10,6 +10,6 @@ router.use(authenticate);
 router.get('/summary', getExpenseSummary);
 router.get('/', getExpenses);
 router.post('/', authorize([Role.ADMIN, Role.CASHIER, Role.OPERATOR]), createExpense);
-router.delete('/:id', authorize([Role.ADMIN]), deleteExpense);
+router.delete('/:id', authorize([Role.ADMIN], 'action:delete_expense'), deleteExpense);
 
 export default router;

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 export const LedgersPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const canDeleteLedger = isAdmin || Boolean(user?.permissions?.includes('action:delete_ledger'));
 
   const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'SUPPLIERS' | 'DUAL_PARTNERS'>('CUSTOMERS');
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -236,8 +237,8 @@ export const LedgersPage: React.FC = () => {
   };
 
   const handleDeletePaymentRecord = async (entry: any) => {
-    if (!isAdmin) {
-      alert('Sirf Admin he ledger payment record delete kar sakta ha!');
+    if (!canDeleteLedger) {
+      alert('Aap ke pas ledger payment record delete karne ki permission nahi hai!');
       return;
     }
 
@@ -689,19 +690,19 @@ export const LedgersPage: React.FC = () => {
               <th style={{ textAlign: 'right' }}>Debit (Rs.)</th>
               <th style={{ textAlign: 'right' }}>Credit (Rs.)</th>
               <th style={{ textAlign: 'right' }}>Running Balance</th>
-              {isAdmin && <th style={{ textAlign: 'center', width: '90px' }}>Action</th>}
+              {canDeleteLedger && <th style={{ textAlign: 'center', width: '90px' }}>Action</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={isAdmin ? 9 : 8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <td colSpan={canDeleteLedger ? 9 : 8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   Loading ledger transactions...
                 </td>
               </tr>
             ) : filteredLedgerEntries.length === 0 ? (
               <tr>
-                <td colSpan={isAdmin ? 9 : 8} style={{ textAlign: 'center', padding: '35px', color: '#94a3b8' }}>
+                <td colSpan={canDeleteLedger ? 9 : 8} style={{ textAlign: 'center', padding: '35px', color: '#94a3b8' }}>
                   {ledgerSearch ? (
                     <div>
                       <p style={{ fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
@@ -751,7 +752,7 @@ export const LedgersPage: React.FC = () => {
                   <td style={{ textAlign: 'right', fontWeight: 800 }}>
                     Rs. {Number(entry.runningBalance).toLocaleString()}
                   </td>
-                  {isAdmin && (
+                  {canDeleteLedger && (
                     <td style={{ textAlign: 'center' }}>
                       <button
                         type="button"

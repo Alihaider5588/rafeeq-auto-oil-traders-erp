@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
   Users,
   Calendar,
@@ -73,6 +74,11 @@ interface Payroll {
 }
 
 export const EmployeesPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+  const canEditEmployee = isAdmin || Boolean(user?.permissions?.includes('action:edit_employee'));
+  const canDeleteEmployee = isAdmin || Boolean(user?.permissions?.includes('action:delete_employee'));
+
   const [activeTab, setActiveTab] = useState<'employees' | 'attendance' | 'payroll'>('employees');
 
   // Employee State
@@ -479,25 +485,27 @@ export const EmployeesPage: React.FC = () => {
                       </span>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <button
-                        onClick={() => handleDeleteEmployee(emp)}
-                        style={{
-                          backgroundColor: '#fee2e2',
-                          color: '#b91c1c',
-                          border: '1px solid #fecaca',
-                          borderRadius: '6px',
-                          padding: '5px 10px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                        title="Remove Employee"
-                      >
-                        Remove
-                      </button>
+                      {canDeleteEmployee && (
+                        <button
+                          onClick={() => handleDeleteEmployee(emp)}
+                          style={{
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #fecaca',
+                            borderRadius: '6px',
+                            padding: '5px 10px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Remove Employee"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -849,22 +857,24 @@ export const EmployeesPage: React.FC = () => {
                               {att.notes || '-'}
                             </td>
                             <td className="no-print" style={{ textAlign: 'center' }}>
-                              <button
-                                onClick={() => handleDeleteAttendanceRecord(att.id)}
-                                style={{
-                                  backgroundColor: '#fee2e2',
-                                  color: '#b91c1c',
-                                  border: '1px solid #fecaca',
-                                  borderRadius: '6px',
-                                  padding: '4px 8px',
-                                  fontSize: '0.72rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                                title="Delete Attendance Entry"
-                              >
-                                Delete
-                              </button>
+                              {canDeleteEmployee && (
+                                <button
+                                  onClick={() => handleDeleteAttendanceRecord(att.id)}
+                                  style={{
+                                    backgroundColor: '#fee2e2',
+                                    color: '#b91c1c',
+                                    border: '1px solid #fecaca',
+                                    borderRadius: '6px',
+                                    padding: '4px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Delete Attendance Entry"
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );

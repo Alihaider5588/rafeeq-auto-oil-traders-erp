@@ -22,6 +22,6 @@ router.post('/contra-offset', authorize([Role.ADMIN, Role.OPERATOR]), recordCont
 router.get('/customer/:customerId', getCustomerLedger);
 router.get('/supplier/:supplierId', getSupplierLedger);
 router.post('/payment', recordPayment);
-router.delete('/entry/:id', authorize([Role.ADMIN]), deleteLedgerEntry);
+router.delete('/entry/:id', authorize([Role.ADMIN], 'action:delete_ledger'), deleteLedgerEntry);
 
 export default router;

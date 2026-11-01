@@ -61,6 +61,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export const ExpensesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const canDeleteExpense = isAdmin || Boolean(user?.permissions?.includes('action:delete_expense'));
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -327,11 +328,11 @@ export const ExpensesPage: React.FC = () => {
                     Rs. {Number(exp.amount).toLocaleString()}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    {isAdmin ? (
+                    {canDeleteExpense ? (
                       <button
                         onClick={() => handleDelete(exp.id)}
                         style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                        title="Delete Expense (Admin only)"
+                        title="Delete Expense"
                       >
                         <Trash2 size={16} />
                       </button>

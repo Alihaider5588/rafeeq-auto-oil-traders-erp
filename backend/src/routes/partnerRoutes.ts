@@ -30,16 +30,16 @@ router.post('/link-dual', authorize([Role.ADMIN, Role.OPERATOR]), linkExistingPa
 router.get('/suppliers', getSuppliers);
 router.get('/suppliers/:id', getSupplierById);
 router.post('/suppliers', authorize([Role.ADMIN, Role.OPERATOR]), createSupplier);
-router.put('/suppliers/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateSupplier);
-router.patch('/suppliers/:id', authorize([Role.ADMIN, Role.OPERATOR]), updateSupplier);
-router.delete('/suppliers/:id', authorize([Role.ADMIN]), deleteSupplier);
+router.put('/suppliers/:id', authorize([Role.ADMIN], 'action:edit_supplier'), updateSupplier);
+router.patch('/suppliers/:id', authorize([Role.ADMIN], 'action:edit_supplier'), updateSupplier);
+router.delete('/suppliers/:id', authorize([Role.ADMIN], 'action:delete_supplier'), deleteSupplier);
 
 // Customers
 router.get('/customers', getCustomers);
 router.get('/customers/:id', getCustomerById);
 router.post('/customers', authorize([Role.ADMIN, Role.OPERATOR, Role.SALESMAN]), createCustomer);
-router.put('/customers/:id', authorize([Role.ADMIN, Role.OPERATOR, Role.SALESMAN]), updateCustomer);
-router.patch('/customers/:id', authorize([Role.ADMIN, Role.OPERATOR, Role.SALESMAN]), updateCustomer);
-router.delete('/customers/:id', authorize([Role.ADMIN]), deleteCustomer);
+router.put('/customers/:id', authorize([Role.ADMIN], 'action:edit_customer'), updateCustomer);
+router.patch('/customers/:id', authorize([Role.ADMIN], 'action:edit_customer'), updateCustomer);
+router.delete('/customers/:id', authorize([Role.ADMIN], 'action:delete_customer'), deleteCustomer);
 
 export default router;

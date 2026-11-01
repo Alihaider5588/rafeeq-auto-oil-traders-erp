@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 export const PurchasesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const canDeletePurchase = isAdmin || Boolean(user?.permissions?.includes('action:delete_purchase'));
   const [purchases, setPurchases] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -436,7 +437,7 @@ export const PurchasesPage: React.FC = () => {
                       >
                         <Eye size={13} /> View
                       </button>
-                      {isAdmin && (
+                      {canDeletePurchase && (
                         <button
                           onClick={() => handleDeletePurchase(p.id, p.invoiceNumber)}
                           className="btn btn-sm"

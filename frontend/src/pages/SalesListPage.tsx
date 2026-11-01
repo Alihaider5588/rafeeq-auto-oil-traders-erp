@@ -11,6 +11,8 @@ import {
 export const SalesListPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const canEditInvoice = isAdmin || Boolean(user?.permissions?.includes('action:edit_invoice'));
+  const canDeleteInvoice = isAdmin || Boolean(user?.permissions?.includes('action:delete_invoice'));
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
@@ -525,8 +527,8 @@ export const SalesListPage: React.FC = () => {
                         <Eye size={14} /> View
                       </button>
 
-                      {/* Admin Only: Edit / Correct Invoice */}
-                      {isAdmin && s.status !== 'CANCELLED' && (
+                      {/* Edit / Correct Invoice (Admin or with edit permission) */}
+                      {canEditInvoice && s.status !== 'CANCELLED' && (
                         <button
                           onClick={() => openEditModal(s)}
                           className="btn btn-sm"
@@ -540,7 +542,7 @@ export const SalesListPage: React.FC = () => {
                             alignItems: 'center',
                             gap: '4px'
                           }}
-                          title="Admin Edit: Fix fake or wrong bill / products"
+                          title="Edit: Fix fake or wrong bill / products"
                         >
                           <Edit3 size={13} /> Edit
                         </button>
@@ -568,7 +570,7 @@ export const SalesListPage: React.FC = () => {
                       )}
 
                       {/* Void / Cancel Sale */}
-                      {isAdmin && s.status !== 'CANCELLED' && (
+                      {canDeleteInvoice && s.status !== 'CANCELLED' && (
                         <button
                           onClick={() => handleCancelSale(s.id)}
                           className="btn btn-danger btn-sm"
@@ -579,8 +581,8 @@ export const SalesListPage: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Permanent Delete Invoice (Admin only) */}
-                      {isAdmin && (
+                      {/* Permanent Delete Invoice */}
+                      {canDeleteInvoice && (
                         <button
                           onClick={() => handleDeleteSalePermanent(s.id, s.invoiceNumber)}
                           className="btn btn-sm"

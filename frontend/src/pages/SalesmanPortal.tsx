@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import api, { getMediaUrl } from '../services/api';
 import { Customer, Product } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   Smartphone,
   CheckCircle,
@@ -25,8 +26,23 @@ import {
   AlertTriangle,
   Truck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Bookmark,
+  FileText
 } from 'lucide-react';
+
+export interface PosDraftOrder {
+  id: string;
+  name: string;
+  customer: Customer | null;
+  cart: CartItem[];
+  receivedPayment: number;
+  paymentMethod: 'CASH' | 'ONLINE' | 'CHEQUE';
+  notes: string;
+  totalBill: number;
+  itemsCount: number;
+  createdAt: string;
+}
 
 interface ExtendedProduct extends Product {
   conversionFactor?: number;
@@ -118,6 +134,25 @@ export const SalesmanPortal: React.FC = () => {
     creditLimit: '100000',
   });
 
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+  const canDeleteDraft = isAdmin || Boolean(user?.permissions?.includes('action:delete_draft')) || Boolean(user?.permissions?.includes('action:delete_invoice'));
+
+  // Saved Draft Orders State
+  const [drafts, setDrafts] = useState<PosDraftOrder[]>(() => {
+    try {
+      const saved = localStorage.getItem('rot_pos_draft_orders');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showDraftsModal, setShowDraftsModal] = useState<boolean>(false);
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+
+  // Selected Van Product Id for highlighting
+  const [selectedVanProductId, setSelectedVanProductId] = useState<string | null>(null);
+
   // Quick Adjust Credit Limit Modal
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [newCreditLimitInput, setNewCreditLimitInput] = useState('');
@@ -149,7 +184,46 @@ export const SalesmanPortal: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    // Restore active cart session backup if user navigated to another tab and came back
+    try {
+      const backupStr = localStorage.getItem('rot_pos_active_cart_backup');
+      if (backupStr) {
+        const backup = JSON.parse(backupStr);
+        if (backup && Array.isArray(backup.cart) && backup.cart.length > 0 && (Date.now() - (backup.savedAt || 0) < 24 * 60 * 60 * 1000)) {
+          setCart(backup.cart);
+          if (backup.customer) setSelectedCustomer(backup.customer);
+          if (backup.receivedPayment !== undefined) setReceivedPayment(backup.receivedPayment);
+          if (backup.paymentMethod) setPaymentMethod(backup.paymentMethod);
+          if (backup.notes) setNotes(backup.notes);
+          if (backup.activeDraftId) setActiveDraftId(backup.activeDraftId);
+          setSuccessMsg('ℹ️ Pichli session ka in-progress order restore kar diya gaya hai!');
+          setTimeout(() => setSuccessMsg(''), 4000);
+        }
+      }
+    } catch (e) {}
   }, []);
+
+  // Keep active cart backup synced so navigating away preserves everything
+  useEffect(() => {
+    if (cart.length > 0) {
+      try {
+        localStorage.setItem('rot_pos_active_cart_backup', JSON.stringify({
+          cart,
+          customer: selectedCustomer,
+          receivedPayment,
+          paymentMethod,
+          notes,
+          activeDraftId,
+          savedAt: Date.now()
+        }));
+      } catch (e) {}
+    } else if (!activeDraftId) {
+      try {
+        localStorage.removeItem('rot_pos_active_cart_backup');
+      } catch (e) {}
+    }
+  }, [cart, selectedCustomer, receivedPayment, paymentMethod, notes, activeDraftId]);
 
   const sanitizeCustomerList = (list: any[]): Customer[] => {
     if (!Array.isArray(list)) return [];
@@ -431,6 +505,97 @@ export const SalesmanPortal: React.FC = () => {
   const netRemainingDebt = isWalkIn ? Math.max(0, totalBill - receivedPayment) : (totalPayableWithDebt - receivedPayment);
   const isCreditExceeded = !isWalkIn && customerCreditLimit > 0 && netRemainingDebt > customerCreditLimit;
   const isWalkInCreditAttempt = isWalkIn && totalBill > 0 && (totalBill - receivedPayment) > 0;
+
+  // Drafts Management Handlers
+  const handleSaveAsDraft = () => {
+    if (cart.length === 0) {
+      alert('Draft mein save karne ke liye basket mein kam az kam 1 product shamil hona chahiye.');
+      return;
+    }
+
+    const draftId = activeDraftId || `draft_${Date.now()}`;
+    const custLabel = selectedCustomer?.shopName || 'Walk-in Counter Customer';
+    const draftName = `${custLabel} — Rs. ${totalBill.toLocaleString()}`;
+
+    const newDraft: PosDraftOrder = {
+      id: draftId,
+      name: draftName,
+      customer: selectedCustomer,
+      cart: [...cart],
+      receivedPayment,
+      paymentMethod,
+      notes,
+      totalBill,
+      itemsCount: cart.length,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedDrafts = [newDraft, ...drafts.filter((d) => d.id !== draftId)];
+    setDrafts(updatedDrafts);
+    try {
+      localStorage.setItem('rot_pos_draft_orders', JSON.stringify(updatedDrafts));
+      localStorage.removeItem('rot_pos_active_cart_backup');
+    } catch (e) {}
+
+    // Reset current working cart so salesman can start another bill
+    setCart([]);
+    setSelectedCustomer(null);
+    setReceivedPayment(0);
+    setNotes('');
+    setActiveDraftId(null);
+    setSuccessMsg(`✓ Draft order "${draftName}" mehfooz ho gaya hai! Aap kisi bhi waqt 'Draft Orders' se ise wapis load ya delete kar saktay hain.`);
+    setTimeout(() => setSuccessMsg(''), 5000);
+  };
+
+  const handleLoadDraft = (draft: PosDraftOrder) => {
+    if (cart.length > 0 && activeDraftId !== draft.id) {
+      const confirmLoad = window.confirm(
+        'Mojooda basket mein pehle se products hain. Kya aap mojooda basket ko is draft se tabdeel karna chahte hain?'
+      );
+      if (!confirmLoad) return;
+    }
+
+    setSelectedCustomer(draft.customer);
+    setCart(draft.cart || []);
+    setReceivedPayment(draft.receivedPayment || 0);
+    setPaymentMethod(draft.paymentMethod || 'CASH');
+    setNotes(draft.notes || '');
+    setActiveDraftId(draft.id);
+    setShowDraftsModal(false);
+
+    setSuccessMsg(`✓ Draft order "${draft.name}" bill basket mein load ho gaya!`);
+    setTimeout(() => setSuccessMsg(''), 4000);
+
+    setTimeout(() => {
+      const cartEl = document.getElementById('pos-order-cart-section');
+      if (cartEl) {
+        cartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
+  };
+
+  const handleDeleteDraft = (draftId: string, draftName: string) => {
+    if (!canDeleteDraft) {
+      alert('Aap ke pas draft delete karne ki permission nahi hai. Barah-e-karam Admin se rabta karein.');
+      return;
+    }
+
+    if (window.confirm(`Kya aap draft order "${draftName}" ko delete karna chahte hain?`)) {
+      const updated = drafts.filter((d) => d.id !== draftId);
+      setDrafts(updated);
+      try {
+        localStorage.setItem('rot_pos_draft_orders', JSON.stringify(updated));
+      } catch (e) {}
+      if (activeDraftId === draftId) {
+        setActiveDraftId(null);
+        try {
+          localStorage.removeItem('rot_pos_active_cart_backup');
+        } catch (e) {}
+      }
+      setSuccessMsg(`✓ Draft order delete kar diya gaya.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    }
+  };
 
   const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -775,6 +940,21 @@ export const SalesmanPortal: React.FC = () => {
           return { ...prevVan, items: updatedItems, financials: newFin };
         });
 
+        // If this sale was from a draft, remove it from drafts
+        if (activeDraftId) {
+          setDrafts((prevDrafts) => {
+            const rem = prevDrafts.filter((d) => d.id !== activeDraftId);
+            try {
+              localStorage.setItem('rot_pos_draft_orders', JSON.stringify(rem));
+            } catch (e) {}
+            return rem;
+          });
+          setActiveDraftId(null);
+        }
+        try {
+          localStorage.removeItem('rot_pos_active_cart_backup');
+        } catch (e) {}
+
         setCart([]);
         setReceivedPayment(0);
         setNotes('');
@@ -868,6 +1048,42 @@ export const SalesmanPortal: React.FC = () => {
           >
             <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
             {syncing ? 'Syncing...' : 'Sync Stock'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDraftsModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: drafts.length > 0 ? '#b45309' : '#334155',
+              color: '#ffffff',
+              border: drafts.length > 0 ? '1px solid #f59e0b' : '1px solid #475569',
+              borderRadius: '10px',
+              padding: '8px 12px',
+              fontSize: '0.78rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: drafts.length > 0 ? '0 0 10px rgba(245, 158, 11, 0.45)' : 'none',
+              transition: 'all 0.2s'
+            }}
+            title="Saved draft orders - Switch tabs safely without losing data"
+          >
+            <Bookmark size={13} />
+            <span>Draft Orders</span>
+            {drafts.length > 0 && (
+              <span style={{
+                backgroundColor: '#f59e0b',
+                color: '#0f172a',
+                borderRadius: '10px',
+                padding: '1px 6px',
+                fontSize: '0.72rem',
+                fontWeight: 900
+              }}>
+                {drafts.length}
+              </span>
+            )}
           </button>
           <PosLiveClock />
         </div>
@@ -1071,19 +1287,63 @@ export const SalesmanPortal: React.FC = () => {
                 <tbody>
                   {activeVan.items.map((vi: any) => {
                     const prodInMain = products.find(p => p.id === vi.productId);
+                    const cartItem = cart.find(ci => ci.product.id === vi.productId);
+                    const isInBill = Boolean(cartItem);
+                    const isRowClicked = selectedVanProductId === vi.productId;
+
                     return (
-                      <tr key={vi.id} style={{ borderBottom: '1px solid #334155' }}>
-                        <td style={{ padding: '6px 8px', fontWeight: 700, color: '#f8fafc' }}>
-                          {vi.product?.name}
-                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '6px' }}>({vi.product?.sku})</span>
+                      <tr
+                        key={vi.id}
+                        onClick={() => setSelectedVanProductId(prev => prev === vi.productId ? null : vi.productId)}
+                        style={{
+                          borderBottom: '1px solid #334155',
+                          backgroundColor: isInBill ? '#064e3b' : (isRowClicked ? '#1e3a5f' : 'transparent'),
+                          boxShadow: isInBill ? 'inset 4px 0 0 #34d399' : (isRowClicked ? 'inset 4px 0 0 #38bdf8' : 'none'),
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <td style={{ padding: '8px 8px', fontWeight: 700, color: '#f8fafc' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span>{vi.product?.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>({vi.product?.sku})</span>
+                            {isInBill && (
+                              <span style={{
+                                backgroundColor: '#10b981',
+                                color: '#ffffff',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                boxShadow: '0 0 8px rgba(16, 185, 129, 0.4)'
+                              }}>
+                                ✓ IN BILL: {cartItem?.quantity} {cartItem?.unitType === 'PRIMARY' ? 'Ctn' : 'Pcs'}
+                              </span>
+                            )}
+                            {!isInBill && isRowClicked && (
+                              <span style={{
+                                backgroundColor: '#0284c7',
+                                color: '#ffffff',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800
+                              }}>
+                                👉 SELECTED
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#94a3b8' }}>
+                        <td style={{ padding: '8px 8px', textAlign: 'center', color: '#94a3b8' }}>
                           {vi.loadedQty}
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center', color: '#4ade80', fontWeight: 800 }}>
+                        <td style={{ padding: '8px 8px', textAlign: 'center', color: '#4ade80', fontWeight: 800 }}>
                           {vi.soldQty || 0}
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                        <td style={{ padding: '8px 8px', textAlign: 'center' }}>
                           <span style={{
                             backgroundColor: vi.remainingInVan > 0 ? '#1e3a8a' : '#450a0a',
                             color: vi.remainingInVan > 0 ? '#93c5fd' : '#fca5a5',
@@ -1094,13 +1354,17 @@ export const SalesmanPortal: React.FC = () => {
                             {vi.remainingInVan} {vi.product?.unit?.symbol || 'Pcs'}
                           </span>
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                        <td style={{ padding: '8px 8px', textAlign: 'right' }}>
                           <button
                             type="button"
-                            onClick={() => handleAddVanItemToBill(vi)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVanProductId(vi.productId);
+                              handleAddVanItemToBill(vi);
+                            }}
                             style={{
-                              backgroundColor: '#f59e0b',
-                              color: '#0f172a',
+                              backgroundColor: isInBill ? '#10b981' : '#f59e0b',
+                              color: isInBill ? '#ffffff' : '#0f172a',
                               border: 'none',
                               borderRadius: '6px',
                               padding: '5px 12px',
@@ -1110,10 +1374,11 @@ export const SalesmanPortal: React.FC = () => {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                              transition: 'all 0.15s ease'
                             }}
                           >
-                            <Plus size={13} /> + Bill
+                            <Plus size={13} /> {isInBill ? '+ Bill More' : '+ Bill'}
                           </button>
                         </td>
                       </tr>
@@ -1543,6 +1808,44 @@ export const SalesmanPortal: React.FC = () => {
         <h3 className="card-title" style={{ marginBottom: '14px' }}>
           3. Order Basket & Negotiated Unit Rates
         </h3>
+
+        {/* ACTIVE DRAFT BANNER IF EDITING A SAVED DRAFT */}
+        {activeDraftId && (
+          <div style={{
+            backgroundColor: '#fef3c7',
+            border: '1.5px dashed #f59e0b',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            marginBottom: '14px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}>
+            <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Bookmark size={16} /> 📋 Editing Saved Draft Order (Is order ko invoice banayein ya update karein)
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Kya aap is draft ko chhor kar naya taaza bill shuru karna chahte hain?')) {
+                  setActiveDraftId(null);
+                  setCart([]);
+                  setSelectedCustomer(null);
+                  setReceivedPayment(0);
+                  setNotes('');
+                  try {
+                    localStorage.removeItem('rot_pos_active_cart_backup');
+                  } catch (e) {}
+                }
+              }}
+              style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Discard & Start New Bill
+            </button>
+          </div>
+        )}
 
         {/* DISCOUNT PANEL: Category-Wise or Full Bill Percentage Discount */}
         {cart.length > 0 && (
@@ -2306,37 +2609,100 @@ export const SalesmanPortal: React.FC = () => {
               </div>
             )}
 
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={handleSubmitOrder}
-              className="btn btn-primary btn-lg"
-              style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '10px',
-                cursor: submitting ? 'wait' : 'pointer',
-                ...(isCreditExceeded || isWalkInCreditAttempt ? { backgroundColor: '#dc2626', borderColor: '#dc2626' } : {})
-              }}
-            >
-              {submitting ? (
-                'Submitting Order to Server...'
-              ) : isWalkInCreditAttempt ? (
-                <>
-                  <AlertCircle size={20} /> ⚠️ Walk-in Poora Cash Wasool Karein (Click to Submit)
-                </>
-              ) : isCreditExceeded ? (
-                <>
-                  <AlertCircle size={20} /> ⚠️ Credit Limit Barhayein Ya Cash Lein (Click to View)
-                </>
-              ) : (
-                <>
-                  <Send size={20} /> Submit & Sync Order Now
-                </>
-              )}
-            </button>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(200px, 1fr) auto auto',
+              gap: '10px',
+              marginTop: '10px',
+              alignItems: 'stretch'
+            }}>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={handleSubmitOrder}
+                className="btn btn-primary btn-lg"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: '10px',
+                  cursor: submitting ? 'wait' : 'pointer',
+                  ...(isCreditExceeded || isWalkInCreditAttempt ? { backgroundColor: '#dc2626', borderColor: '#dc2626' } : {})
+                }}
+              >
+                {submitting ? (
+                  'Submitting Order to Server...'
+                ) : isWalkInCreditAttempt ? (
+                  <>
+                    <AlertCircle size={20} /> ⚠️ Walk-in Poora Cash Wasool Karein (Click to Submit)
+                  </>
+                ) : isCreditExceeded ? (
+                  <>
+                    <AlertCircle size={20} /> ⚠️ Credit Limit Barhayein Ya Cash Lein (Click to View)
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} /> Submit & Sync Order Now
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveAsDraft}
+                disabled={submitting || cart.length === 0}
+                style={{
+                  backgroundColor: '#fef3c7',
+                  color: '#92400e',
+                  border: '1.5px solid #fcd34d',
+                  borderRadius: '10px',
+                  padding: '12px 18px',
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                  cursor: submitting || cart.length === 0 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Save current order in drafts so you can switch tabs or resume later"
+              >
+                <Bookmark size={18} /> Save as Draft
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Kya aap is order basket ko khali karna chahte hain?')) {
+                    setCart([]);
+                    setSelectedCustomer(null);
+                    setReceivedPayment(0);
+                    setActiveDraftId(null);
+                    try {
+                      localStorage.removeItem('rot_pos_active_cart_backup');
+                    } catch (e) {}
+                  }
+                }}
+                disabled={submitting || cart.length === 0}
+                style={{
+                  backgroundColor: '#fee2e2',
+                  color: '#b91c1c',
+                  border: '1.5px solid #fca5a5',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  cursor: submitting || cart.length === 0 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px'
+                }}
+                title="Clear Basket"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -2915,6 +3281,214 @@ export const SalesmanPortal: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAVED DRAFT ORDERS MODAL */}
+      {showDraftsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '680px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '16px 20px',
+              backgroundColor: '#0f172a',
+              color: '#ffffff',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ backgroundColor: '#f59e0b', padding: '6px', borderRadius: '8px', color: '#0f172a' }}>
+                  <Bookmark size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                    Saved Draft Orders (عارضی محفوظ شدہ ڈرافٹس)
+                  </h3>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    Jab tak invoice submit na ho, yahan orders mehfooz rehte hain
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDraftsModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 800 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, backgroundColor: '#f8fafc' }}>
+              {drafts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>📋</div>
+                  <h4 style={{ fontWeight: 800, color: '#334155', margin: '0 0 6px 0' }}>Koi Draft Order Save Nahi Hai</h4>
+                  <p style={{ fontSize: '0.85rem', maxWidth: '380px', margin: '0 auto', color: '#64748b' }}>
+                    Jab aap order basket mein items add kar ke <b>"Save as Draft"</b> click karein ge, ya kisi aur tab mein jayen ge, to order yahan mehfooz rahe ga.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Kul Mehfooz Drafts: {drafts.length}</span>
+                    <span>Click 'Load' to resume bill</span>
+                  </div>
+
+                  {drafts.map((draft) => {
+                    const isDraftWalkIn = !draft.customer || draft.customer.phone === '00000000000' || draft.customer.shopName?.toLowerCase().includes('walk-in');
+                    return (
+                      <div
+                        key={draft.id}
+                        style={{
+                          backgroundColor: '#ffffff',
+                          border: activeDraftId === draft.id ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                          borderRadius: '12px',
+                          padding: '16px',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Store size={16} color="#d97706" />
+                              {draft.customer?.shopName || 'Walk-in Customer / Counter Sale'}
+                              {isDraftWalkIn && (
+                                <span style={{ backgroundColor: '#dcfce7', color: '#15803d', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                  Cash Counter
+                                </span>
+                              )}
+                              {activeDraftId === draft.id && (
+                                <span style={{ backgroundColor: '#fef3c7', color: '#b45309', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                                  Currently Open
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                              Phone: {draft.customer?.phone || '00000000000'} &bull; Saved: {new Date(draft.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Draft Bill Total:</div>
+                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#059669' }}>
+                              Rs. {Number(draft.totalBill || 0).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Items preview */}
+                        <div style={{
+                          backgroundColor: '#f8fafc',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          fontSize: '0.78rem',
+                          color: '#334155',
+                          border: '1px solid #e2e8f0'
+                        }}>
+                          <div style={{ fontWeight: 700, color: '#64748b', marginBottom: '4px' }}>
+                            Products ({draft.cart?.length || 0} items):
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {draft.cart?.map((it, idx) => (
+                              <span
+                                key={idx}
+                                style={{
+                                  backgroundColor: '#ffffff',
+                                  border: '1px solid #cbd5e1',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                {it.product.name} &times; <b>{it.quantity} {it.unitType === 'PRIMARY' ? 'Ctn' : 'Pcs'}</b> (@ Rs. {it.unitPrice})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDraft(draft.id, draft.name)}
+                            className="btn btn-sm"
+                            style={{
+                              backgroundColor: '#fee2e2',
+                              color: '#b91c1c',
+                              border: '1px solid #fca5a5',
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Trash2 size={14} /> Delete Draft
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleLoadDraft(draft)}
+                            className="btn btn-primary btn-sm"
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '6px',
+                              fontWeight: 800,
+                              fontSize: '0.8rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <FileText size={14} /> Load / Continue Invoice
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', backgroundColor: '#ffffff' }}>
+              <button
+                type="button"
+                onClick={() => setShowDraftsModal(false)}
+                className="btn btn-outline"
+                style={{ padding: '6px 18px', fontWeight: 700 }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

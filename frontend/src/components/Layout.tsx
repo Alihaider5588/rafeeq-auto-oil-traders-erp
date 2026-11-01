@@ -76,9 +76,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (!user) return false;
     if (user.role === 'ADMIN') return true; // Admin has unrestricted access to all modules
 
-    // If custom granular permissions are configured for this staff member, respect them directly
-    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
-      return user.permissions.includes(path);
+    // If custom granular tab permissions are configured for this staff member, respect them directly
+    if (user.permissions && Array.isArray(user.permissions)) {
+      const tabPerms = user.permissions.filter((p: string) => p.startsWith('/'));
+      if (tabPerms.length > 0) {
+        return tabPerms.includes(path);
+      }
     }
 
     // Default fallback to role-based access if no custom permissions have been explicitly set

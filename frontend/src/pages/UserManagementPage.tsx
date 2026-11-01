@@ -1,8 +1,282 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../services/api';
 import { User, Role } from '../types';
-import { Shield, Plus, Key, CheckCircle, XCircle } from 'lucide-react';
+import { Shield, Plus, Key, CheckCircle, XCircle, Search, Edit2, Trash2, Eye, Filter, CheckSquare, Square, Lock, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+export interface TabPermissionModule {
+  path: string;
+  labelEn: string;
+  labelUrdu: string;
+  category: 'Billing & POS' | 'Inventory & Catalog' | 'CRM & Accounts' | 'Operations & Staff' | 'Administration';
+  editAction?: {
+    key: string;
+    alias?: string;
+    label: string;
+    desc: string;
+  };
+  deleteAction?: {
+    key: string;
+    alias?: string;
+    label: string;
+    desc: string;
+  };
+}
+
+export const PERMISSION_MODULES: TabPermissionModule[] = [
+  // 1. Billing & POS
+  {
+    path: '/sales',
+    labelEn: 'Sales & POS Billing Terminal',
+    labelUrdu: 'سیل و کاؤنٹر انوائس بلنگ',
+    category: 'Billing & POS',
+    editAction: {
+      key: 'action:edit_invoice',
+      alias: 'action:edit_sale',
+      label: 'Edit Invoices',
+      desc: 'Allow user to edit or correct sales invoices.',
+    },
+    deleteAction: {
+      key: 'action:delete_invoice',
+      alias: 'action:delete_sale',
+      label: 'Delete / Void Invoice',
+      desc: 'Allow permanently deleting or cancelling sales invoices.',
+    },
+  },
+  {
+    path: '/salesman',
+    labelEn: 'Salesman Mobile Portal & Van POS',
+    labelUrdu: 'سیلز مین موبائل پورٹل و وین سیل',
+    category: 'Billing & POS',
+    deleteAction: {
+      key: 'action:delete_draft',
+      label: 'Delete Saved Drafts',
+      desc: 'Allow user to delete pending draft orders in Salesman Portal.',
+    },
+  },
+  {
+    path: '/web-orders',
+    labelEn: 'Web Orders Queue',
+    labelUrdu: 'آن لائن ویب سائٹ آرڈرز کیو',
+    category: 'Billing & POS',
+    deleteAction: {
+      key: 'action:delete_web_order',
+      label: 'Reject / Delete Orders',
+      desc: 'Allow rejecting or deleting website online orders.',
+    },
+  },
+
+  // 2. Inventory & Products
+  {
+    path: '/products',
+    labelEn: 'Products & Stock Inventory',
+    labelUrdu: 'پروڈکٹس، کیٹگریز و انوینٹری اسٹاک',
+    category: 'Inventory & Catalog',
+    editAction: {
+      key: 'action:edit_product',
+      label: 'Edit Products & Stock',
+      desc: 'Allow editing product names, cost, and selling rates.',
+    },
+    deleteAction: {
+      key: 'action:delete_product',
+      label: 'Delete Products',
+      desc: 'Allow permanently deleting products from inventory.',
+    },
+  },
+  {
+    path: '/purchases',
+    labelEn: 'Purchases (Stock Inward)',
+    labelUrdu: 'انورڈ مال کی خریداری و بلنگ',
+    category: 'Inventory & Catalog',
+    editAction: {
+      key: 'action:edit_purchase',
+      label: 'Edit Purchases',
+      desc: 'Allow modifying inward purchase records.',
+    },
+    deleteAction: {
+      key: 'action:delete_purchase',
+      label: 'Delete Purchases',
+      desc: 'Allow deleting purchase records and reversing inward stock.',
+    },
+  },
+  {
+    path: '/catalogue',
+    labelEn: 'PDF Product Catalogue',
+    labelUrdu: 'پروڈکٹ کیٹلاگ و بروشر (View Only)',
+    category: 'Inventory & Catalog',
+  },
+
+  // 3. CRM & Accounts
+  {
+    path: '/customers',
+    labelEn: 'Customers & Khata',
+    labelUrdu: 'کسٹمرز کھاتے و دکانیں',
+    category: 'CRM & Accounts',
+    editAction: {
+      key: 'action:edit_customer',
+      label: 'Edit Customer & Limits',
+      desc: 'Allow editing customer info, phone, area, and credit limit.',
+    },
+    deleteAction: {
+      key: 'action:delete_customer',
+      label: 'Delete Customer Record',
+      desc: 'Allow removing customers from directory.',
+    },
+  },
+  {
+    path: '/suppliers',
+    labelEn: 'Suppliers & Mills',
+    labelUrdu: 'سپلائرز، کمپنیاں و مِلیں',
+    category: 'CRM & Accounts',
+    editAction: {
+      key: 'action:edit_supplier',
+      label: 'Edit Supplier Info',
+      desc: 'Allow updating supplier contact & bank information.',
+    },
+    deleteAction: {
+      key: 'action:delete_supplier',
+      label: 'Delete Supplier Record',
+      desc: 'Allow deleting suppliers from directory.',
+    },
+  },
+  {
+    path: '/ledgers',
+    labelEn: 'Ledgers & Accounts',
+    labelUrdu: 'کھاتے، وصولیاں و ادائیگیاں',
+    category: 'CRM & Accounts',
+    editAction: {
+      key: 'action:edit_ledger',
+      label: 'Edit Ledger Entry',
+      desc: 'Allow editing voucher or payment ledger entries.',
+    },
+    deleteAction: {
+      key: 'action:delete_ledger',
+      label: 'Delete Payment Records',
+      desc: 'Allow deleting recorded payments or contra-settlement entries.',
+    },
+  },
+  {
+    path: '/expenses',
+    labelEn: 'Daily Expenses',
+    labelUrdu: 'روزمرہ دکان و وین کے اخراجات',
+    category: 'CRM & Accounts',
+    editAction: {
+      key: 'action:edit_expense',
+      label: 'Edit Expenses',
+      desc: 'Allow modifying expense category and payment details.',
+    },
+    deleteAction: {
+      key: 'action:delete_expense',
+      label: 'Delete Expenses',
+      desc: 'Allow deleting recorded shop expenses.',
+    },
+  },
+
+  // 4. Operations & Staff
+  {
+    path: '/delivery',
+    labelEn: 'Van Delivery & Route Schedules',
+    labelUrdu: 'ڈلیوری وین، روٹس و روزانہ ٹرپ',
+    category: 'Operations & Staff',
+    editAction: {
+      key: 'action:edit_delivery',
+      label: 'Edit Vehicle / Routes',
+      desc: 'Allow editing vehicle details, weekly routes, and trips.',
+    },
+    deleteAction: {
+      key: 'action:delete_delivery',
+      label: 'Delete Delivery / Vehicle',
+      desc: 'Allow deleting delivery trips, routes, or vehicles.',
+    },
+  },
+  {
+    path: '/employees',
+    labelEn: 'Employees & Attendance',
+    labelUrdu: 'ملازمین، حاضری و پے رول تنخواہیں',
+    category: 'Operations & Staff',
+    editAction: {
+      key: 'action:edit_employee',
+      label: 'Edit Employee / Attendance',
+      desc: 'Allow editing employee details and attendance entries.',
+    },
+    deleteAction: {
+      key: 'action:delete_employee',
+      label: 'Delete Employee / Attendance',
+      desc: 'Allow deleting employee profiles or attendance logs.',
+    },
+  },
+  {
+    path: '/operator',
+    labelEn: 'Operator Desk',
+    labelUrdu: 'آپریٹر ڈیسک شارٹ کٹس (View Only)',
+    category: 'Operations & Staff',
+  },
+  {
+    path: '/cashier',
+    labelEn: 'Cashier Desk',
+    labelUrdu: 'کیشیئر ڈیسک شارٹ کٹس (View Only)',
+    category: 'Operations & Staff',
+  },
+
+  // 5. System & Administration
+  {
+    path: '/reports',
+    labelEn: 'Profit & Reports',
+    labelUrdu: 'منافع و تفصیلی بزنس رپورٹس (View Only)',
+    category: 'Administration',
+  },
+  {
+    path: '/admin',
+    labelEn: 'Admin Dashboard',
+    labelUrdu: 'ایڈمن مرکزی ڈیش بورڈ (View Only)',
+    category: 'Administration',
+  },
+  {
+    path: '/admin/users',
+    labelEn: 'User Management',
+    labelUrdu: 'صارفین و پرمیشن مینجمنٹ',
+    category: 'Administration',
+    editAction: {
+      key: 'action:edit_user',
+      label: 'Edit Users & Roles',
+      desc: 'Allow modifying other user accounts and reset passwords.',
+    },
+    deleteAction: {
+      key: 'action:delete_user',
+      label: 'Delete Staff Users',
+      desc: 'Allow deactivating or deleting staff user accounts.',
+    },
+  },
+  {
+    path: '/admin/settings',
+    labelEn: 'System Settings',
+    labelUrdu: 'سسٹم پرنٹ و بزنس سیٹنگز',
+    category: 'Administration',
+    editAction: {
+      key: 'action:edit_settings',
+      label: 'Modify Settings',
+      desc: 'Allow editing business name, invoice headers, and printer options.',
+    },
+  },
+  {
+    path: '/admin/utilities',
+    labelEn: 'Utilities & Backup',
+    labelUrdu: 'ڈیٹا امپورٹ، بارکوڈ و ٹولز (View Only)',
+    category: 'Administration',
+  },
+  {
+    path: '/admin/audit',
+    labelEn: 'Audit Trail Logs',
+    labelUrdu: 'سسٹم آڈٹ لاگز و ہسٹری (View Only)',
+    category: 'Administration',
+  },
+  {
+    path: '/admin/confidential-brand',
+    labelEn: 'Confidential Brand Vault',
+    labelUrdu: 'خفیہ برانڈ تجوری و خفیہ ریٹس (View Only)',
+    category: 'Administration',
+  },
+];
 
 export const UserManagementPage: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -28,35 +302,13 @@ export const UserManagementPage: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Granular Tab Permissions Modal
+  // Granular Tab & Action Permissions Modal
   const [showPermModal, setShowPermModal] = useState(false);
   const [selectedUserForPerms, setSelectedUserForPerms] = useState<User | null>(null);
   const [userPerms, setUserPerms] = useState<string[]>([]);
   const [savingPerms, setSavingPerms] = useState(false);
-
-  const AVAILABLE_TABS = [
-    { path: '/sales', label: 'Sales & POS Terminal (سیل و کاؤنٹر بلنگ)' },
-    { path: '/salesman', label: 'Salesman Mobile Portal (سیلز مین پورٹل)' },
-    { path: '/products', label: 'Products & Stock (پروڈکٹس و انوینٹری)' },
-    { path: '/web-orders', label: 'Web Orders Queue (ویب سائٹ آرڈرز)' },
-    { path: '/purchases', label: 'Purchases (انورڈ مال کی خریداری)' },
-    { path: '/customers', label: 'Customers & Khata (کسٹمرز و دکانیں)' },
-    { path: '/suppliers', label: 'Suppliers & Mills (سپلائرز و کمپنیاں)' },
-    { path: '/ledgers', label: 'Ledgers & Accounts (کھاتے و وصولیاں)' },
-    { path: '/expenses', label: 'Daily Expenses (روزمرہ دکان اخراجات)' },
-    { path: '/delivery', label: 'Van Delivery & Routes (ڈلیوری وین و روٹس)' },
-    { path: '/catalogue', label: 'PDF Product Catalogue (پروڈکٹ کیٹلاگ)' },
-    { path: '/employees', label: 'Employees & Attendance (ملازمین و حاضری)' },
-    { path: '/reports', label: 'Profit & Reports (منافع و تفصیلی رپورٹس)' },
-    { path: '/admin/settings', label: 'System Settings (سسٹم پرنٹ و بزنس سیٹنگز)' },
-    { path: '/admin/utilities', label: 'Utilities (ڈیٹا امپورٹ، بارکوڈ و ٹولز)' },
-    { path: '/admin/users', label: 'User Management (صارفین و پرمیشن مینجمنٹ)' },
-    { path: '/admin/audit', label: 'Audit Trail (سسٹم آڈٹ لاگز)' },
-    { path: '/admin/confidential-brand', label: 'Confidential Brand Vault (خفیہ برانڈ تجوری)' },
-    { path: '/admin', label: 'Admin Dashboard (ایڈمن ڈیش بورڈ)' },
-    { path: '/operator', label: 'Operator Desk (آپریٹر ڈیسک)' },
-    { path: '/cashier', label: 'Cashier Desk (کیشیئر ڈیسک)' },
-  ];
+  const [permSearch, setPermSearch] = useState('');
+  const [permCategoryFilter, setPermCategoryFilter] = useState('ALL');
 
   useEffect(() => {
     fetchUsers();
@@ -76,6 +328,8 @@ export const UserManagementPage: React.FC = () => {
 
   const handleOpenPermsModal = (u: User) => {
     setSelectedUserForPerms(u);
+    setPermSearch('');
+    setPermCategoryFilter('ALL');
     // If permissions array already defined, use it, else default by role
     if (u.permissions && Array.isArray(u.permissions)) {
       setUserPerms(u.permissions);
@@ -88,7 +342,7 @@ export const UserManagementPage: React.FC = () => {
       } else if (u.role === 'OPERATOR') {
         setUserPerms(['/sales', '/products', '/purchases', '/customers', '/suppliers', '/ledgers', '/expenses', '/delivery', '/web-orders', '/catalogue']);
       } else {
-        setUserPerms(AVAILABLE_TABS.map(t => t.path));
+        setUserPerms(PERMISSION_MODULES.map(t => t.path));
       }
     }
     setShowPermModal(true);
@@ -102,6 +356,123 @@ export const UserManagementPage: React.FC = () => {
     }
   };
 
+  const toggleActionPerm = (key: string, alias?: string, associatedPath?: string) => {
+    const hasKey = userPerms.includes(key);
+    if (hasKey) {
+      setUserPerms(userPerms.filter(p => p !== key && (!alias || p !== alias)));
+    } else {
+      const toAdd = [key];
+      if (alias && !userPerms.includes(alias)) toAdd.push(alias);
+      if (associatedPath && !userPerms.includes(associatedPath)) toAdd.push(associatedPath);
+      setUserPerms([...userPerms, ...toAdd]);
+    }
+  };
+
+  const handleSelectAllTabs = () => {
+    const allPaths = PERMISSION_MODULES.map(m => m.path);
+    setUserPerms(Array.from(new Set([...userPerms, ...allPaths])));
+  };
+
+  const handleClearAllTabs = () => {
+    const allPaths = new Set(PERMISSION_MODULES.map(m => m.path));
+    setUserPerms(userPerms.filter(p => !allPaths.has(p)));
+  };
+
+  const handleGrantAllEdits = () => {
+    const editKeys: string[] = [];
+    PERMISSION_MODULES.forEach(m => {
+      if (m.editAction) {
+        editKeys.push(m.editAction.key);
+        if (m.editAction.alias) editKeys.push(m.editAction.alias);
+        editKeys.push(m.path);
+      }
+    });
+    setUserPerms(Array.from(new Set([...userPerms, ...editKeys])));
+  };
+
+  const handleRevokeAllEdits = () => {
+    const editKeys = new Set<string>();
+    PERMISSION_MODULES.forEach(m => {
+      if (m.editAction) {
+        editKeys.add(m.editAction.key);
+        if (m.editAction.alias) editKeys.add(m.editAction.alias);
+      }
+    });
+    setUserPerms(userPerms.filter(p => !editKeys.has(p)));
+  };
+
+  const handleGrantAllDeletes = () => {
+    const deleteKeys: string[] = [];
+    PERMISSION_MODULES.forEach(m => {
+      if (m.deleteAction) {
+        deleteKeys.push(m.deleteAction.key);
+        if (m.deleteAction.alias) deleteKeys.push(m.deleteAction.alias);
+        deleteKeys.push(m.path);
+      }
+    });
+    setUserPerms(Array.from(new Set([...userPerms, ...deleteKeys])));
+  };
+
+  const handleRevokeAllDeletes = () => {
+    const deleteKeys = new Set<string>();
+    PERMISSION_MODULES.forEach(m => {
+      if (m.deleteAction) {
+        deleteKeys.add(m.deleteAction.key);
+        if (m.deleteAction.alias) deleteKeys.add(m.deleteAction.alias);
+      }
+    });
+    setUserPerms(userPerms.filter(p => !deleteKeys.has(p)));
+  };
+
+  const handleGrantFullAccess = () => {
+    const allItems: string[] = [];
+    PERMISSION_MODULES.forEach(m => {
+      allItems.push(m.path);
+      if (m.editAction) {
+        allItems.push(m.editAction.key);
+        if (m.editAction.alias) allItems.push(m.editAction.alias);
+      }
+      if (m.deleteAction) {
+        allItems.push(m.deleteAction.key);
+        if (m.deleteAction.alias) allItems.push(m.deleteAction.alias);
+      }
+    });
+    setUserPerms(Array.from(new Set(allItems)));
+  };
+
+  const handleClearEverything = () => {
+    setUserPerms([]);
+  };
+
+  const filteredModules = useMemo(() => {
+    return PERMISSION_MODULES.filter(m => {
+      if (permCategoryFilter !== 'ALL' && m.category !== permCategoryFilter) {
+        return false;
+      }
+      if (!permSearch.trim()) return true;
+      const q = permSearch.toLowerCase();
+      return (
+        m.labelEn.toLowerCase().includes(q) ||
+        m.labelUrdu.includes(q) ||
+        m.path.toLowerCase().includes(q) ||
+        (m.editAction && (m.editAction.label.toLowerCase().includes(q) || m.editAction.desc.toLowerCase().includes(q))) ||
+        (m.deleteAction && (m.deleteAction.label.toLowerCase().includes(q) || m.deleteAction.desc.toLowerCase().includes(q)))
+      );
+    });
+  }, [permSearch, permCategoryFilter]);
+
+  const enabledTabsCount = useMemo(() => {
+    return PERMISSION_MODULES.filter(m => userPerms.includes(m.path)).length;
+  }, [userPerms]);
+
+  const enabledEditsCount = useMemo(() => {
+    return PERMISSION_MODULES.filter(m => m.editAction && userPerms.includes(m.editAction.key)).length;
+  }, [userPerms]);
+
+  const enabledDeletesCount = useMemo(() => {
+    return PERMISSION_MODULES.filter(m => m.deleteAction && userPerms.includes(m.deleteAction.key)).length;
+  }, [userPerms]);
+
   const handleSavePerms = async () => {
     if (!selectedUserForPerms) return;
     setSavingPerms(true);
@@ -112,7 +483,7 @@ export const UserManagementPage: React.FC = () => {
       setShowPermModal(false);
       setSelectedUserForPerms(null);
       fetchUsers();
-      alert('Tab access permissions updated successfully! The user will now only see their authorized tabs.');
+      alert('Tab access and Edit/Delete permissions updated successfully! The user will immediately be constrained to their authorized permissions.');
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to update permissions');
     } finally {
@@ -532,7 +903,7 @@ export const UserManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* Dynamic Tab Permissions Modal */}
+      {/* Dynamic Tab & Action Permissions Modal */}
       {showPermModal && selectedUserForPerms && (
         <div style={{
           position: 'fixed',
@@ -540,137 +911,449 @@ export const UserManagementPage: React.FC = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(3px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 120,
-          padding: '20px'
+          padding: '16px'
         }}>
           <div style={{
-            backgroundColor: '#fff',
+            backgroundColor: '#ffffff',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '560px',
-            padding: '26px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-            maxHeight: '90vh',
+            maxWidth: '1040px',
+            height: '92vh',
+            maxHeight: '920px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                  Portal Tab Access & Permissions
-                </h2>
-                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0 0' }}>
-                  User: <strong style={{ color: '#0f172a' }}>{selectedUserForPerms.fullName}</strong> ({selectedUserForPerms.username}) &bull; Role: <span className="badge badge-info">{selectedUserForPerms.role}</span>
-                </p>
+            {/* 1. Modal Header (Fixed) */}
+            <div style={{
+              padding: '16px 24px',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#f8fafc',
+              flexShrink: 0
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  backgroundColor: '#e0f2fe',
+                  color: '#0369a1',
+                  padding: '10px',
+                  borderRadius: '10px'
+                }}>
+                  <Shield size={22} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    Portal Tab Access & Module Permissions (ماڈیول اختیارات و پرمیشنز)
+                  </h2>
+                  <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '3px 0 0 0' }}>
+                    User: <strong style={{ color: '#0f172a' }}>{selectedUserForPerms.fullName}</strong> (@{selectedUserForPerms.username}) &bull; Role: <span className="badge badge-info">{selectedUserForPerms.role}</span>
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowPermModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  fontSize: '1.1rem',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Close"
               >
                 ✕
               </button>
             </div>
 
+            {/* 2. Search, Filter & Quick Bulk Actions Bar (Fixed) */}
             <div style={{
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              borderRadius: '8px',
-              padding: '10px 14px',
-              marginBottom: '16px',
-              fontSize: '0.82rem',
-              color: '#1e40af'
+              padding: '12px 20px',
+              backgroundColor: '#ffffff',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              flexShrink: 0
             }}>
-              Select the tabs this employee is allowed to view and operate in their portal sidebar. Unchecked tabs will remain hidden and completely inaccessible.
-            </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+                {/* Search input */}
+                <div style={{ position: 'relative', flex: '1', minWidth: '240px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search module name, Urdu title, or path (e.g. sales, products, khata)..."
+                    value={permSearch}
+                    onChange={(e) => setPermSearch(e.target.value)}
+                    style={{ paddingLeft: '36px', height: '36px', fontSize: '0.85rem' }}
+                  />
+                  {permSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setPermSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>
-                Assigned Tabs ({userPerms.length} of {AVAILABLE_TABS.length})
-              </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setUserPerms(AVAILABLE_TABS.map(t => t.path))}
-                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Select All
-                </button>
-                <span style={{ color: '#cbd5e1' }}>|</span>
-                <button
-                  type="button"
-                  onClick={() => setUserPerms([])}
-                  style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Clear All
-                </button>
+                {/* Bulk Action Buttons */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleSelectAllTabs}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    title="Allow viewing all sidebar tabs"
+                  >
+                    <Eye size={13} color="#0284c7" /> All Tabs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGrantAllEdits}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    title="Grant edit access to all applicable modules"
+                  >
+                    <Edit2 size={13} color="#4f46e5" /> All Edits
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGrantAllDeletes}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    title="Grant delete access to all applicable modules"
+                  >
+                    <Trash2 size={13} color="#e11d48" /> All Deletes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGrantFullAccess}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '6px 10px', backgroundColor: '#ecfdf5', borderColor: '#a7f3d0', color: '#047857', fontWeight: 700 }}
+                    title="Grant full view + edit + delete everywhere"
+                  >
+                    ⚡ Full Access
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearEverything}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '6px 10px', color: '#dc2626', borderColor: '#fecaca' }}
+                    title="Clear all permissions"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Filter Pills */}
+              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                {[
+                  { key: 'ALL', label: 'All Modules (تمام)' },
+                  { key: 'Billing & POS', label: 'Billing & POS (سیل و بلنگ)' },
+                  { key: 'Inventory & Catalog', label: 'Inventory (اسٹاک و پروڈکٹس)' },
+                  { key: 'CRM & Accounts', label: 'Accounts (کھاتے و ادائیگیاں)' },
+                  { key: 'Operations & Staff', label: 'Staff & Delivery (وین و عملہ)' },
+                  { key: 'Administration', label: 'System (ایڈمن و کنٹرول)' },
+                ].map(cat => {
+                  const isActive = permCategoryFilter === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => setPermCategoryFilter(cat.key)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '0.76rem',
+                        fontWeight: isActive ? 700 : 500,
+                        backgroundColor: isActive ? '#0f172a' : '#f1f5f9',
+                        color: isActive ? '#ffffff' : '#475569',
+                        border: 'none',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
+            {/* 3. Main Scrollable Permissions Matrix Body (Never Squished!) */}
             <div style={{
               flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
-              border: '1px solid #e2e8f0',
-              borderRadius: '10px',
-              padding: '12px',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '10px',
-              marginBottom: '20px',
+              padding: '16px 20px',
               backgroundColor: '#f8fafc'
             }}>
-              {AVAILABLE_TABS.map((tab) => {
-                const isChecked = userPerms.includes(tab.path);
-                return (
-                  <label
-                    key={tab.path}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: isChecked ? '#e0f2fe' : '#ffffff',
-                      border: isChecked ? '1px solid #38bdf8' : '1px solid #e2e8f0',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleTabPerm(tab.path)}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#0284c7' }}
-                    />
-                    <span style={{ fontSize: '0.88rem', fontWeight: isChecked ? 700 : 500, color: isChecked ? '#0369a1' : '#334155' }}>
-                      {tab.label}
-                    </span>
-                  </label>
-                );
-              })}
+              <div style={{
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                marginBottom: '12px',
+                fontSize: '0.8rem',
+                color: '#1e40af',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '1rem' }}>💡</span>
+                <span>
+                  Admin har tab ke samne <b>View Tab (سائیڈ بار میں نظر آنا)</b>، <b>✏️ Allow Edit (ترمیم کا اختیار)</b>، aur <b>🗑️ Allow Delete (ڈیلیٹ کا اختیار)</b> apni marzi se check/uncheck kar sakte hain.
+                </span>
+              </div>
+
+              {filteredModules.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  No modules match your search filter "{permSearch}".
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {filteredModules.map((m) => {
+                    const isTabActive = userPerms.includes(m.path);
+                    const hasEdit = Boolean(m.editAction);
+                    const isEditActive = hasEdit && m.editAction ? userPerms.includes(m.editAction.key) : false;
+                    const hasDelete = Boolean(m.deleteAction);
+                    const isDeleteActive = hasDelete && m.deleteAction ? userPerms.includes(m.deleteAction.key) : false;
+
+                    return (
+                      <div
+                        key={m.path}
+                        style={{
+                          backgroundColor: '#ffffff',
+                          borderRadius: '10px',
+                          border: isTabActive ? '1.5px solid #93c5fd' : '1px solid #e2e8f0',
+                          padding: '12px 16px',
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(250px, 1.3fr) 150px 170px 170px',
+                          gap: '12px',
+                          alignItems: 'center',
+                          boxShadow: isTabActive ? '0 1px 3px rgba(37,99,235,0.06)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {/* Module Info */}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                            <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                              {m.labelEn}
+                            </span>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#f1f5f9',
+                              color: '#64748b',
+                              fontFamily: 'monospace'
+                            }}>
+                              {m.path}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>
+                            {m.labelUrdu}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
+                            Category: <b style={{ color: '#64748b' }}>{m.category}</b>
+                          </div>
+                        </div>
+
+                        {/* Column 1: Tab Access / View Checkbox */}
+                        <div>
+                          <label
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              backgroundColor: isTabActive ? '#e0f2fe' : '#f8fafc',
+                              border: isTabActive ? '1.5px solid #0284c7' : '1px solid #e2e8f0',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isTabActive}
+                              onChange={() => toggleTabPerm(m.path)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#0284c7' }}
+                            />
+                            <div>
+                              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isTabActive ? '#0369a1' : '#64748b' }}>
+                                👁️ View Tab
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: isTabActive ? '#0284c7' : '#94a3b8' }}>
+                                {isTabActive ? 'Active (نظر آئے گا)' : 'Hidden (پوشیدہ)'}
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+
+                        {/* Column 2: Edit Permission Checkbox */}
+                        <div>
+                          {hasEdit && m.editAction ? (
+                            <label
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 10px',
+                                borderRadius: '8px',
+                                backgroundColor: isEditActive ? '#e0e7ff' : '#f8fafc',
+                                border: isEditActive ? '1.5px solid #4f46e5' : '1px solid #e2e8f0',
+                                cursor: 'pointer',
+                                userSelect: 'none',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={m.editAction.desc}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isEditActive}
+                                onChange={() => toggleActionPerm(m.editAction!.key, m.editAction!.alias, m.path)}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#4f46e5' }}
+                              />
+                              <div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isEditActive ? '#3730a3' : '#64748b' }}>
+                                  ✏️ Allow Edit
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: isEditActive ? '#4f46e5' : '#94a3b8' }}>
+                                  {isEditActive ? 'Allowed (ترمیم جاری)' : 'No Edit (منع)'}
+                                </div>
+                              </div>
+                            </label>
+                          ) : (
+                            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', padding: '6px' }}>
+                              — <span style={{ fontSize: '0.7rem' }}>(View Only)</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Column 3: Delete Permission Checkbox */}
+                        <div>
+                          {hasDelete && m.deleteAction ? (
+                            <label
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 10px',
+                                borderRadius: '8px',
+                                backgroundColor: isDeleteActive ? '#fee2e2' : '#f8fafc',
+                                border: isDeleteActive ? '1.5px solid #e11d48' : '1px solid #e2e8f0',
+                                cursor: 'pointer',
+                                userSelect: 'none',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={m.deleteAction.desc}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isDeleteActive}
+                                onChange={() => toggleActionPerm(m.deleteAction!.key, m.deleteAction!.alias, m.path)}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#e11d48' }}
+                              />
+                              <div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isDeleteActive ? '#9f1239' : '#64748b' }}>
+                                  🗑️ Allow Delete
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: isDeleteActive ? '#e11d48' : '#94a3b8' }}>
+                                  {isDeleteActive ? 'Allowed (ڈیلیٹ جاری)' : 'No Delete (منع)'}
+                                </div>
+                              </div>
+                            </label>
+                          ) : (
+                            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', padding: '6px' }}>
+                              —
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setShowPermModal(false)}
-                className="btn btn-outline"
-                disabled={savingPerms}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSavePerms}
-                className="btn btn-primary"
-                disabled={savingPerms}
-                style={{ padding: '8px 20px', fontWeight: 800 }}
-              >
-                {savingPerms ? 'Saving Permissions...' : 'Save Tab Permissions'}
-              </button>
+            {/* 4. Modal Footer (Fixed) */}
+            <div style={{
+              padding: '14px 24px',
+              borderTop: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexShrink: 0
+            }}>
+              {/* Stats Summary */}
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                  Tabs Active: <strong style={{ color: '#0284c7' }}>{enabledTabsCount}</strong> of {PERMISSION_MODULES.length}
+                </span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                  Edit Permissions: <strong style={{ color: '#4f46e5' }}>{enabledEditsCount}</strong>
+                </span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                  Delete Permissions: <strong style={{ color: '#e11d48' }}>{enabledDeletesCount}</strong>
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPermModal(false)}
+                  className="btn btn-outline"
+                  disabled={savingPerms}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSavePerms}
+                  className="btn btn-primary"
+                  disabled={savingPerms}
+                  style={{ padding: '8px 24px', fontWeight: 800, minWidth: '170px' }}
+                >
+                  {savingPerms ? 'Saving Permissions...' : 'Save Permissions'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

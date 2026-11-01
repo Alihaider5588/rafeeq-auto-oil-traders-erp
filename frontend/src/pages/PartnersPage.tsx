@@ -7,6 +7,9 @@ import { useAuth } from '../context/AuthContext';
 export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIERS' }> = ({ type }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const isCustomer = type === 'CUSTOMERS';
+  const canEdit = isAdmin || (isCustomer ? Boolean(user?.permissions?.includes('action:edit_customer')) : Boolean(user?.permissions?.includes('action:edit_supplier')));
+  const canDelete = isAdmin || (isCustomer ? Boolean(user?.permissions?.includes('action:delete_customer')) : Boolean(user?.permissions?.includes('action:delete_supplier')));
   const [data, setData] = useState<any[]>([]);
   const [salesmen, setSalesmen] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -561,26 +564,28 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(item)}
-                        className="btn btn-sm btn-outline"
-                        style={{
-                          padding: '4px 8px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          color: '#4338ca',
-                          borderColor: '#c7d2fe',
-                          backgroundColor: '#eef2ff'
-                        }}
-                        title={`Edit ${type === 'CUSTOMERS' ? 'Customer & Credit Limit' : 'Supplier'} Details`}
-                      >
-                        <Edit2 size={13} /> Edit
-                      </button>
-                      {isAdmin && (
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(item)}
+                          className="btn btn-sm btn-outline"
+                          style={{
+                            padding: '4px 8px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: '#4338ca',
+                            borderColor: '#c7d2fe',
+                            backgroundColor: '#eef2ff'
+                          }}
+                          title={`Edit ${type === 'CUSTOMERS' ? 'Customer & Credit Limit' : 'Supplier'} Details`}
+                        >
+                          <Edit2 size={13} /> Edit
+                        </button>
+                      )}
+                      {canDelete && (
                         <button
                           onClick={() => handleDeleteItem(item.id, type === 'CUSTOMERS' ? item.shopName : item.companyName)}
                           className="btn btn-sm"

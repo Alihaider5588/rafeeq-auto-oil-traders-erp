@@ -26,8 +26,8 @@ router.use(authenticate);
 // Online Website Orders Queue (View, Confirm, Reject, Delete)
 router.get('/web-orders', getWebOrdersQueue);
 router.post('/web-orders/:id/confirm', authorize([Role.ADMIN, Role.OPERATOR]), confirmWebOrder);
-router.post('/web-orders/:id/reject', authorize([Role.ADMIN]), rejectWebOrder);
-router.delete('/web-orders/:id', authorize([Role.ADMIN]), deleteWebOrder);
+router.post('/web-orders/:id/reject', authorize([Role.ADMIN], ['action:delete_web_order', 'action:delete_sale']), rejectWebOrder);
+router.delete('/web-orders/:id', authorize([Role.ADMIN], ['action:delete_web_order', 'action:delete_sale']), deleteWebOrder);
 
 // Rate History query for party-product combination
 router.get('/customer-rate', getCustomerProductRate);
@@ -37,11 +37,10 @@ router.get('/', getSales);
 router.get('/:id', getSaleById);
 router.post('/', createSale); // Admins, Operators, Cashiers & Salesmen can create sales
 router.post('/:id/approve', authorize([Role.ADMIN, Role.OPERATOR]), approveSale);
-router.post('/:id/cancel', authorize([Role.ADMIN]), cancelSale);
-
-// Strict Admin-only Invoice Correction / Edit
-router.put('/:id/edit', authorize([Role.ADMIN]), editSaleInvoice);
-router.delete('/:id', authorize([Role.ADMIN]), deleteSale);
+// Invoice Cancellation, Correction & Permanent Deletion (Admin or assigned action permissions)
+router.post('/:id/cancel', authorize([Role.ADMIN], ['action:delete_sale', 'action:delete_invoice']), cancelSale);
+router.put('/:id/edit', authorize([Role.ADMIN], ['action:edit_sale', 'action:edit_invoice']), editSaleInvoice);
+router.delete('/:id', authorize([Role.ADMIN], ['action:delete_sale', 'action:delete_invoice']), deleteSale);
 
 // Sales Return / Order Wapsi with reason tracking
 router.post('/:id/return', authorize([Role.ADMIN, Role.OPERATOR]), createSalesReturn);

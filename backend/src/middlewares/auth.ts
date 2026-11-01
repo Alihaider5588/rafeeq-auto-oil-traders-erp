@@ -115,7 +115,7 @@ export const authenticate = async (
   }
 };
 
-export const authorize = (allowedRoles: Role[], requiredPerm?: string) => {
+export const authorize = (allowedRoles: Role[], requiredPerm?: string | string[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -126,9 +126,12 @@ export const authorize = (allowedRoles: Role[], requiredPerm?: string) => {
       return next();
     }
 
-    // Granular permission check: if user has been granted permission by Admin for this tab/module
-    if (requiredPerm && req.user.permissions && Array.isArray(req.user.permissions) && req.user.permissions.includes(requiredPerm)) {
-      return next();
+    // Granular permission check: if user has been granted permission by Admin for this tab/module/action
+    if (requiredPerm && req.user.permissions && Array.isArray(req.user.permissions)) {
+      const perms = Array.isArray(requiredPerm) ? requiredPerm : [requiredPerm];
+      if (perms.some((p) => req.user!.permissions!.includes(p))) {
+        return next();
+      }
     }
 
     if (!allowedRoles.includes(req.user.role)) {

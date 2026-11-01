@@ -10,6 +10,8 @@ import { useAuth } from '../context/AuthContext';
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const canEditProduct = isAdmin || Boolean(user?.permissions?.includes('action:edit_product'));
+  const canDeleteProduct = isAdmin || Boolean(user?.permissions?.includes('action:delete_product'));
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -895,14 +897,16 @@ export const ProductsPage: React.FC = () => {
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        <button
-                          onClick={() => handleOpenEdit(p)}
-                          className="btn btn-outline"
-                          style={{ padding: '5px 8px' }}
-                          title="Edit Product"
-                        >
-                          <Edit2 size={14} />
-                        </button>
+                        {canEditProduct && (
+                          <button
+                            onClick={() => handleOpenEdit(p)}
+                            className="btn btn-outline"
+                            style={{ padding: '5px 8px' }}
+                            title="Edit Product"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setSelectedProductForStock(p);
@@ -915,12 +919,12 @@ export const ProductsPage: React.FC = () => {
                         >
                           <Sliders size={14} />
                         </button>
-                        {isAdmin && (
+                        {canDeleteProduct && (
                           <button
                             onClick={() => handleDeleteProduct(p)}
                             className="btn btn-outline"
                             style={{ padding: '5px 8px', color: '#ef4444', borderColor: '#fca5a5' }}
-                            title="Permanently Delete Product from POS & DB (Admin only)"
+                            title="Permanently Delete Product from POS & DB"
                           >
                             <Trash2 size={14} />
                           </button>
