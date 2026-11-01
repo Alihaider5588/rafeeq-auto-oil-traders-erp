@@ -151,6 +151,22 @@ export const SalesmanPortal: React.FC = () => {
     loadData();
   }, []);
 
+  const sanitizeCustomerList = (list: any[]): Customer[] => {
+    if (!Array.isArray(list)) return [];
+    return list.map((c) => {
+      const isWalk = !c || c.phone === '00000000000' || c.shopName?.toLowerCase().includes('walk-in') || c.id === 'walk-in';
+      if (isWalk) {
+        return {
+          ...c,
+          currentReceivable: 0,
+          creditLimit: 0,
+          openingBalance: 0,
+        };
+      }
+      return c;
+    });
+  };
+
   const loadData = async (force: boolean = false) => {
     try {
       const now = Date.now();
@@ -176,7 +192,7 @@ export const SalesmanPortal: React.FC = () => {
           try {
             const parsed = JSON.parse(cachedCustStr);
             if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
-              setCustomers(parsed.data);
+              setCustomers(sanitizeCustomerList(parsed.data));
               hasValidCusts = true;
             }
           } catch (e) {}
@@ -204,9 +220,10 @@ export const SalesmanPortal: React.FC = () => {
       setActiveVan(vanRes?.data?.activeVan || null);
 
       if (cRes?.data?.customers) {
-        setCustomers(cRes.data.customers);
+        const sanitized = sanitizeCustomerList(cRes.data.customers);
+        setCustomers(sanitized);
         try {
-          sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: cRes.data.customers, timestamp: now }));
+          sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: sanitized, timestamp: now }));
         } catch (e) {}
       }
 
@@ -396,23 +413,22 @@ export const SalesmanPortal: React.FC = () => {
     }, 150);
   };
 
-  const previousDebt = Number(selectedCustomer?.currentReceivable || 0);
-  const customerCreditLimit = Number(selectedCustomer?.creditLimit || 0);
   const isWalkIn = Boolean(
-    selectedCustomer && (
-      selectedCustomer?.phone === '00000000000' ||
-      selectedCustomer?.shopName?.toLowerCase().includes('walk-in') ||
-      selectedCustomer?.id === 'walk-in'
-    )
+    !selectedCustomer ||
+    selectedCustomer?.phone === '00000000000' ||
+    selectedCustomer?.shopName?.toLowerCase().includes('walk-in') ||
+    selectedCustomer?.id === 'walk-in'
   );
+  const previousDebt = isWalkIn ? 0 : Number(selectedCustomer?.currentReceivable || 0);
+  const customerCreditLimit = isWalkIn ? 0 : Number(selectedCustomer?.creditLimit || 0);
 
   const totalBill = cart.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
   );
 
-  const totalPayableWithDebt = totalBill + previousDebt;
-  const netRemainingDebt = totalPayableWithDebt - receivedPayment;
+  const totalPayableWithDebt = isWalkIn ? totalBill : (totalBill + previousDebt);
+  const netRemainingDebt = isWalkIn ? Math.max(0, totalBill - receivedPayment) : (totalPayableWithDebt - receivedPayment);
   const isCreditExceeded = !isWalkIn && customerCreditLimit > 0 && netRemainingDebt > customerCreditLimit;
   const isWalkInCreditAttempt = isWalkIn && totalBill > 0 && (totalBill - receivedPayment) > 0;
 
@@ -722,11 +738,11 @@ export const SalesmanPortal: React.FC = () => {
           return updated;
         });
 
-        if (targetCustomerId && targetCustomerId !== 'walk-in') {
+        if (targetCustomerId && targetCustomerId !== 'walk-in' && !isWalkIn) {
           setCustomers((prevCusts) => {
             const updated = prevCusts.map((c) => {
               if (c.id === targetCustomerId) {
-                return { ...c, currentBalance: netRemainingDebt };
+                return { ...c, currentReceivable: netRemainingDebt };
               }
               return c;
             });
@@ -1123,7 +1139,12 @@ export const SalesmanPortal: React.FC = () => {
                 if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
                 const walkIn = customers.find(c => c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in'));
                 if (walkIn) {
-                  setSelectedCustomer(walkIn);
+                  setSelectedCustomer({
+                    ...walkIn,
+                    currentReceivable: 0,
+                    creditLimit: 0,
+                    openingBalance: 0,
+                  });
                 } else {
                   setSelectedCustomer({
                     id: 'walk-in',
@@ -1245,15 +1266,30 @@ export const SalesmanPortal: React.FC = () => {
               onChange={(e) => {
                 if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
                 const cust = customers.find((c) => c.id === e.target.value);
-                setSelectedCustomer(cust || null);
+                if (cust && (cust.phone === '00000000000' || cust.shopName.toLowerCase().includes('walk-in') || cust.id === 'walk-in')) {
+                  setSelectedCustomer({
+                    ...cust,
+                    currentReceivable: 0,
+                    creditLimit: 0,
+                    openingBalance: 0,
+                  });
+                  if (totalBill > 0 && receivedPayment === 0) {
+                    setReceivedPayment(totalBill);
+                  }
+                } else {
+                  setSelectedCustomer(cust || null);
+                }
               }}
             >
               <option value="">-- Choose Assigned Shop / Garage --</option>
-              {filteredCustomers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.shopName} ({c.ownerName}) - Balance: Rs. {Number(c.currentReceivable).toLocaleString()}
-                </option>
-              ))}
+              {filteredCustomers.map((c) => {
+                const isCustWalkIn = c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in') || c.id === 'walk-in';
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.shopName} ({c.ownerName}) - Balance: {isCustWalkIn ? 'Rs. 0 (Cash Only)' : `Rs. ${Number(c.currentReceivable).toLocaleString()}`}
+                  </option>
+                );
+              })}
             </select>
             {renderFieldErrorTag('customer')}
           </div>
@@ -1263,29 +1299,44 @@ export const SalesmanPortal: React.FC = () => {
         {customerSearchTerm && filteredCustomers.length > 0 && filteredCustomers.length <= 6 && (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Quick Pick:</span>
-            {filteredCustomers.map(c => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  setSelectedCustomer(c);
-                  if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
-                }}
-                style={{
-                  padding: '3px 10px',
-                  fontSize: '0.8rem',
-                  borderRadius: '16px',
-                  backgroundColor: selectedCustomer?.id === c.id ? '#0284c7' : '#f1f5f9',
-                  color: selectedCustomer?.id === c.id ? '#ffffff' : '#334155',
-                  border: selectedCustomer?.id === c.id ? '1px solid #0284c7' : '1px solid #cbd5e1',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                ✓ {c.shopName}
-              </button>
-            ))}
+            {filteredCustomers.map(c => {
+              const isCustWalkIn = c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in') || c.id === 'walk-in';
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => {
+                    if (fieldErrors.customer) setFieldErrors(prev => ({ ...prev, customer: '' }));
+                    if (isCustWalkIn) {
+                      setSelectedCustomer({
+                        ...c,
+                        currentReceivable: 0,
+                        creditLimit: 0,
+                        openingBalance: 0,
+                      });
+                      if (totalBill > 0 && receivedPayment === 0) {
+                        setReceivedPayment(totalBill);
+                      }
+                    } else {
+                      setSelectedCustomer(c);
+                    }
+                  }}
+                  style={{
+                    padding: '3px 10px',
+                    fontSize: '0.8rem',
+                    borderRadius: '16px',
+                    backgroundColor: selectedCustomer?.id === c.id ? '#0284c7' : '#f1f5f9',
+                    color: selectedCustomer?.id === c.id ? '#ffffff' : '#334155',
+                    border: selectedCustomer?.id === c.id ? '1px solid #0284c7' : '1px solid #cbd5e1',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  ✓ {c.shopName}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -1309,9 +1360,11 @@ export const SalesmanPortal: React.FC = () => {
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Previous Udhar / Sabqa Baqaya:</div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: Number(selectedCustomer.currentReceivable) > 0 ? '#dc2626' : '#16a34a' }}>
-                Rs. {Number(selectedCustomer.currentReceivable).toLocaleString()}
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                {isWalkIn ? 'Khata / Account Status:' : 'Previous Udhar / Sabqa Baqaya:'}
+              </div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isWalkIn ? '#16a34a' : (Number(selectedCustomer.currentReceivable) > 0 ? '#dc2626' : '#16a34a') }}>
+                {isWalkIn ? 'Rs. 0 (Counter Cash Sale)' : `Rs. ${Number(selectedCustomer.currentReceivable).toLocaleString()}`}
               </div>
               {!isWalkIn && (
                 <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
@@ -1938,9 +1991,11 @@ export const SalesmanPortal: React.FC = () => {
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Sabqa Udhar (Previous Debt):</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: previousDebt > 0 ? '#dc2626' : '#16a34a' }}>
-                    Rs. {previousDebt.toLocaleString()}
+                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    {isWalkIn ? 'Khata / Udhar Balance:' : 'Sabqa Udhar (Previous Debt):'}
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#16a34a' }}>
+                    {isWalkIn ? 'Rs. 0 (Cash Only)' : `Rs. ${previousDebt.toLocaleString()}`}
                   </div>
                 </div>
               </div>
@@ -1948,7 +2003,7 @@ export const SalesmanPortal: React.FC = () => {
               {/* Total Payable (Bill + Sabqa Udhar) */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', backgroundColor: '#e2e8f0', padding: '10px 14px', borderRadius: '8px', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>
-                  Kul Wajib-ul-Ada (Current Bill + Sabqa Udhar):
+                  {isWalkIn ? 'Kul Wajib-ul-Ada (Current Cash Bill):' : 'Kul Wajib-ul-Ada (Current Bill + Sabqa Udhar):'}
                 </span>
                 <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
                   Rs. {totalPayableWithDebt.toLocaleString()}
@@ -1981,7 +2036,7 @@ export const SalesmanPortal: React.FC = () => {
                     Pay Current Bill Only (Rs. {totalBill.toLocaleString()})
                   </button>
 
-                  {previousDebt > 0 && (
+                  {!isWalkIn && previousDebt > 0 && (
                     <button
                       type="button"
                       onClick={() => {

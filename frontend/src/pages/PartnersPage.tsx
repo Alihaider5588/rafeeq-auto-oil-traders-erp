@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, User } from '../types';
@@ -109,10 +108,16 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
             try {
               const parsed = JSON.parse(cachedCustStr);
               if (now - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
-                setData(parsed.data);
+                const sanitized = parsed.data.map((c: any) => {
+                  if (!c || c.phone === '00000000000' || c.shopName?.toLowerCase().includes('walk-in') || c.id === 'walk-in') {
+                    return { ...c, currentReceivable: 0, creditLimit: 0, openingBalance: 0 };
+                  }
+                  return c;
+                });
+                setData(sanitized);
                 cachedCustomers = true;
               }
-            } catch (e) {}
+            } catch (e) { }
           }
         }
 
@@ -126,10 +131,16 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
 
         const [cRes, uRes] = await Promise.all(promises);
         if (cRes?.data?.customers) {
-          setData(cRes.data.customers);
+          const sanitized = cRes.data.customers.map((c: any) => {
+            if (!c || c.phone === '00000000000' || c.shopName?.toLowerCase().includes('walk-in') || c.id === 'walk-in') {
+              return { ...c, currentReceivable: 0, creditLimit: 0, openingBalance: 0 };
+            }
+            return c;
+          });
+          setData(sanitized);
           try {
-            sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: cRes.data.customers, timestamp: now }));
-          } catch (e) {}
+            sessionStorage.setItem('rot_cached_customers', JSON.stringify({ data: sanitized, timestamp: now }));
+          } catch (e) { }
         }
         if (uRes?.data?.users) {
           setSalesmen((uRes.data.users || []).filter((u: any) => u.role === 'SALESMAN'));
@@ -342,7 +353,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#b91c1c' }}>{operationError}</div>
             </div>
           </div>
-          <button 
+          <button
             type="button"
             onClick={() => setOperationError('')}
             style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#991b1b', fontWeight: 900 }}
@@ -373,7 +384,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#047857' }}>{operationSuccess}</div>
             </div>
           </div>
-          <button 
+          <button
             type="button"
             onClick={() => setOperationSuccess('')}
             style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#065f46', fontWeight: 900 }}

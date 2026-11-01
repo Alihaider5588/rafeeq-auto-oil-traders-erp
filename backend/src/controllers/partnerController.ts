@@ -254,8 +254,10 @@ export const getCustomers = async (req: AuthenticatedRequest, res: Response): Pr
 
     const enrichedCustomers = customers.map((c) => {
       const match = c.notes ? c.notes.match(/\[DUAL_PARTNER:([a-zA-Z0-9_-]+)\]/) : null;
+      const isWalkIn = c.phone === '00000000000' || c.shopName.toLowerCase().includes('walk-in');
       return {
         ...c,
+        currentReceivable: isWalkIn ? new Prisma.Decimal(0) : c.currentReceivable,
         isDualPartner: Boolean(match),
         linkedSupplierId: match ? match[1] : null,
       };
@@ -292,7 +294,12 @@ export const getCustomerById = async (req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    res.json({ success: true, customer });
+    const isWalkIn = customer.phone === '00000000000' || customer.shopName.toLowerCase().includes('walk-in');
+    const safeCustomer = isWalkIn
+      ? { ...customer, currentReceivable: new Prisma.Decimal(0), creditLimit: new Prisma.Decimal(0), openingBalance: new Prisma.Decimal(0) }
+      : customer;
+
+    res.json({ success: true, customer: safeCustomer });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to retrieve customer' });
   }

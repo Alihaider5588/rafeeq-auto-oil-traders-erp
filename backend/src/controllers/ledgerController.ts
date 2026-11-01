@@ -147,8 +147,9 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
         const customer = await tx.customer.findUnique({ where: { id: data.customerId } });
         if (!customer) throw new Error('Customer not found');
 
-        const curRec = Number(customer.currentReceivable);
-        const newRec = curRec - data.amount;
+        const isWalkIn = customer.phone === '00000000000' || customer.shopName.toLowerCase().includes('walk-in');
+        const curRec = isWalkIn ? 0 : Number(customer.currentReceivable);
+        const newRec = isWalkIn ? 0 : (curRec - data.amount);
 
         await tx.customer.update({
           where: { id: customer.id },

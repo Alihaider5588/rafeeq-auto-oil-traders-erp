@@ -481,8 +481,8 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
         }
 
         // 4. Update Customer Ledger & Current Receivable
-        const currentReceivable = Number(customer.currentReceivable);
-        const newReceivable = currentReceivable + remainingBalance;
+        const currentReceivable = isWalkIn ? 0 : Number(customer.currentReceivable);
+        const newReceivable = isWalkIn ? 0 : (currentReceivable + remainingBalance);
 
         await tx.customer.update({
           where: { id: customer.id },
@@ -950,9 +950,10 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
         // 2. REVERSE OLD CUSTOMER RECEIVABLE
         const oldCust = await tx.customer.findUnique({ where: { id: existingSale.customerId } });
         if (oldCust) {
-          const oldReceivable = Number(oldCust.currentReceivable);
+          const isOldWalkIn = oldCust.phone === '00000000000' || oldCust.shopName.toLowerCase().includes('walk-in');
+          const oldReceivable = isOldWalkIn ? 0 : Number(oldCust.currentReceivable);
           const oldRemaining = Number(existingSale.remainingBalance);
-          const reversedReceivable = oldReceivable - oldRemaining;
+          const reversedReceivable = isOldWalkIn ? 0 : (oldReceivable - oldRemaining);
 
           await tx.customer.update({
             where: { id: existingSale.customerId },
@@ -1041,8 +1042,9 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
         // 6. APPLY NEW CUSTOMER RECEIVABLE & LEDGER
         const freshCust = await tx.customer.findUnique({ where: { id: data.customerId } });
         if (freshCust) {
-          const curReceivable = Number(freshCust.currentReceivable);
-          const newReceivable = curReceivable + remainingBalance;
+          const isFreshWalkIn = freshCust.phone === '00000000000' || freshCust.shopName.toLowerCase().includes('walk-in');
+          const curReceivable = isFreshWalkIn ? 0 : Number(freshCust.currentReceivable);
+          const newReceivable = isFreshWalkIn ? 0 : (curReceivable + remainingBalance);
 
           await tx.customer.update({
             where: { id: data.customerId },
@@ -1245,8 +1247,9 @@ export const createSalesReturn = async (req: AuthenticatedRequest, res: Response
       const balanceToCredit = totalRefundValue - refundAmount;
       const curCustomer = await tx.customer.findUnique({ where: { id: sale.customerId } });
       if (curCustomer) {
-        const curReceivable = Number(curCustomer.currentReceivable);
-        const newReceivable = curReceivable - balanceToCredit;
+        const isWalkInCust = curCustomer.phone === '00000000000' || curCustomer.shopName.toLowerCase().includes('walk-in');
+        const curReceivable = isWalkInCust ? 0 : Number(curCustomer.currentReceivable);
+        const newReceivable = isWalkInCust ? 0 : (curReceivable - balanceToCredit);
 
         await tx.customer.update({
           where: { id: sale.customerId },
