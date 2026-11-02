@@ -258,6 +258,123 @@ export const getCustomerProductRate = async (req: AuthenticatedRequest, res: Res
   }
 };
 
+// Customer/Party-Wide Rate History lookup (returns all products and their last negotiated rates for a customer)
+export const getCustomerAllRates = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { customerId } = req.query;
+
+    if (!customerId) {
+      // If no customerId provided, return recent customer rates from customerProductRate
+      let rates: any[] = [];
+      if ((prisma as any).customerProductRate) {
+        rates = await (prisma as any).customerProductRate.findMany({
+          take: 100,
+          orderBy: { lastSaleDate: 'desc' },
+          include: {
+            customer: {
+              select: { id: true, shopName: true, ownerName: true, phone: true }
+            },
+            product: {
+              include: { unit: true, primaryUnit: true }
+            }
+          }
+        });
+      }
+
+      res.json({
+        success: true,
+        rates: rates.map((r: any) => ({
+          id: r.id,
+          customerId: r.customerId,
+          customer: r.customer,
+          product: r.product,
+          unitType: r.lastUnitType,
+          lastRate: Number(r.lastUnitPrice),
+          lastInvoice: r.lastInvoiceNumber,
+          lastDate: r.lastSaleDate,
+        }))
+      });
+      return;
+    }
+
+    const cId = String(customerId);
+    const ratesMap = new Map<string, any>();
+
+    // 1. Check customerProductRate table first
+    if ((prisma as any).customerProductRate) {
+      const recordedRates = await (prisma as any).customerProductRate.findMany({
+        where: { customerId: cId },
+        include: {
+          product: {
+            include: { unit: true, primaryUnit: true }
+          }
+        },
+        orderBy: { lastSaleDate: 'desc' }
+      });
+
+      for (const r of recordedRates) {
+        if (r.product) {
+          ratesMap.set(r.productId, {
+            id: r.id,
+            productId: r.productId,
+            product: r.product,
+            unitType: r.lastUnitType,
+            lastRate: Number(r.lastUnitPrice),
+            lastInvoice: r.lastInvoiceNumber,
+            lastDate: r.lastSaleDate,
+          });
+        }
+      }
+    }
+
+    // 2. Also check recent saleItems for this customer in completed sales (in case some sales occurred before upsert)
+    const recentSaleItems = await prisma.saleItem.findMany({
+      where: {
+        sale: {
+          customerId: cId,
+          status: OrderStatus.COMPLETED
+        }
+      },
+      include: {
+        sale: {
+          select: { invoiceNumber: true, saleDate: true }
+        },
+        product: {
+          include: { unit: true, primaryUnit: true }
+        }
+      },
+      orderBy: {
+        sale: { saleDate: 'desc' }
+      },
+      take: 200
+    });
+
+    for (const it of recentSaleItems) {
+      if (it.product && !ratesMap.has(it.productId)) {
+        ratesMap.set(it.productId, {
+          id: it.id,
+          productId: it.productId,
+          product: it.product,
+          unitType: it.unitType || 'SECONDARY',
+          lastRate: Number(it.unitPrice),
+          lastInvoice: it.sale.invoiceNumber,
+          lastDate: it.sale.saleDate,
+        });
+      }
+    }
+
+    const ratesList = Array.from(ratesMap.values());
+
+    res.json({
+      success: true,
+      rates: ratesList
+    });
+  } catch (error) {
+    console.error('getCustomerAllRates error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve customer rates' });
+  }
+};
+
 export const createSale = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const parsed = saleSchema.safeParse(req.body);

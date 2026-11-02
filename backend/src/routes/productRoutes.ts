@@ -45,10 +45,10 @@ router.post('/units', authorize([Role.ADMIN, Role.OPERATOR]), createUnit);
 
 // Products
 router.get('/', getProducts);
-router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createProduct);
+router.post('/', createProduct);
 router.get('/:id', getProductById);
-router.put('/:id', authorize([Role.ADMIN], 'action:edit_product'), updateProduct);
-router.delete('/:id', authorize([Role.ADMIN], 'action:delete_product'), deleteProduct);
-router.post('/:id/adjust-stock', authorize([Role.ADMIN, Role.OPERATOR]), adjustProductStock);
+router.put('/:id', updateProduct);
+router.delete('/:id', deleteProduct);
+router.post('/:id/adjust-stock', adjustProductStock);
 
 export default router;

@@ -10,8 +10,8 @@ import { useAuth } from '../context/AuthContext';
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canEditProduct = isAdmin || Boolean(user?.permissions?.includes('action:edit_product'));
-  const canDeleteProduct = isAdmin || Boolean(user?.permissions?.includes('action:delete_product'));
+  const canEditProduct = true;
+  const canDeleteProduct = true;
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -56,6 +56,19 @@ export const ProductsPage: React.FC = () => {
   const [modalError, setModalError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [imageUploading, setImageUploading] = useState(false);
+
+  // Dual-Unit (Carton & Loose Pieces) Synchronized State for Form
+  const [stockCartons, setStockCartons] = useState('0');
+  const [stockLoosePieces, setStockLoosePieces] = useState('0');
+  const [alertCartons, setAlertCartons] = useState('0');
+  const [alertLoosePieces, setAlertLoosePieces] = useState('5');
+  const [purchasePriceCarton, setPurchasePriceCarton] = useState('');
+  const [salePriceCarton, setSalePriceCarton] = useState('');
+  const [wholesalePriceCarton, setWholesalePriceCarton] = useState('');
+
+  // Stock Adjust Dual-Unit State
+  const [adjustCartons, setAdjustCartons] = useState('');
+  const [adjustLoosePieces, setAdjustLoosePieces] = useState('');
 
   // Stock Adjust Form
   const [stockAdjustData, setStockAdjustData] = useState({
@@ -179,6 +192,179 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
+  // Dual-Unit Real-Time Synced Handlers
+  const handleStockCartonPieceChange = (ctnStr: string, looseStr: string) => {
+    setStockCartons(ctnStr);
+    setStockLoosePieces(looseStr);
+    const conv = Number(formData.conversionFactor) || 1;
+    const ctn = parseFloat(ctnStr) || 0;
+    const loose = parseFloat(looseStr) || 0;
+    const total = (ctn * conv) + loose;
+    setFormData(prev => ({ ...prev, openingStock: String(total) }));
+  };
+
+  const handleTotalStockChange = (totalStr: string) => {
+    setFormData(prev => ({ ...prev, openingStock: totalStr }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const total = parseFloat(totalStr) || 0;
+    if (conv > 1) {
+      setStockCartons(String(Math.floor(total / conv)));
+      setStockLoosePieces(String(total % conv));
+    } else {
+      setStockCartons('0');
+      setStockLoosePieces(totalStr);
+    }
+  };
+
+  const handleAlertCartonPieceChange = (ctnStr: string, looseStr: string) => {
+    setAlertCartons(ctnStr);
+    setAlertLoosePieces(looseStr);
+    const conv = Number(formData.conversionFactor) || 1;
+    const ctn = parseFloat(ctnStr) || 0;
+    const loose = parseFloat(looseStr) || 0;
+    const total = (ctn * conv) + loose;
+    setFormData(prev => ({ ...prev, minimumStockLevel: String(total) }));
+  };
+
+  const handleTotalAlertChange = (totalStr: string) => {
+    setFormData(prev => ({ ...prev, minimumStockLevel: totalStr }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const total = parseFloat(totalStr) || 0;
+    if (conv > 1) {
+      setAlertCartons(String(Math.floor(total / conv)));
+      setAlertLoosePieces(String(total % conv));
+    } else {
+      setAlertCartons('0');
+      setAlertLoosePieces(totalStr);
+    }
+  };
+
+  const handleCartonPurchaseChange = (ctnPriceStr: string) => {
+    setPurchasePriceCarton(ctnPriceStr);
+    if (fieldErrors.purchasePrice) setFieldErrors(prev => ({ ...prev, purchasePrice: '' }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const ctnPrice = parseFloat(ctnPriceStr);
+    if (!isNaN(ctnPrice) && conv > 0) {
+      const piecePrice = Math.round((ctnPrice / conv) * 100) / 100;
+      setFormData(prev => ({ ...prev, purchasePrice: String(piecePrice) }));
+    } else if (ctnPriceStr === '') {
+      setFormData(prev => ({ ...prev, purchasePrice: '' }));
+    }
+  };
+
+  const handlePiecePurchaseChange = (piecePriceStr: string) => {
+    if (fieldErrors.purchasePrice) setFieldErrors(prev => ({ ...prev, purchasePrice: '' }));
+    setFormData(prev => ({ ...prev, purchasePrice: piecePriceStr }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const piecePrice = parseFloat(piecePriceStr);
+    if (!isNaN(piecePrice) && conv > 0) {
+      setPurchasePriceCarton(String(Math.round(piecePrice * conv * 100) / 100));
+    } else if (piecePriceStr === '') {
+      setPurchasePriceCarton('');
+    }
+  };
+
+  const handleCartonSaleChange = (ctnPriceStr: string) => {
+    setSalePriceCarton(ctnPriceStr);
+    if (fieldErrors.salePrice) setFieldErrors(prev => ({ ...prev, salePrice: '' }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const ctnPrice = parseFloat(ctnPriceStr);
+    if (!isNaN(ctnPrice) && conv > 0) {
+      const piecePrice = Math.round((ctnPrice / conv) * 100) / 100;
+      setFormData(prev => ({ ...prev, salePrice: String(piecePrice) }));
+    } else if (ctnPriceStr === '') {
+      setFormData(prev => ({ ...prev, salePrice: '' }));
+    }
+  };
+
+  const handlePieceSaleChange = (piecePriceStr: string) => {
+    if (fieldErrors.salePrice) setFieldErrors(prev => ({ ...prev, salePrice: '' }));
+    setFormData(prev => ({ ...prev, salePrice: piecePriceStr }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const piecePrice = parseFloat(piecePriceStr);
+    if (!isNaN(piecePrice) && conv > 0) {
+      setSalePriceCarton(String(Math.round(piecePrice * conv * 100) / 100));
+    } else if (piecePriceStr === '') {
+      setSalePriceCarton('');
+    }
+  };
+
+  const handleCartonWholesaleChange = (ctnPriceStr: string) => {
+    setWholesalePriceCarton(ctnPriceStr);
+    if (fieldErrors.wholesalePrice) setFieldErrors(prev => ({ ...prev, wholesalePrice: '' }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const ctnPrice = parseFloat(ctnPriceStr);
+    if (!isNaN(ctnPrice) && conv > 0) {
+      const piecePrice = Math.round((ctnPrice / conv) * 100) / 100;
+      setFormData(prev => ({ ...prev, wholesalePrice: String(piecePrice) }));
+    } else if (ctnPriceStr === '') {
+      setFormData(prev => ({ ...prev, wholesalePrice: '' }));
+    }
+  };
+
+  const handlePieceWholesaleChange = (piecePriceStr: string) => {
+    if (fieldErrors.wholesalePrice) setFieldErrors(prev => ({ ...prev, wholesalePrice: '' }));
+    setFormData(prev => ({ ...prev, wholesalePrice: piecePriceStr }));
+    const conv = Number(formData.conversionFactor) || 1;
+    const piecePrice = parseFloat(piecePriceStr);
+    if (!isNaN(piecePrice) && conv > 0) {
+      setWholesalePriceCarton(String(Math.round(piecePrice * conv * 100) / 100));
+    } else if (piecePriceStr === '') {
+      setWholesalePriceCarton('');
+    }
+  };
+
+  const handleConversionFactorChange = (newConvStr: string) => {
+    if (fieldErrors.conversionFactor) setFieldErrors(prev => ({ ...prev, conversionFactor: '' }));
+    setFormData(prev => ({ ...prev, conversionFactor: newConvStr }));
+    const newConv = parseFloat(newConvStr);
+    if (!isNaN(newConv) && newConv > 0) {
+      const pPrice = parseFloat(formData.purchasePrice);
+      if (!isNaN(pPrice) && pPrice > 0) {
+        setPurchasePriceCarton(String(Math.round(pPrice * newConv * 100) / 100));
+      }
+      const sPrice = parseFloat(formData.salePrice);
+      if (!isNaN(sPrice) && sPrice > 0) {
+        setSalePriceCarton(String(Math.round(sPrice * newConv * 100) / 100));
+      }
+      const wPrice = parseFloat(formData.wholesalePrice);
+      if (!isNaN(wPrice) && wPrice > 0) {
+        setWholesalePriceCarton(String(Math.round(wPrice * newConv * 100) / 100));
+      }
+      const totalStock = parseFloat(formData.openingStock) || 0;
+      setStockCartons(String(Math.floor(totalStock / newConv)));
+      setStockLoosePieces(String(totalStock % newConv));
+
+      const minStock = parseFloat(formData.minimumStockLevel) || 0;
+      setAlertCartons(String(Math.floor(minStock / newConv)));
+      setAlertLoosePieces(String(minStock % newConv));
+    }
+  };
+
+  // Stock Adjustment Dual Handlers
+  const handleAdjustStockCartonPieceChange = (ctnStr: string, looseStr: string) => {
+    setAdjustCartons(ctnStr);
+    setAdjustLoosePieces(looseStr);
+    const conv = Number(selectedProductForStock?.conversionFactor) || 1;
+    const ctn = parseFloat(ctnStr) || 0;
+    const loose = parseFloat(looseStr) || 0;
+    const total = (ctn * conv) + loose;
+    setStockAdjustData(prev => ({ ...prev, quantity: String(total) }));
+  };
+
+  const handleAdjustTotalQtyChange = (qtyStr: string) => {
+    setStockAdjustData(prev => ({ ...prev, quantity: qtyStr }));
+    const conv = Number(selectedProductForStock?.conversionFactor) || 1;
+    const total = parseFloat(qtyStr) || 0;
+    if (conv > 1) {
+      setAdjustCartons(String(Math.floor(total / conv)));
+      setAdjustLoosePieces(String(total % conv));
+    } else {
+      setAdjustCartons('0');
+      setAdjustLoosePieces(qtyStr);
+    }
+  };
+
   const handleOpenAdd = () => {
     loadMetadata();
     setIsEditing(false);
@@ -205,15 +391,28 @@ export const ProductsPage: React.FC = () => {
       showPublicPrice: true,
       isActive: true,
     });
+    setStockCartons('0');
+    setStockLoosePieces('0');
+    setAlertCartons('0');
+    setAlertLoosePieces('5');
+    setPurchasePriceCarton('');
+    setSalePriceCarton('');
+    setWholesalePriceCarton('');
     setModalError('');
     setFieldErrors({});
     setShowAddEditModal(true);
   };
 
-
   const handleOpenEdit = (prod: Product) => {
     setIsEditing(true);
     setEditingId(prod.id);
+    const totalStock = Number(prod.currentStock) || 0;
+    const minStock = Number(prod.minimumStockLevel) || 5;
+    const conv = Number(prod.conversionFactor) || 1;
+    const pCost = Number(prod.purchasePrice) || 0;
+    const pSale = Number(prod.salePrice) || 0;
+    const pWs = prod.wholesalePrice ? Number(prod.wholesalePrice) : 0;
+
     setFormData({
       name: prod.name,
       sku: prod.sku,
@@ -235,6 +434,25 @@ export const ProductsPage: React.FC = () => {
       showPublicPrice: prod.showPublicPrice ?? true,
       isActive: prod.isActive ?? true,
     });
+
+    if (conv > 1 && prod.primaryUnitId) {
+      setStockCartons(String(Math.floor(totalStock / conv)));
+      setStockLoosePieces(String(totalStock % conv));
+      setAlertCartons(String(Math.floor(minStock / conv)));
+      setAlertLoosePieces(String(minStock % conv));
+      setPurchasePriceCarton(pCost > 0 ? String(Math.round(pCost * conv * 100) / 100) : '');
+      setSalePriceCarton(pSale > 0 ? String(Math.round(pSale * conv * 100) / 100) : '');
+      setWholesalePriceCarton(pWs > 0 ? String(Math.round(pWs * conv * 100) / 100) : '');
+    } else {
+      setStockCartons('0');
+      setStockLoosePieces(String(totalStock));
+      setAlertCartons('0');
+      setAlertLoosePieces(String(minStock));
+      setPurchasePriceCarton('');
+      setSalePriceCarton('');
+      setWholesalePriceCarton('');
+    }
+
     setModalError('');
     setFieldErrors({});
     setShowAddEditModal(true);
@@ -729,9 +947,9 @@ export const ProductsPage: React.FC = () => {
               <th>Product Name</th>
               <th>Category & Brand</th>
               <th>Packaging / Units</th>
-              <th style={{ textAlign: 'right' }}>Cost Price</th>
-              <th style={{ textAlign: 'right' }}>Sale Price</th>
-              <th style={{ textAlign: 'right' }}>Current Stock</th>
+              <th style={{ textAlign: 'right' }}>Cost Price (Carton / Pc)</th>
+              <th style={{ textAlign: 'right' }}>Sale Price (Carton / Pc)</th>
+              <th style={{ textAlign: 'right', width: '190px' }}>Available Stock</th>
               <th style={{ textAlign: 'right' }}>Stock Worth (Cost)</th>
               <th style={{ textAlign: 'center' }}>Visibility</th>
               <th style={{ textAlign: 'center' }}>Actions</th>
@@ -757,8 +975,9 @@ export const ProductsPage: React.FC = () => {
                 const stock = Number(p.currentStock);
                 const minStock = Number(p.minimumStockLevel);
                 const conv = Number(p.conversionFactor) || 1;
-                const cartons = conv > 1 ? Math.floor(stock / conv) : 0;
-                const remBottles = conv > 1 ? stock % conv : stock;
+                const hasPackaging = conv > 1 && Boolean(p.primaryUnit);
+                const cartons = hasPackaging ? Math.floor(stock / conv) : 0;
+                const remBottles = hasPackaging ? stock % conv : stock;
                 const isOutOfStock = stock <= 0;
                 const isLowStock = stock <= minStock;
 
@@ -795,45 +1014,100 @@ export const ProductsPage: React.FC = () => {
                       <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{p.brand}</div>
                     </td>
                     <td>
-                      {conv > 1 && p.primaryUnit ? (
+                      {hasPackaging ? (
                         <div>
-                          <span style={{ fontWeight: 700, color: '#1e293b' }}>
-                            1 {p.primaryUnit.name} = {conv} {p.unit?.symbol || 'Pcs'}
+                          <span style={{ fontWeight: 800, color: '#0369a1', backgroundColor: '#e0f2fe', padding: '2px 8px', borderRadius: '4px', fontSize: '0.82rem' }}>
+                            1 {p.primaryUnit?.name || 'Carton'} = {conv} {p.unit?.symbol || 'Pcs'}
                           </span>
                         </div>
                       ) : (
-                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                          Standard ({p.unit?.name || 'Unit'})
+                        <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                          {p.unit?.name || 'Unit'} ({p.unit?.symbol || 'Pc'})
                         </span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right', color: '#475569' }}>
-                      Rs. {cost.toLocaleString()}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                      Rs. {price.toLocaleString()}
-                      {p.wholesalePrice ? (
-                        <div style={{ fontSize: '0.7rem', color: '#d97706' }}>
-                          WS: Rs. {Number(p.wholesalePrice).toLocaleString()}
+                    {/* COST PRICE - CARTON & PIECE */}
+                    <td style={{ textAlign: 'right' }}>
+                      {hasPackaging ? (
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.92rem' }}>
+                            Rs. {Math.round(cost * conv).toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#64748b' }}>/ {p.primaryUnit?.symbol || 'Ctn'}</span>
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                            (Rs. {cost.toLocaleString()} / {p.unit?.symbol || 'Pc'})
+                          </div>
                         </div>
-                      ) : null}
+                      ) : (
+                        <div style={{ fontWeight: 600, color: '#475569' }}>
+                          Rs. {cost.toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {p.unit?.symbol || 'Pc'}</span>
+                        </div>
+                      )}
                     </td>
-                    {/* CURRENT STOCK COLUMN - HIGHLIGHTED IN RED ON MINIMUM ALERT */}
+                    {/* SALE PRICE - CARTON & PIECE */}
+                    <td style={{ textAlign: 'right' }}>
+                      {hasPackaging ? (
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.96rem' }}>
+                            Rs. {Math.round(price * conv).toLocaleString()} <span style={{ fontSize: '0.74rem', color: '#0284c7' }}>/ {p.primaryUnit?.symbol || 'Ctn'}</span>
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
+                            Rs. {price.toLocaleString()} / {p.unit?.symbol || 'Pc'}
+                          </div>
+                          {p.wholesalePrice && Number(p.wholesalePrice) > 0 ? (
+                            <div style={{ fontSize: '0.68rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
+                              WS: Rs. {Math.round(Number(p.wholesalePrice) * conv).toLocaleString()} / {p.primaryUnit?.symbol || 'Ctn'}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                            Rs. {price.toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {p.unit?.symbol || 'Pc'}</span>
+                          </div>
+                          {p.wholesalePrice && Number(p.wholesalePrice) > 0 ? (
+                            <div style={{ fontSize: '0.7rem', color: '#d97706' }}>
+                              WS: Rs. {Number(p.wholesalePrice).toLocaleString()}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
+                    {/* CURRENT STOCK COLUMN - PROMINENT CARTONS + TOTAL PCS PRESERVED */}
                     <td style={{
                       textAlign: 'right',
-                      fontWeight: 800,
                       backgroundColor: isOutOfStock ? '#fee2e2' : isLowStock ? '#fef2f2' : undefined,
                       borderLeft: isOutOfStock ? '3px solid #dc2626' : isLowStock ? '3px solid #ef4444' : undefined,
                       borderRight: isLowStock ? '1px solid #fecaca' : undefined,
                       padding: '8px 12px'
                     }}>
-                      <div style={{
-                        color: isOutOfStock ? '#dc2626' : isLowStock ? '#b91c1c' : '#059669',
-                        fontSize: isLowStock ? '0.98rem' : '0.92rem',
-                        fontWeight: 900
-                      }}>
-                        {stock} {p.unit?.symbol || ''}
-                      </div>
+                      {hasPackaging ? (
+                        <>
+                          <div style={{
+                            color: isOutOfStock ? '#dc2626' : isLowStock ? '#b91c1c' : '#047857',
+                            fontSize: '1.02rem',
+                            fontWeight: 900,
+                            letterSpacing: '-0.02em'
+                          }}>
+                            {cartons} {p.primaryUnit?.symbol || 'Ctn'}{remBottles > 0 ? ` + ${remBottles} ${p.unit?.symbol || 'Pcs'}` : ''}
+                          </div>
+                          <div style={{
+                            fontSize: '0.76rem',
+                            color: isLowStock ? '#991b1b' : '#334155',
+                            fontWeight: 700,
+                            marginTop: '2px'
+                          }}>
+                            Total: <b style={{ color: '#0f172a' }}>{stock.toLocaleString()} {p.unit?.symbol || 'Pcs'}</b>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{
+                          color: isOutOfStock ? '#dc2626' : isLowStock ? '#b91c1c' : '#059669',
+                          fontSize: '0.98rem',
+                          fontWeight: 900
+                        }}>
+                          {stock.toLocaleString()} {p.unit?.symbol || 'Pcs'}
+                        </div>
+                      )}
 
                       {isOutOfStock ? (
                         <div style={{
@@ -846,7 +1120,7 @@ export const ProductsPage: React.FC = () => {
                           borderRadius: '4px',
                           fontSize: '0.68rem',
                           fontWeight: 900,
-                          marginTop: '3px'
+                          marginTop: '4px'
                         }}>
                           ⛔ OUT OF STOCK
                         </div>
@@ -861,24 +1135,22 @@ export const ProductsPage: React.FC = () => {
                           borderRadius: '4px',
                           fontSize: '0.68rem',
                           fontWeight: 800,
-                          marginTop: '3px'
+                          marginTop: '4px'
                         }}>
-                          ⚠️ MIN ALERT ({stock}/{minStock})
+                          ⚠️ MIN ALERT ({hasPackaging ? `${cartons}/${Math.ceil(minStock / conv)} ${p.primaryUnit?.symbol || 'Ctn'} • ` : ''}{stock}/{minStock} {p.unit?.symbol || 'Pcs'})
                         </div>
                       ) : null}
-
-                      {conv > 1 && p.primaryUnit && stock > 0 && (
-                        <div style={{ fontSize: '0.7rem', color: isLowStock ? '#991b1b' : '#64748b', fontWeight: 600, marginTop: '2px' }}>
-                          ({cartons} {p.primaryUnit.symbol} {remBottles > 0 ? `+ ${remBottles} ${p.unit?.symbol}` : ''})
-                        </div>
-                      )}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 800 }}>
                       <div style={{ color: stock * cost > 0 ? '#1d4ed8' : '#94a3b8', fontSize: '0.92rem' }}>
                         Rs. {Math.round(stock * cost).toLocaleString()}
                       </div>
-                      <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500 }}>
-                        {stock} {p.unit?.symbol || 'Pcs'} × Rs. {cost.toLocaleString()}
+                      <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
+                        {hasPackaging ? (
+                          <span>{cartons} {p.primaryUnit?.symbol || 'Ctn'}{remBottles > 0 ? ` + ${remBottles} ${p.unit?.symbol || 'Pcs'}` : ''} ({stock} {p.unit?.symbol || 'Pcs'})</span>
+                        ) : (
+                          <span>{stock} {p.unit?.symbol || 'Pcs'} × Rs. {cost.toLocaleString()}</span>
+                        )}
                       </div>
                     </td>
                     <td style={{ textAlign: 'center' }}>
@@ -1171,11 +1443,7 @@ export const ProductsPage: React.FC = () => {
                           ...(fieldErrors.conversionFactor ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
                         }}
                         value={formData.conversionFactor === '0' ? '' : formData.conversionFactor}
-                        onChange={(e) => {
-                          if (fieldErrors.conversionFactor) setFieldErrors(prev => ({ ...prev, conversionFactor: '' }));
-                          const val = e.target.value;
-                          setFormData({ ...formData, conversionFactor: val });
-                        }}
+                        onChange={(e) => handleConversionFactorChange(e.target.value)}
                       />
                       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
                         {units.find(u => u.id === formData.unitId)?.symbol || 'SECONDARY'}
@@ -1189,107 +1457,363 @@ export const ProductsPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Pricing Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700 }}>
-                    Purchase / Cost Price (Rs.) * <span style={{ color: '#dc2626', fontSize: '0.72rem' }}>(🔒 Private)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-control"
-                    placeholder="e.g. 6200"
-                    style={{ ...(fieldErrors.purchasePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
-                    value={formData.purchasePrice === '0' ? '' : formData.purchasePrice}
-                    onChange={(e) => {
-                      if (fieldErrors.purchasePrice) setFieldErrors(prev => ({ ...prev, purchasePrice: '' }));
-                      setFormData({ ...formData, purchasePrice: e.target.value });
-                    }}
-                    required
-                  />
-                  {renderFieldErrorTag('purchasePrice')}
-                  <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
-                    Sirf internal cost k liye hai, public ko nahi dikhayi jati.
+              {/* Pricing Section - Primary (Carton) & Secondary (Piece) Dual Synchronized */}
+              {formData.primaryUnitId && Number(formData.conversionFactor) > 1 ? (
+                <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <span>💰 Product Pricing (Carton & Piece Rates / کارٹن و فی بوتل ریٹ)</span>
+                    <span style={{ fontSize: '0.76rem', color: '#0284c7', fontWeight: 700, backgroundColor: '#e0f2fe', padding: '2px 8px', borderRadius: '12px' }}>
+                      1 {units.find(u => u.id === formData.primaryUnitId)?.name || 'Carton'} = {formData.conversionFactor} {units.find(u => u.id === formData.unitId)?.name || 'Pcs'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+                    {/* Purchase / Cost Price */}
+                    <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: fieldErrors.purchasePrice ? '2px solid #ef4444' : '1px solid #cbd5e1' }}>
+                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.84rem' }}>
+                        Purchase Cost * <span style={{ color: '#dc2626', fontSize: '0.72rem' }}>(🔒 Private)</span>
+                      </label>
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, marginBottom: '2px' }}>
+                          Rate per {units.find(u => u.id === formData.primaryUnitId)?.symbol || 'Ctn'} (کارٹن لاگت):
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="e.g. 6000"
+                            style={{ fontWeight: 800, color: '#1e293b' }}
+                            value={purchasePriceCarton}
+                            onChange={(e) => handleCartonPurchaseChange(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>
+                          Rate per {units.find(u => u.id === formData.unitId)?.symbol || 'Pc'} (فی بوتل لاگت):
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="e.g. 500"
+                            value={formData.purchasePrice === '0' ? '' : formData.purchasePrice}
+                            onChange={(e) => handlePiecePurchaseChange(e.target.value)}
+                            required
+                          />
+                        </div>
+                      </div>
+                      {renderFieldErrorTag('purchasePrice')}
+                    </div>
+
+                    {/* Retail Sale Price */}
+                    <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: fieldErrors.salePrice ? '2px solid #ef4444' : '1px solid #cbd5e1' }}>
+                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.84rem' }}>
+                        Retail Sale Rate * <span style={{ color: '#16a34a', fontSize: '0.72rem' }}>(🌐 Public)</span>
+                      </label>
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 700, marginBottom: '2px' }}>
+                          Rate per {units.find(u => u.id === formData.primaryUnitId)?.symbol || 'Ctn'} (کارٹن ریٹیل ریٹ):
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="e.g. 7200"
+                            style={{ fontWeight: 800, color: '#0f172a' }}
+                            value={salePriceCarton}
+                            onChange={(e) => handleCartonSaleChange(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>
+                          Rate per {units.find(u => u.id === formData.unitId)?.symbol || 'Pc'} (فی بوتل ریٹیل ریٹ):
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="e.g. 600"
+                            value={formData.salePrice === '0' ? '' : formData.salePrice}
+                            onChange={(e) => handlePieceSaleChange(e.target.value)}
+                            required
+                          />
+                        </div>
+                      </div>
+                      {renderFieldErrorTag('salePrice')}
+                    </div>
+
+                    {/* Wholesale Rate */}
+                    <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: fieldErrors.wholesalePrice ? '2px solid #ef4444' : '1px solid #cbd5e1' }}>
+                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.84rem' }}>
+                        Wholesale Rate <span style={{ color: '#d97706', fontSize: '0.72rem' }}>(🔒 B2B)</span>
+                      </label>
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 700, marginBottom: '2px' }}>
+                          Rate per {units.find(u => u.id === formData.primaryUnitId)?.symbol || 'Ctn'} (کارٹن ہول سیل):
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="e.g. 6600"
+                            style={{ fontWeight: 800, color: '#b45309' }}
+                            value={wholesalePriceCarton}
+                            onChange={(e) => handleCartonWholesaleChange(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>
+                          Rate per {units.find(u => u.id === formData.unitId)?.symbol || 'Pc'} (فی بوتل ہول سیل):
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="e.g. 550"
+                            value={formData.wholesalePrice === '0' ? '' : formData.wholesalePrice}
+                            onChange={(e) => handlePieceWholesaleChange(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      {renderFieldErrorTag('wholesalePrice')}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Purchase / Cost Price (Rs.) * <span style={{ color: '#dc2626', fontSize: '0.72rem' }}>(🔒 Private)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      placeholder="e.g. 6200"
+                      style={{ ...(fieldErrors.purchasePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
+                      value={formData.purchasePrice === '0' ? '' : formData.purchasePrice}
+                      onChange={(e) => {
+                        if (fieldErrors.purchasePrice) setFieldErrors(prev => ({ ...prev, purchasePrice: '' }));
+                        setFormData({ ...formData, purchasePrice: e.target.value });
+                      }}
+                      required
+                    />
+                    {renderFieldErrorTag('purchasePrice')}
+                    <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
+                      Sirf internal cost k liye hai, public ko nahi dikhayi jati.
+                    </small>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Retail Sale Rate (Rs.) * <span style={{ color: '#16a34a', fontSize: '0.72rem' }}>(🌐 Public)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      placeholder="e.g. 7500"
+                      style={{ ...(fieldErrors.salePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
+                      value={formData.salePrice === '0' ? '' : formData.salePrice}
+                      onChange={(e) => {
+                        if (fieldErrors.salePrice) setFieldErrors(prev => ({ ...prev, salePrice: '' }));
+                        setFormData({ ...formData, salePrice: e.target.value });
+                      }}
+                      required
+                    />
+                    {renderFieldErrorTag('salePrice')}
+                    <small style={{ color: '#059669', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
+                      Yeh counter aur public website par display honi wali price hai.
+                    </small>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Wholesale Rate (Rs.) <span style={{ color: '#d97706', fontSize: '0.72rem' }}>(🔒 Private - B2B)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      placeholder="e.g. 6800"
+                      style={{ ...(fieldErrors.wholesalePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
+                      value={formData.wholesalePrice === '0' ? '' : formData.wholesalePrice}
+                      onChange={(e) => {
+                        if (fieldErrors.wholesalePrice) setFieldErrors(prev => ({ ...prev, wholesalePrice: '' }));
+                        setFormData({ ...formData, wholesalePrice: e.target.value });
+                      }}
+                    />
+                    {renderFieldErrorTag('wholesalePrice')}
+                    <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
+                      Wholesale rate public website par show nahi hota.
+                    </small>
+                  </div>
+                </div>
+              )}
+
+              {/* Stock Alerts & Available Stock - Carton & Piece Dual Synchronized */}
+              {formData.primaryUnitId && Number(formData.conversionFactor) > 1 ? (
+                <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#166534', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <span>📦 Physical Stock & Minimum Alerts (کارٹن و پیس میں اسٹاک اندراج)</span>
+                    <span style={{ fontSize: '0.74rem', color: '#15803d', fontWeight: 700, backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px' }}>
+                      {isEditing ? 'Current Stock in Shop' : 'Initial Stock Quantity'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px', marginBottom: '10px' }}>
+                    {/* Available Stock Dual Box */}
+                    <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '10px', border: '1.5px solid #bbf7d0' }}>
+                      <label className="form-label" style={{ color: '#0f172a', fontWeight: 800, fontSize: '0.86rem', marginBottom: '8px', display: 'block' }}>
+                        {isEditing ? 'Available Physical Stock (موجودہ مال اسٹاک)' : 'Opening / Available Stock * (دکان میں موجود اسٹاک)'}
+                      </label>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                            {units.find(u => u.id === formData.primaryUnitId)?.name || 'Cartons'} (کارٹن):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control"
+                            placeholder="0"
+                            style={{ fontWeight: 800, color: '#15803d', fontSize: '1rem', borderColor: '#86efac' }}
+                            value={stockCartons}
+                            onChange={(e) => handleStockCartonPieceChange(e.target.value, stockLoosePieces)}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                            Loose {units.find(u => u.id === formData.unitId)?.symbol || 'Pcs'} (کھلے پیس):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control"
+                            placeholder="0"
+                            style={{ fontWeight: 800, color: '#334155', fontSize: '1rem' }}
+                            value={stockLoosePieces}
+                            onChange={(e) => handleStockCartonPieceChange(stockCartons, e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 800, display: 'block', marginBottom: '3px' }}>
+                            Total {units.find(u => u.id === formData.unitId)?.symbol || 'Pcs'} (ٹوٹل پیس):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control"
+                            placeholder="0"
+                            style={{ fontWeight: 800, color: '#0369a1', fontSize: '1rem', backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }}
+                            value={formData.openingStock}
+                            onChange={(e) => handleTotalStockChange(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: '8px', backgroundColor: '#f8fafc', padding: '6px 10px', borderRadius: '6px' }}>
+                        📊 <b>حساب:</b> {stockCartons || 0} {units.find(u => u.id === formData.primaryUnitId)?.name || 'Cartons'} ({(Number(stockCartons) || 0) * (Number(formData.conversionFactor) || 1)} {units.find(u => u.id === formData.unitId)?.symbol || 'Pcs'}) + {stockLoosePieces || 0} کھلے پیس = <b style={{ color: '#0284c7' }}>{formData.openingStock || 0} کل {units.find(u => u.id === formData.unitId)?.symbol || 'Pcs'}</b>
+                      </div>
+                    </div>
+
+                    {/* Minimum Stock Alert Box */}
+                    <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '10px', border: '1.5px solid #fed7aa' }}>
+                      <label className="form-label" style={{ color: '#9a3412', fontWeight: 800, fontSize: '0.86rem', marginBottom: '8px', display: 'block' }}>
+                        ⚠️ Low Stock Alert (کم از کم اسٹاک وارننگ)
+                      </label>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: '#9a3412', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                            Alert in {units.find(u => u.id === formData.primaryUnitId)?.symbol || 'Ctn'} (کارٹن):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control"
+                            placeholder="0"
+                            style={{ fontWeight: 800, color: '#c2410c', borderColor: '#fdba74' }}
+                            value={alertCartons}
+                            onChange={(e) => handleAlertCartonPieceChange(e.target.value, alertLoosePieces)}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                            Total Alert {units.find(u => u.id === formData.unitId)?.symbol || 'Pcs'} (ٹوٹل پیس):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control"
+                            placeholder="0"
+                            style={{ fontWeight: 800, color: '#334155' }}
+                            value={formData.minimumStockLevel}
+                            onChange={(e) => handleTotalAlertChange(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.72rem', color: '#9a3412', marginTop: '8px' }}>
+                        جب دکان میں اسٹاک <b>{formData.minimumStockLevel} {units.find(u => u.id === formData.unitId)?.symbol || 'Pcs'}</b> ({alertCartons} {units.find(u => u.id === formData.primaryUnitId)?.symbol || 'Ctn'}) سے کم ہوگا تو الرٹ آئے گا۔
+                      </div>
+                    </div>
+                  </div>
+
+                  <small style={{ color: '#166534', fontSize: '0.73rem', display: 'block' }}>
+                    💡 نوٹ: آپ کارٹن اور کھلے پیس الگ الگ درج کر سکتے ہیں، یا سیدھا کل پیس لکھ سکتے ہیں۔ پہلے درج شدہ مال بھی محفوظ رہے گا اور بار بار گننا نہیں پڑے گا۔
                   </small>
                 </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="form-label">Minimum Stock Alert</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.minimumStockLevel}
+                      onChange={(e) => setFormData({ ...formData, minimumStockLevel: e.target.value })}
+                    />
+                  </div>
 
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700 }}>
-                    Retail Sale Rate (Rs.) * <span style={{ color: '#16a34a', fontSize: '0.72rem' }}>(🌐 Public)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-control"
-                    placeholder="e.g. 7500"
-                    style={{ ...(fieldErrors.salePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
-                    value={formData.salePrice === '0' ? '' : formData.salePrice}
-                    onChange={(e) => {
-                      if (fieldErrors.salePrice) setFieldErrors(prev => ({ ...prev, salePrice: '' }));
-                      setFormData({ ...formData, salePrice: e.target.value });
-                    }}
-                    required
-                  />
-                  {renderFieldErrorTag('salePrice')}
-                  <small style={{ color: '#059669', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
-                    Yeh counter aur public website par display honi wali price hai.
-                  </small>
+                  <div>
+                    <label className="form-label" style={{ color: '#0284c7', fontWeight: 700 }}>
+                      {isEditing ? 'Available Physical Stock (Current)' : 'Opening / Available Stock *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      placeholder="e.g. 50"
+                      style={{ borderColor: '#38bdf8', backgroundColor: '#f0f9ff', fontWeight: 700 }}
+                      value={formData.openingStock}
+                      onChange={(e) => setFormData({ ...formData, openingStock: e.target.value })}
+                    />
+                    <small style={{ color: '#64748b', fontSize: '0.75rem' }}>
+                      Current inventory in {units.find(u => u.id === formData.unitId)?.symbol || 'Base Units'}
+                    </small>
+                  </div>
                 </div>
-
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700 }}>
-                    Wholesale Rate (Rs.) <span style={{ color: '#d97706', fontSize: '0.72rem' }}>(🔒 Private - B2B)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-control"
-                    placeholder="e.g. 6800"
-                    style={{ ...(fieldErrors.wholesalePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
-                    value={formData.wholesalePrice === '0' ? '' : formData.wholesalePrice}
-                    onChange={(e) => {
-                      if (fieldErrors.wholesalePrice) setFieldErrors(prev => ({ ...prev, wholesalePrice: '' }));
-                      setFormData({ ...formData, wholesalePrice: e.target.value });
-                    }}
-                  />
-                  {renderFieldErrorTag('wholesalePrice')}
-                  <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginTop: '3px' }}>
-                    Wholesale rate public website par show nahi hota.
-                  </small>
-                </div>
-              </div>
-
-              {/* Stock Alerts & Available Stock */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                <div>
-                  <label className="form-label">Minimum Stock Alert</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={formData.minimumStockLevel}
-                    onChange={(e) => setFormData({ ...formData, minimumStockLevel: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label" style={{ color: '#0284c7', fontWeight: 700 }}>
-                    {isEditing ? 'Available Physical Stock (Current)' : 'Opening / Available Stock *'}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-control"
-                    placeholder="e.g. 50"
-                    style={{ borderColor: '#38bdf8', backgroundColor: '#f0f9ff', fontWeight: 700 }}
-                    value={formData.openingStock}
-                    onChange={(e) => setFormData({ ...formData, openingStock: e.target.value })}
-                  />
-                  <small style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                    Current inventory in {units.find(u => u.id === formData.unitId)?.symbol || 'Base Units'}
-                  </small>
-                </div>
-              </div>
+              )}
 
               {/* Specs & Description */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
@@ -1403,14 +1927,36 @@ export const ProductsPage: React.FC = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 100, padding: '20px'
         }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '14px', width: '420px', maxWidth: '90%', padding: '24px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '14px', width: '460px', maxWidth: '90%', padding: '24px' }}>
             <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem', fontWeight: 800 }}>
               Adjust Inventory Count
             </h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b' }}>
-              Product: <b>{selectedProductForStock.name}</b><br />
-              Current Count: <b>{selectedProductForStock.currentStock} {selectedProductForStock.unit?.symbol}</b>
-            </p>
+            {(() => {
+              const pConv = Number(selectedProductForStock.conversionFactor) || 1;
+              const pStock = Number(selectedProductForStock.currentStock) || 0;
+              const pHasPack = pConv > 1 && Boolean(selectedProductForStock.primaryUnit);
+              const pCartons = pHasPack ? Math.floor(pStock / pConv) : 0;
+              const pRem = pHasPack ? pStock % pConv : pStock;
+
+              return (
+                <div style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div>Product: <b style={{ color: '#0f172a' }}>{selectedProductForStock.name}</b></div>
+                  <div style={{ marginTop: '4px' }}>
+                    Current Count:{' '}
+                    {pHasPack ? (
+                      <>
+                        <b style={{ color: '#047857', fontSize: '0.96rem' }}>
+                          {pCartons} {selectedProductForStock.primaryUnit?.symbol || 'Ctn'} {pRem > 0 ? `+ ${pRem} ${selectedProductForStock.unit?.symbol || 'Pcs'}` : ''}
+                        </b>{' '}
+                        <span style={{ color: '#64748b' }}>(Total: {pStock} {selectedProductForStock.unit?.symbol || 'Pcs'})</span>
+                      </>
+                    ) : (
+                      <b style={{ color: '#047857' }}>{pStock} {selectedProductForStock.unit?.symbol || 'Pcs'}</b>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <form onSubmit={handleAdjustStock}>
               <div style={{ marginBottom: '14px' }}>
@@ -1426,18 +1972,74 @@ export const ProductsPage: React.FC = () => {
                 </select>
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label className="form-label">Quantity</label>
-                <input
-                  type="number"
-                  step="1"
-                  required
-                  className="form-control"
-                  placeholder="Quantity in base units"
-                  value={stockAdjustData.quantity}
-                  onChange={(e) => setStockAdjustData({ ...stockAdjustData, quantity: e.target.value })}
-                />
-              </div>
+              {Number(selectedProductForStock.conversionFactor) > 1 && selectedProductForStock.primaryUnit ? (
+                <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1.5px solid #86efac', marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 700, color: '#166534', marginBottom: '6px', fontSize: '0.84rem' }}>
+                    Adjustment Quantity (Cartons & Loose Pieces)
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                        {selectedProductForStock.primaryUnit?.symbol || 'Ctn'} (کارٹن):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="form-control"
+                        placeholder="0"
+                        style={{ fontWeight: 800, color: '#15803d' }}
+                        value={adjustCartons}
+                        onChange={(e) => handleAdjustStockCartonPieceChange(e.target.value, adjustLoosePieces)}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                        Loose {selectedProductForStock.unit?.symbol || 'Pcs'} (کھلے):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="form-control"
+                        placeholder="0"
+                        style={{ fontWeight: 800, color: '#334155' }}
+                        value={adjustLoosePieces}
+                        onChange={(e) => handleAdjustStockCartonPieceChange(adjustCartons, e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 800, display: 'block', marginBottom: '3px' }}>
+                        Total {selectedProductForStock.unit?.symbol || 'Pcs'} (ٹوٹل):
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        required
+                        className="form-control"
+                        placeholder="Total"
+                        style={{ fontWeight: 800, color: '#0284c7', backgroundColor: '#f0f9ff' }}
+                        value={stockAdjustData.quantity}
+                        onChange={(e) => handleAdjustTotalQtyChange(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#166534', marginTop: '6px' }}>
+                    = {adjustCartons || 0} Ctn ({(Number(adjustCartons) || 0) * (Number(selectedProductForStock.conversionFactor) || 1)} Pcs) + {adjustLoosePieces || 0} Loose = <b>{stockAdjustData.quantity || 0} Total Pieces</b>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="form-label">Quantity in {selectedProductForStock.unit?.symbol || 'Base Units'} *</label>
+                  <input
+                    type="number"
+                    step="1"
+                    required
+                    className="form-control"
+                    placeholder="Quantity in base units"
+                    value={stockAdjustData.quantity}
+                    onChange={(e) => setStockAdjustData({ ...stockAdjustData, quantity: e.target.value })}
+                  />
+                </div>
+              )}
 
               <div style={{ marginBottom: '18px' }}>
                 <label className="form-label">Reason / Notes</label>

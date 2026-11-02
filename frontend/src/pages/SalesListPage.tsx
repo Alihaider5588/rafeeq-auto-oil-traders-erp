@@ -29,6 +29,7 @@ export const SalesListPage: React.FC = () => {
   const [selectedRateCustomer, setSelectedRateCustomer] = useState<string>('');
   const [customerRates, setCustomerRates] = useState<any[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
+  const [partySearch, setPartySearch] = useState('');
 
   // Admin Edit Invoice Modal
   const [editModalSale, setEditModalSale] = useState<Sale | null>(null);
@@ -80,6 +81,7 @@ export const SalesListPage: React.FC = () => {
   useEffect(() => {
     fetchSales();
     fetchSettings();
+    loadCustomers();
   }, []);
 
   const fetchSettings = async () => {
@@ -419,7 +421,10 @@ export const SalesListPage: React.FC = () => {
 
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
-            onClick={() => setShowRatesModal(true)}
+            onClick={() => {
+              loadCustomers();
+              setShowRatesModal(true);
+            }}
             className="btn btn-secondary"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
@@ -835,11 +840,11 @@ export const SalesListPage: React.FC = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 100, padding: '20px'
         }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', width: '700px', maxWidth: '90%', maxHeight: '85vh', overflowY: 'auto', padding: '24px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '16px', width: '750px', maxWidth: '95%', maxHeight: '88vh', overflowY: 'auto', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                  Customer Negotiated Rate History
+                  Customer Negotiated Rate History (پارٹی ریٹ ہسٹری)
                 </h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
                   Inspect historical selling rates automatically saved per customer and product.
@@ -853,56 +858,177 @@ export const SalesListPage: React.FC = () => {
               </button>
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-                Select Customer / Shop
-              </label>
-              <select
-                className="form-control"
-                value={selectedRateCustomer}
-                onChange={(e) => handleViewCustomerRates(e.target.value)}
-              >
-                <option value="">-- Choose Customer --</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.shopName} ({c.ownerName})
-                  </option>
-                ))}
-              </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '5px', color: '#334155' }}>
+                  🔍 Search Party / Shop / Phone
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Type shop name, owner or phone..."
+                  value={partySearch}
+                  onChange={(e) => setPartySearch(e.target.value)}
+                  style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', margin: 0 }}>
+                    Select Party / Shop ({customers.length} Parties)
+                  </label>
+                  {customers.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={loadCustomers}
+                      style={{ background: 'none', border: 'none', color: '#d97706', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                    >
+                      🔄 Reload
+                    </button>
+                  )}
+                </div>
+                <select
+                  className="form-control"
+                  value={selectedRateCustomer}
+                  onChange={(e) => handleViewCustomerRates(e.target.value)}
+                  style={{ padding: '8px 12px', fontSize: '0.85rem', fontWeight: 600 }}
+                >
+                  <option value="">-- Choose Party ({customers.length} Available) --</option>
+                  {customers
+                    .filter((c) => {
+                      if (!partySearch) return true;
+                      const q = partySearch.toLowerCase();
+                      return (
+                        (c.shopName && c.shopName.toLowerCase().includes(q)) ||
+                        (c.ownerName && c.ownerName.toLowerCase().includes(q)) ||
+                        (c.phone && c.phone.includes(q))
+                      );
+                    })
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.shopName} {c.ownerName ? `(${c.ownerName})` : ''} - {c.phone || ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
 
             {loadingRates ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>Loading rates...</div>
-            ) : selectedRateCustomer && customerRates.length === 0 ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
-                No prior rate history recorded for this customer. Standard catalog prices will apply.
+              <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ display: 'inline-block', marginBottom: '8px' }} />
+                <div>Loading party rate records...</div>
               </div>
-            ) : customerRates.length > 0 ? (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>Unit</th>
-                    <th style={{ textAlign: 'right' }}>Last Sold Rate</th>
-                    <th>Last Invoice</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customerRates.map((r: any) => (
-                    <tr key={r.id}>
-                      <td style={{ fontWeight: 600 }}>{r.product?.name}</td>
-                      <td><span className="badge badge-neutral">{r.unitType}</span></td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#059669' }}>
-                        Rs. {Number(r.lastRate).toLocaleString()}
-                      </td>
-                      <td className="font-mono">{r.lastInvoice || '—'}</td>
-                      <td>{r.lastDate ? new Date(r.lastDate).toLocaleDateString() : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : null}
+            ) : !selectedRateCustomer ? (
+              <div style={{
+                padding: '30px',
+                textAlign: 'center',
+                backgroundColor: '#f8fafc',
+                borderRadius: '10px',
+                border: '1.5px dashed #cbd5e1',
+                color: '#64748b'
+              }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>📋</div>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#334155', marginBottom: '4px' }}>
+                  Please select a Customer / Party from the dropdown above
+                </div>
+                <div style={{ fontSize: '0.8rem' }}>
+                  Is party ko pehle jis rate par jo product sale hua tha, unke rates yahan show honge.
+                </div>
+              </div>
+            ) : customerRates.length === 0 ? (
+              <div style={{
+                padding: '30px',
+                textAlign: 'center',
+                backgroundColor: '#fffbeb',
+                borderRadius: '10px',
+                border: '1px solid #fde68a',
+                color: '#92400e'
+              }}>
+                <div style={{ fontSize: '1.4rem', marginBottom: '6px' }}>ℹ️</div>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                  No prior rate history recorded for this customer yet.
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#b45309' }}>
+                  Is customer ko pehle koi sale invoice generate nahi hui, is liye default catalog prices apply honge.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: '0.8rem', color: '#15803d', fontWeight: 700, marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>✓ Total {customerRates.length} Negotiated Product Rates Found</span>
+                  <span style={{ color: '#64748b', fontWeight: 500 }}>Rates auto-update on each completed sale</span>
+                </div>
+                <div className="table-container" style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Product & Details</th>
+                        <th>Sold Unit</th>
+                        <th style={{ textAlign: 'right' }}>Last Sold Rate</th>
+                        <th>Last Invoice</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerRates.map((r: any) => {
+                        const conv = Number(r.product?.conversionFactor || 1);
+                        const isPrimary = r.unitType === 'PRIMARY';
+                        const primarySymbol = r.product?.primaryUnit?.symbol || 'Ctn';
+                        const secSymbol = r.product?.unit?.symbol || 'Pcs';
+                        const numRate = Number(r.lastRate) || 0;
+
+                        return (
+                          <tr key={r.id}>
+                            <td>
+                              <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.product?.name}</div>
+                              {r.product?.sku && (
+                                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Code: {r.product.sku}</div>
+                              )}
+                            </td>
+                            <td>
+                              <span
+                                className="badge"
+                                style={{
+                                  backgroundColor: isPrimary ? '#fef3c7' : '#f1f5f9',
+                                  color: isPrimary ? '#b45309' : '#475569',
+                                  fontWeight: 700,
+                                  border: isPrimary ? '1px solid #fde68a' : '1px solid #cbd5e1'
+                                }}
+                              >
+                                {isPrimary ? `📦 ${primarySymbol} (${conv} ${secSymbol})` : `🧴 ${secSymbol}`}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 800, color: '#059669', fontSize: '0.98rem' }}>
+                                Rs. {numRate.toLocaleString()}{' '}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#047857' }}>
+                                  / {isPrimary ? primarySymbol : secSymbol}
+                                </span>
+                              </div>
+                              {conv > 1 && (
+                                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                  {isPrimary ? (
+                                    `(= Rs. ${(Math.round((numRate / conv) * 100) / 100).toLocaleString()} / ${secSymbol})`
+                                  ) : (
+                                    `(= Rs. ${(Math.round(numRate * conv)).toLocaleString()} / ${primarySymbol})`
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="font-mono" style={{ fontWeight: 700, color: '#d97706', fontSize: '0.84rem' }}>
+                              {r.lastInvoice || '—'}
+                            </td>
+                            <td style={{ fontSize: '0.82rem', color: '#475569' }}>
+                              {r.lastDate ? new Date(r.lastDate).toLocaleDateString() : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

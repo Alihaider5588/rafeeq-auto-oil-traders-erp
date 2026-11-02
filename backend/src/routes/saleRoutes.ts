@@ -6,6 +6,7 @@ import {
   approveSale,
   cancelSale,
   getCustomerProductRate,
+  getCustomerAllRates,
   editSaleInvoice,
   createSalesReturn,
   deleteSale,
@@ -31,6 +32,7 @@ router.delete('/web-orders/:id', authorize([Role.ADMIN], ['action:delete_web_ord
 
 // Rate History query for party-product combination
 router.get('/customer-rate', getCustomerProductRate);
+router.get('/customer-rates', getCustomerAllRates);
 
 // Sales CRUD & Workflows
 router.get('/', getSales);

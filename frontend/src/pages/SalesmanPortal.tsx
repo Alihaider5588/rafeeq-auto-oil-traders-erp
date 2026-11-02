@@ -350,33 +350,39 @@ export const SalesmanPortal: React.FC = () => {
       return;
     }
 
-    const standardPrice = Number(product.salePrice);
+    const conv = Number(product.conversionFactor) || 1;
+    const hasPrimary = (!!product.primaryUnit || !!product.primaryUnitId) && conv > 1;
+    // Default to PRIMARY unit (Carton) if configured, else SECONDARY (Piece)
+    const defaultUnit: 'PRIMARY' | 'SECONDARY' = hasPrimary ? 'PRIMARY' : 'SECONDARY';
+
+    const standardBase = Number(product.salePrice);
+    const defaultStandardRate = defaultUnit === 'PRIMARY' ? standardBase * conv : standardBase;
     const isWalkIn = !selectedCustomer || selectedCustomer.id === 'walk-in' || selectedCustomer.phone === '00000000000' || selectedCustomer.shopName.toLowerCase().includes('walk-in');
 
-    const cacheKey = selectedCustomer ? `${selectedCustomer.id}:${product.id}:SECONDARY` : '';
+    const cacheKey = selectedCustomer ? `${selectedCustomer.id}:${product.id}:${defaultUnit}` : '';
     const cachedRate = cacheKey ? rateCacheRef.current[cacheKey] : null;
-    const initialPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : standardPrice;
+    const initialPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : defaultStandardRate;
 
-    // Instantly add to cart without network freeze
+    // Instantly add to cart with primary unit (Carton) as default if available
     setCart(prev => [
       ...prev,
       {
         product,
         quantity: 1,
-        unitType: 'SECONDARY',
+        unitType: defaultUnit,
         unitPrice: initialPrice,
-        standardRate: standardPrice,
+        standardRate: defaultStandardRate,
         rateInfo: cachedRate || undefined,
       },
     ]);
 
     // Asynchronously update with negotiated rate in background if available
     if (!isWalkIn && selectedCustomer && !cachedRate) {
-      fetchCustomerRate(selectedCustomer.id, product.id, 'SECONDARY').then(rateInfo => {
+      fetchCustomerRate(selectedCustomer.id, product.id, defaultUnit).then(rateInfo => {
         if (rateInfo?.suggestedRate) {
           setCart(curCart =>
             curCart.map(it =>
-              it.product.id === product.id && it.unitType === 'SECONDARY'
+              it.product.id === product.id && it.unitType === defaultUnit
                 ? { ...it, unitPrice: Number(rateInfo.suggestedRate), rateInfo }
                 : it
             )
@@ -1758,20 +1764,45 @@ export const SalesmanPortal: React.FC = () => {
                       {p.name}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: isSelected ? '#b45309' : '#64748b' }}>
-                      Code: {p.sku} | In Stock: <b>{Number(p.currentStock)}</b> {p.unit?.symbol || ''}
-                      {p.conversionFactor && p.conversionFactor > 1 && (
-                        <span style={{ marginLeft: '6px', color: '#d97706', fontWeight: 600 }}>
-                          (1 {p.primaryUnit?.symbol || 'Ctn'} = {p.conversionFactor} {p.unit?.symbol || 'Pcs'})
+                      Code: {p.sku} | In Stock:{' '}
+                      {p.conversionFactor && p.conversionFactor > 1 && p.primaryUnit ? (
+                        <span>
+                          <b style={{ color: Number(p.currentStock) > 0 ? '#15803d' : '#dc2626' }}>
+                            {Math.floor(Number(p.currentStock) / Number(p.conversionFactor))} {p.primaryUnit?.symbol || 'Ctn'}
+                            {Number(p.currentStock) % Number(p.conversionFactor) > 0 ? ` + ${Number(p.currentStock) % Number(p.conversionFactor)} ${p.unit?.symbol || 'Pcs'}` : ''}
+                          </b>{' '}
+                          <span style={{ color: '#64748b' }}>(Total: {Number(p.currentStock)} {p.unit?.symbol || 'Pcs'})</span>
                         </span>
+                      ) : (
+                        <b style={{ color: Number(p.currentStock) > 0 ? '#15803d' : '#dc2626' }}>
+                          {Number(p.currentStock)} {p.unit?.symbol || ''}
+                        </b>
                       )}
                     </div>
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 800, color: '#d97706', fontSize: '1.02rem' }}>
-                    Rs. {Number(p.salePrice).toLocaleString()}
-                  </div>
+                  {p.conversionFactor && p.conversionFactor > 1 && p.primaryUnit ? (
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#d97706', fontSize: '1.05rem' }}>
+                        Rs. {(Number(p.salePrice) * Number(p.conversionFactor)).toLocaleString()}{' '}
+                        <span style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 700 }}>
+                          /{p.primaryUnit?.symbol || 'Ctn'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                        (Rs. {Number(p.salePrice).toLocaleString()} / {p.unit?.symbol || 'Pc'})
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontWeight: 800, color: '#d97706', fontSize: '1.02rem' }}>
+                      Rs. {Number(p.salePrice).toLocaleString()}{' '}
+                      <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        /{p.unit?.symbol || 'Pc'}
+                      </span>
+                    </div>
+                  )}
                   {isSelected ? (
                     <span style={{
                       marginTop: '4px',
@@ -2113,17 +2144,18 @@ export const SalesmanPortal: React.FC = () => {
                           <select
                             className="form-control"
                             style={{
-                              fontSize: '0.8rem',
+                              fontSize: '0.82rem',
                               padding: '6px 8px',
-                              fontWeight: 700,
-                              backgroundColor: '#ffffff',
-                              borderColor: item.unitType === 'PRIMARY' ? '#d97706' : '#cbd5e1'
+                              fontWeight: 800,
+                              backgroundColor: item.unitType === 'PRIMARY' ? '#fef3c7' : '#ffffff',
+                              borderColor: item.unitType === 'PRIMARY' ? '#d97706' : '#94a3b8',
+                              color: item.unitType === 'PRIMARY' ? '#92400e' : '#1e293b'
                             }}
                             value={item.unitType}
                             onChange={(e) => handleUnitChange(index, e.target.value as any)}
                           >
-                            <option value="SECONDARY">{secondaryLabel} ({secondarySymbol})</option>
-                            <option value="PRIMARY">{primaryLabel} ({primarySymbol} = {conv} {secondarySymbol})</option>
+                            <option value="PRIMARY">📦 {primaryLabel} ({primarySymbol} = {conv} {secondarySymbol}) [کارٹن]</option>
+                            <option value="SECONDARY">🧴 {secondaryLabel} ({secondarySymbol}) [کُھلے پیس]</option>
                           </select>
                         ) : (
                           <div style={{
