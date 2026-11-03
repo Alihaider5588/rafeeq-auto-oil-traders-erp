@@ -60,6 +60,7 @@ export const getPurchases = async (req: AuthenticatedRequest, res: Response): Pr
                   sku: true,
                   brand: true,
                   purchasePrice: true,
+                  conversionFactor: true,
                   unit: { select: { id: true, name: true, symbol: true } },
                   primaryUnit: { select: { id: true, name: true, symbol: true } },
                 },

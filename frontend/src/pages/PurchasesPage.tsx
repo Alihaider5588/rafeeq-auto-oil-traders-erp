@@ -18,8 +18,13 @@ export const PurchasesPage: React.FC = () => {
   // New purchase state
   const [supplierId, setSupplierId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [items, setItems] = useState<Array<{ productId: string; quantity: number; unitCost: number }>>([
-    { productId: '', quantity: 1, unitCost: 0 },
+  const [items, setItems] = useState<Array<{
+    productId: string;
+    quantity: number;
+    unitCost: number;
+    unitType: 'PRIMARY' | 'SECONDARY';
+  }>>([
+    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY' },
   ]);
   const [paidAmount, setPaidAmount] = useState('0');
   const [notes, setNotes] = useState('');
@@ -176,11 +181,16 @@ export const PurchasesPage: React.FC = () => {
 
         // Auto-select in current purchase row
         const updated = [...items];
+        const pConv = Number(createdProd.conversionFactor) || 1;
+        const pHasPrimary = (!!createdProd.primaryUnit || !!createdProd.primaryUnitId) && pConv > 1;
+        const defaultUT: 'PRIMARY' | 'SECONDARY' = pHasPrimary ? 'PRIMARY' : 'SECONDARY';
+        const defaultCost = defaultUT === 'PRIMARY' ? pCost * pConv : pCost;
         if (updated[targetItemIndex]) {
           updated[targetItemIndex].productId = createdProd.id;
-          updated[targetItemIndex].unitCost = pCost;
+          updated[targetItemIndex].unitCost = defaultCost;
+          updated[targetItemIndex].unitType = defaultUT;
         } else {
-          updated.push({ productId: createdProd.id, quantity: 1, unitCost: pCost });
+          updated.push({ productId: createdProd.id, quantity: 1, unitCost: defaultCost, unitType: defaultUT });
         }
         setItems(updated);
 
@@ -206,7 +216,7 @@ export const PurchasesPage: React.FC = () => {
   };
 
   const addItemRow = () => {
-    setItems([...items, { productId: '', quantity: 1, unitCost: 0 }]);
+    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY' }]);
   };
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -214,7 +224,29 @@ export const PurchasesPage: React.FC = () => {
     if (field === 'productId') {
       const prod = products.find((p) => p.id === value);
       updated[index].productId = value;
-      if (prod) updated[index].unitCost = Number(prod.purchasePrice);
+      if (prod) {
+        const conv = Number(prod.conversionFactor) || 1;
+        const hasPrimary = (!!prod.primaryUnit || !!prod.primaryUnitId) && conv > 1;
+        if (hasPrimary) {
+          updated[index].unitType = 'PRIMARY';
+          updated[index].unitCost = Math.round(Number(prod.purchasePrice) * conv * 100) / 100;
+        } else {
+          updated[index].unitType = 'SECONDARY';
+          updated[index].unitCost = Number(prod.purchasePrice || 0);
+        }
+      }
+    } else if (field === 'unitType') {
+      const prod = products.find((p) => p.id === updated[index].productId);
+      const conv = Number(prod?.conversionFactor) || 1;
+      const oldUnitType = updated[index].unitType;
+      updated[index].unitType = value;
+      if (prod && conv > 1) {
+        if (value === 'PRIMARY' && oldUnitType === 'SECONDARY') {
+          updated[index].unitCost = Math.round(Number(updated[index].unitCost) * conv * 100) / 100;
+        } else if (value === 'SECONDARY' && oldUnitType === 'PRIMARY') {
+          updated[index].unitCost = Math.round((Number(updated[index].unitCost) / conv) * 100) / 100;
+        }
+      }
     } else {
       (updated[index] as any)[field] = value;
     }
@@ -245,6 +277,7 @@ export const PurchasesPage: React.FC = () => {
           productId: it.productId,
           quantity: Number(it.quantity),
           unitCost: Number(it.unitCost),
+          unitType: it.unitType || 'PRIMARY',
         })),
         paidAmount: parseFloat(paidAmount || '0'),
         notes,
@@ -254,7 +287,7 @@ export const PurchasesPage: React.FC = () => {
       if (res.data.success) {
         setShowModal(false);
         setInvoiceNumber('');
-        setItems([{ productId: '', quantity: 1, unitCost: 0 }]);
+        setItems([{ productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY' }]);
         setPaidAmount('0');
         setOperationSuccess(`Purchase invoice #${invoiceNumber} successfully record ho gayi aur stock barh gaya.`);
         setOperationError('');
@@ -484,14 +517,28 @@ export const PurchasesPage: React.FC = () => {
             backgroundColor: '#fff',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '750px',
+            maxWidth: '860px',
             maxHeight: '90vh',
             overflowY: 'auto',
             padding: '24px'
           }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '16px' }}>
-              Record Supplier Purchase / Maal Inward
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
+                  Record Supplier Purchase / Maal Inward (مال کی وصولی)
+                </h2>
+                <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                  Enter company invoice in Cartons or Loose Pieces. Stock and average purchase cost will auto-synchronize.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b' }}
+              >
+                ×
+              </button>
+            </div>
 
             <form onSubmit={handleCreatePurchase}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
@@ -545,7 +592,9 @@ export const PurchasesPage: React.FC = () => {
               {/* Items List */}
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Products Received (Maal Inward) *</label>
+                  <label className="form-label" style={{ marginBottom: 0, fontWeight: 700, color: '#0f172a' }}>
+                    Products Received (Maal Inward) *
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
@@ -572,50 +621,182 @@ export const PurchasesPage: React.FC = () => {
                     <Plus size={14} /> + Naya Product / Item Add Karein
                   </button>
                 </div>
-                {items.map((it, idx) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr auto', gap: '10px', marginBottom: '8px' }}>
-                    <select
-                      className="form-control"
-                      value={it.productId}
-                      onChange={(e) => updateItem(idx, 'productId', e.target.value)}
-                      required
+                {items.map((it, idx) => {
+                  const prod = products.find((p) => p.id === it.productId);
+                  const conv = Number(prod?.conversionFactor) || 1;
+                  const hasPrimary = (!!prod?.primaryUnit || !!prod?.primaryUnitId) && conv > 1;
+                  const isPrimary = it.unitType === 'PRIMARY' && hasPrimary;
+                  const primarySymbol = prod?.primaryUnit?.symbol || 'Ctn';
+                  const secSymbol = prod?.unit?.symbol || 'Pcs';
+                  const totalPieces = isPrimary ? (Number(it.quantity) || 0) * conv : (Number(it.quantity) || 0);
+                  const pieceRate = isPrimary ? (conv > 0 ? (Number(it.unitCost) || 0) / conv : 0) : (Number(it.unitCost) || 0);
+                  const rowTotal = (Number(it.quantity) || 0) * (Number(it.unitCost) || 0);
+
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        backgroundColor: '#f8fafc',
+                        border: '1.5px solid #e2e8f0',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        marginBottom: '10px'
+                      }}
                     >
-                      <option value="">Select Product</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                      ))}
-                    </select>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(200px, 2.5fr) minmax(130px, 1.3fr) minmax(90px, 0.9fr) minmax(110px, 1.1fr) auto',
+                        gap: '10px',
+                        alignItems: 'center'
+                      }}>
+                        {/* 1. Product Select */}
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                            Product (پروڈکٹ)
+                          </label>
+                          <select
+                            className="form-control"
+                            value={it.productId}
+                            onChange={(e) => updateItem(idx, 'productId', e.target.value)}
+                            required
+                            style={{ fontSize: '0.84rem', fontWeight: 700 }}
+                          >
+                            <option value="">Select Product</option>
+                            {products.map((p) => {
+                              const pConv = Number(p.conversionFactor) || 1;
+                              const pHasPrimary = (!!p.primaryUnit || !!p.primaryUnitId) && pConv > 1;
+                              return (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} {p.sku ? `(${p.sku})` : ''} {pHasPrimary ? `— [1 ${p.primaryUnit?.symbol || 'Ctn'} = ${pConv} ${p.unit?.symbol || 'Pcs'}]` : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
 
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-control"
-                      placeholder="Qty"
-                      value={it.quantity === 0 ? '' : it.quantity}
-                      onChange={(e) => updateItem(idx, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                      required
-                    />
+                        {/* 2. Unit / Packaging Selector */}
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                            Packaging / پیکنگ
+                          </label>
+                          {hasPrimary ? (
+                            <select
+                              className="form-control"
+                              value={it.unitType}
+                              onChange={(e) => updateItem(idx, 'unitType', e.target.value)}
+                              style={{
+                                fontSize: '0.82rem',
+                                fontWeight: 800,
+                                backgroundColor: it.unitType === 'PRIMARY' ? '#fef3c7' : '#ffffff',
+                                borderColor: it.unitType === 'PRIMARY' ? '#d97706' : '#cbd5e1',
+                                color: it.unitType === 'PRIMARY' ? '#92400e' : '#1e293b'
+                              }}
+                            >
+                              <option value="PRIMARY">📦 {primarySymbol} (کارٹن = {conv} {secSymbol})</option>
+                              <option value="SECONDARY">🧴 {secSymbol} (کھلے پیس)</option>
+                            </select>
+                          ) : (
+                            <div style={{
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              padding: '7px 10px',
+                              backgroundColor: '#ffffff',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              color: '#475569'
+                            }}>
+                              {secSymbol} (Base Unit)
+                            </div>
+                          )}
+                        </div>
 
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-control"
-                      placeholder="Unit Cost"
-                      value={it.unitCost === 0 ? '' : it.unitCost}
-                      onChange={(e) => updateItem(idx, 'unitCost', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                      required
-                    />
+                        {/* 3. Quantity */}
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                            Qty ({isPrimary ? primarySymbol : secSymbol})
+                          </label>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="any"
+                            className="form-control"
+                            placeholder="Qty"
+                            value={it.quantity === 0 ? '' : it.quantity}
+                            onChange={(e) => updateItem(idx, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                            required
+                            style={{ fontWeight: 800, textAlign: 'center' }}
+                          />
+                        </div>
 
-                    <button
-                      type="button"
-                      onClick={() => removeItemRow(idx)}
-                      className="btn btn-outline"
-                      style={{ padding: '8px 12px' }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                        {/* 4. Cost Price */}
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                            Rate / {isPrimary ? primarySymbol : secSymbol} (Rs.)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            className="form-control"
+                            placeholder="Cost"
+                            value={it.unitCost === 0 ? '' : it.unitCost}
+                            onChange={(e) => updateItem(idx, 'unitCost', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                            required
+                            style={{ fontWeight: 800, color: '#059669', textAlign: 'right' }}
+                          />
+                        </div>
+
+                        {/* 5. Delete Action */}
+                        <div style={{ paddingTop: '16px' }}>
+                          <button
+                            type="button"
+                            onClick={() => removeItemRow(idx)}
+                            className="btn btn-outline"
+                            style={{ padding: '6px 10px', color: '#ef4444', borderColor: '#fca5a5' }}
+                            title="Remove Item"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Helper conversion info */}
+                      {prod && (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginTop: '6px',
+                          paddingTop: '6px',
+                          borderTop: '1px dashed #e2e8f0',
+                          fontSize: '0.76rem',
+                          color: '#64748b'
+                        }}>
+                          <div>
+                            {isPrimary ? (
+                              <span>
+                                📦 <b>{it.quantity || 0} {primarySymbol}</b> = <b style={{ color: '#0284c7' }}>{totalPieces} Total {secSymbol}</b> stock mein jama honge{' '}
+                                <span style={{ color: '#16a34a', fontWeight: 700 }}>
+                                  (@ Rs. {(Math.round(pieceRate * 100) / 100).toLocaleString()} / {secSymbol})
+                                </span>
+                              </span>
+                            ) : (
+                              <span>
+                                🧴 <b>{it.quantity || 0} {secSymbol}</b> stock mein jama honge
+                                {hasPrimary && conv > 0 && (
+                                  <span> (= {(Math.round(((it.quantity || 0) / conv) * 100) / 100)} {primarySymbol})</span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.84rem' }}>
+                            Subtotal: Rs. {rowTotal.toLocaleString()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
 
                 <button type="button" onClick={addItemRow} className="btn btn-outline btn-sm" style={{ marginTop: '6px' }}>
                   + Add Another Product
@@ -1128,7 +1309,12 @@ export const PurchasesPage: React.FC = () => {
                   <tbody>
                     {selectedPurchase.items && selectedPurchase.items.length > 0 ? (
                       selectedPurchase.items.map((it: any, idx: number) => {
-                        const unitName = it.product?.unit?.symbol || it.product?.unit?.name || 'Unit';
+                        const conv = Number(it.product?.conversionFactor) || 1;
+                        const isPrimary = it.unitType === 'PRIMARY';
+                        const primarySymbol = it.product?.primaryUnit?.symbol || 'Ctn';
+                        const secSymbol = it.product?.unit?.symbol || 'Pcs';
+                        const baseQty = Number(it.baseQuantity) || (isPrimary ? Number(it.quantity) * conv : Number(it.quantity));
+
                         return (
                           <tr key={it.id || idx} style={{
                             borderBottom: '1px solid #e2e8f0',
@@ -1147,13 +1333,33 @@ export const PurchasesPage: React.FC = () => {
                               </div>
                             </td>
                             <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 600, color: '#475569', borderRight: '1px solid #e2e8f0' }}>
-                              {unitName}
+                              <span style={{
+                                backgroundColor: isPrimary ? '#fef3c7' : '#f1f5f9',
+                                color: isPrimary ? '#92400e' : '#475569',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                border: isPrimary ? '1px solid #fde68a' : '1px solid #cbd5e1'
+                              }}>
+                                {isPrimary ? `📦 ${primarySymbol} (${conv} ${secSymbol})` : `🧴 ${secSymbol}`}
+                              </span>
                             </td>
                             <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 800, color: '#0f172a', fontSize: '12px', borderRight: '1px solid #e2e8f0' }}>
-                              {Number(it.quantity).toLocaleString()}
+                              <div>{Number(it.quantity).toLocaleString()} {isPrimary ? primarySymbol : secSymbol}</div>
+                              {isPrimary && conv > 1 && (
+                                <div style={{ fontSize: '10px', color: '#0284c7', fontWeight: 600 }}>
+                                  ({baseQty} Total {secSymbol})
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, borderRight: '1px solid #e2e8f0' }}>
-                              Rs. {Number(it.unitCost).toLocaleString()}
+                              <div>Rs. {Number(it.unitCost).toLocaleString()}</div>
+                              {isPrimary && conv > 1 && (
+                                <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                  (= Rs. {Math.round((Number(it.unitCost) / conv) * 100) / 100} / {secSymbol})
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
                               Rs. {Number(it.totalCost || (it.quantity * it.unitCost)).toLocaleString()}
