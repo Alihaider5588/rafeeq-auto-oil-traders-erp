@@ -22,8 +22,10 @@ import {
   ChevronRight,
   Sparkles,
   ShieldAlert,
-  CreditCard
+  CreditCard,
+  FileDown
 } from 'lucide-react';
+import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -495,7 +497,19 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => exportStockAlertsPDF([
+                  ...(alerts?.outOfStockProducts || []),
+                  ...(alerts?.lowStockProducts || [])
+                ], 'ADMIN CRITICAL REORDER ALERTS')}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                title="Download / Print PDF of Minimum Stock Items"
+              >
+                <FileDown size={14} /> Download PDF
+              </button>
               <Link to="/purchases" className="btn btn-primary btn-sm" style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', fontWeight: 700 }}>
                 + Record Purchase Inward
               </Link>

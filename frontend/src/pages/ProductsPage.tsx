@@ -3,9 +3,10 @@ import api, { getMediaUrl } from '../services/api';
 import { Product, Category, Unit } from '../types';
 import { 
   Package, Plus, Search, AlertCircle, AlertTriangle, Check, Edit2, Sliders, 
-  FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw, Trash2
+  FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw, Trash2, FileDown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
@@ -199,7 +200,7 @@ export const ProductsPage: React.FC = () => {
     const conv = Number(formData.conversionFactor) || 1;
     const ctn = parseFloat(ctnStr) || 0;
     const loose = parseFloat(looseStr) || 0;
-    const total = (ctn * conv) + loose;
+    const total = Math.round(((ctn * conv) + loose) * 1000) / 1000;
     setFormData(prev => ({ ...prev, openingStock: String(total) }));
   };
 
@@ -209,7 +210,7 @@ export const ProductsPage: React.FC = () => {
     const total = parseFloat(totalStr) || 0;
     if (conv > 1) {
       setStockCartons(String(Math.floor(total / conv)));
-      setStockLoosePieces(String(total % conv));
+      setStockLoosePieces(String(Math.round((total % conv) * 1000) / 1000));
     } else {
       setStockCartons('0');
       setStockLoosePieces(totalStr);
@@ -222,7 +223,7 @@ export const ProductsPage: React.FC = () => {
     const conv = Number(formData.conversionFactor) || 1;
     const ctn = parseFloat(ctnStr) || 0;
     const loose = parseFloat(looseStr) || 0;
-    const total = (ctn * conv) + loose;
+    const total = Math.round(((ctn * conv) + loose) * 1000) / 1000;
     setFormData(prev => ({ ...prev, minimumStockLevel: String(total) }));
   };
 
@@ -232,7 +233,7 @@ export const ProductsPage: React.FC = () => {
     const total = parseFloat(totalStr) || 0;
     if (conv > 1) {
       setAlertCartons(String(Math.floor(total / conv)));
-      setAlertLoosePieces(String(total % conv));
+      setAlertLoosePieces(String(Math.round((total % conv) * 1000) / 1000));
     } else {
       setAlertCartons('0');
       setAlertLoosePieces(totalStr);
@@ -348,7 +349,7 @@ export const ProductsPage: React.FC = () => {
     const conv = Number(selectedProductForStock?.conversionFactor) || 1;
     const ctn = parseFloat(ctnStr) || 0;
     const loose = parseFloat(looseStr) || 0;
-    const total = (ctn * conv) + loose;
+    const total = Math.round(((ctn * conv) + loose) * 1000) / 1000;
     setStockAdjustData(prev => ({ ...prev, quantity: String(total) }));
   };
 
@@ -358,7 +359,7 @@ export const ProductsPage: React.FC = () => {
     const total = parseFloat(qtyStr) || 0;
     if (conv > 1) {
       setAdjustCartons(String(Math.floor(total / conv)));
-      setAdjustLoosePieces(String(total % conv));
+      setAdjustLoosePieces(String(Math.round((total % conv) * 1000) / 1000));
     } else {
       setAdjustCartons('0');
       setAdjustLoosePieces(qtyStr);
@@ -934,6 +935,33 @@ export const ProductsPage: React.FC = () => {
             <AlertTriangle size={15} />
             {showLowStockOnly ? `Showing Low Stock Only (${lowStockCount}) - Reset` : `⚠️ Minimum Stock Alerts (${lowStockCount})`}
           </button>
+
+          {lowStockCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const lowList = products.filter((p) => Number(p.currentStock || 0) <= Number(p.minimumStockLevel || 0));
+                exportStockAlertsPDF(lowList, 'PRODUCTS CATALOGUE LOW STOCK ALERTS');
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 14px',
+                borderRadius: '8px',
+                border: '1.5px solid #dc2626',
+                backgroundColor: '#dc2626',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title="Download / Print PDF of Minimum Stock Items"
+            >
+              <FileDown size={15} /> Low Stock PDF
+            </button>
+          )}
         </div>
       </div>
 
@@ -1690,6 +1718,7 @@ export const ProductsPage: React.FC = () => {
                           </label>
                           <input
                             type="number"
+                            step="any"
                             min="0"
                             className="form-control"
                             placeholder="0"
@@ -1705,6 +1734,7 @@ export const ProductsPage: React.FC = () => {
                           </label>
                           <input
                             type="number"
+                            step="any"
                             min="0"
                             className="form-control"
                             placeholder="0"
@@ -1720,6 +1750,7 @@ export const ProductsPage: React.FC = () => {
                           </label>
                           <input
                             type="number"
+                            step="any"
                             min="0"
                             className="form-control"
                             placeholder="0"
@@ -1748,6 +1779,7 @@ export const ProductsPage: React.FC = () => {
                           </label>
                           <input
                             type="number"
+                            step="any"
                             min="0"
                             className="form-control"
                             placeholder="0"
@@ -1763,6 +1795,7 @@ export const ProductsPage: React.FC = () => {
                           </label>
                           <input
                             type="number"
+                            step="any"
                             min="0"
                             className="form-control"
                             placeholder="0"
@@ -1789,6 +1822,8 @@ export const ProductsPage: React.FC = () => {
                     <label className="form-label">Minimum Stock Alert</label>
                     <input
                       type="number"
+                      step="any"
+                      min="0"
                       className="form-control"
                       value={formData.minimumStockLevel}
                       onChange={(e) => setFormData({ ...formData, minimumStockLevel: e.target.value })}
@@ -1801,7 +1836,8 @@ export const ProductsPage: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="any"
+                      min="0"
                       className="form-control"
                       placeholder="e.g. 50"
                       style={{ borderColor: '#38bdf8', backgroundColor: '#f0f9ff', fontWeight: 700 }}
@@ -1984,6 +2020,7 @@ export const ProductsPage: React.FC = () => {
                       </label>
                       <input
                         type="number"
+                        step="any"
                         min="0"
                         className="form-control"
                         placeholder="0"
@@ -1998,6 +2035,7 @@ export const ProductsPage: React.FC = () => {
                       </label>
                       <input
                         type="number"
+                        step="any"
                         min="0"
                         className="form-control"
                         placeholder="0"
@@ -2012,7 +2050,7 @@ export const ProductsPage: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        step="1"
+                        step="any"
                         required
                         className="form-control"
                         placeholder="Total"
@@ -2031,7 +2069,7 @@ export const ProductsPage: React.FC = () => {
                   <label className="form-label">Quantity in {selectedProductForStock.unit?.symbol || 'Base Units'} *</label>
                   <input
                     type="number"
-                    step="1"
+                    step="any"
                     required
                     className="form-control"
                     placeholder="Quantity in base units"

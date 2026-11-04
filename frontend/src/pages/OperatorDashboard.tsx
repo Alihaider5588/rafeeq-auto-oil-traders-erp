@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Sale, Product } from '../types';
-import { CheckCircle2, Clock, AlertTriangle, Package, ShoppingBag, RefreshCw, ShoppingCart } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, Package, ShoppingBag, RefreshCw, ShoppingCart, FileDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
 export const OperatorDashboard: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<Sale[]>([]);
@@ -139,6 +140,15 @@ export const OperatorDashboard: React.FC = () => {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => exportStockAlertsPDF(lowStockProducts, 'OPERATOR CRITICAL REORDER ALERTS')}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                title="Download / Print PDF list of products at or below minimum threshold"
+              >
+                <FileDown size={14} /> Download PDF
+              </button>
               <Link to="/purchases" className="btn btn-primary btn-sm" style={{ fontWeight: 700, backgroundColor: '#dc2626', borderColor: '#dc2626' }}>
                 + Inward Maal Purchase
               </Link>
