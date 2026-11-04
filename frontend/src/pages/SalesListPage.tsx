@@ -135,6 +135,7 @@ export const SalesListPage: React.FC = () => {
 
     try {
       await api.post(`/sales/${saleId}/cancel`, { reason });
+      sessionStorage.removeItem('rot_cached_products');
       triggerOperationSuccess('Invoice cancelled and reversed successfully! Stock has been returned to inventory.');
       if (selectedSale?.id === saleId) {
         setSelectedSale(null);
@@ -154,6 +155,7 @@ export const SalesListPage: React.FC = () => {
     try {
       setLoading(true);
       const res = await api.delete(`/sales/${saleId}`);
+      sessionStorage.removeItem('rot_cached_products');
       triggerOperationSuccess(res.data.message || `Invoice #${invoiceNumber} database aur POS se permanently delete ho gayi!`);
       if (selectedSale?.id === saleId) {
         setSelectedSale(null);
@@ -241,6 +243,8 @@ export const SalesListPage: React.FC = () => {
         notes: editNotes,
       });
 
+      sessionStorage.removeItem('rot_cached_products');
+
       triggerOperationSuccess(`Invoice #${editModalSale.invoiceNumber} kamyabi se update ho gayi aur inventory/ledger recalculate ho gaya!`);
       setEditModalSale(null);
       fetchSales();
@@ -309,6 +313,8 @@ export const SalesListPage: React.FC = () => {
         items: itemsToReturn,
         refundAmount: Number(refundCashAmount) || 0,
       });
+
+      sessionStorage.removeItem('rot_cached_products');
 
       triggerOperationSuccess(`Order Return kamyabi se record ho gaya! Stock godown me wapis jama ho gaya aur customer ledger update ho gaya.`);
       setReturnModalSale(null);

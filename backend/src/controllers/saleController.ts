@@ -833,6 +833,7 @@ export const approveSale = async (req: AuthenticatedRequest, res: Response): Pro
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     clearDashboardCache();
     res.json({ success: true, message: 'Order approved and stock/ledger updated' });
   } catch (error: any) {
@@ -929,6 +930,7 @@ export const cancelSale = async (req: AuthenticatedRequest, res: Response): Prom
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     clearDashboardCache();
     res.json({ success: true, message: 'Sale voided and stock/ledger reversed successfully' });
   } catch (error: any) {
@@ -1214,6 +1216,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     clearDashboardCache();
     res.json({ success: true, message: 'Sale invoice corrected successfully by Admin' });
   } catch (error: any) {
@@ -1421,6 +1424,8 @@ export const createSalesReturn = async (req: AuthenticatedRequest, res: Response
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
+    clearDashboardCache();
     res.status(201).json({
       success: true,
       message: 'Sales return processed successfully and inventory restored',
@@ -1529,6 +1534,7 @@ export const deleteSale = async (req: AuthenticatedRequest, res: Response): Prom
       ipAddress: req.ip,
     });
 
+    clearProductsCache();
     clearDashboardCache();
     res.json({
       success: true,

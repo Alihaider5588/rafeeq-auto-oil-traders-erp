@@ -34,6 +34,7 @@ const PRODUCTS_CACHE_TTL = 180 * 1000; // 3 minutes in-memory cache to minimize 
 
 export const clearProductsCache = () => {
   cachedAllProducts = null;
+  cachedAllProductsTime = 0;
 };
 
 export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<void> => {

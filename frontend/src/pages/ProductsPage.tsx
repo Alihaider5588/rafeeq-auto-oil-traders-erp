@@ -106,7 +106,7 @@ export const ProductsPage: React.FC = () => {
   const loadProducts = async (force: boolean = false) => {
     try {
       const now = Date.now();
-      const CACHE_TTL = 15 * 60 * 1000;
+      const CACHE_TTL = 30 * 1000; // 30 seconds fresh cache to avoid stale stock display while conserving network
       const isDefault = !search && !selectedCategory && !showLowStockOnly;
 
       if (!force && isDefault) {
