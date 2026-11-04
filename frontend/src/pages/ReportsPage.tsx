@@ -617,8 +617,34 @@ export const ReportsPage: React.FC = () => {
                                   Code: {sp.sku} {sp.brand ? `• ${sp.brand}` : ''}
                                 </div>
                               </td>
-                              <td style={{ textAlign: 'center', fontWeight: 800, color: sp.currentStock <= 0 ? '#ef4444' : '#0f172a' }}>
-                                {sp.currentStock}
+                              <td style={{ textAlign: 'center' }}>
+                                {(() => {
+                                  const conv = Number(sp.conversionFactor) || 1;
+                                  const hasPkg = (!!sp.primaryUnit || !!sp.primaryUnitId) && conv > 1;
+                                  const pSym = sp.primaryUnit?.symbol || 'Ctn';
+                                  const sSym = sp.unit?.symbol || 'Pcs';
+                                  const cur = Number(sp.currentStock) || 0;
+                                  const isOut = cur <= 0;
+                                  if (hasPkg) {
+                                    const ctn = Math.floor(cur / conv);
+                                    const loose = cur % conv;
+                                    return (
+                                      <div>
+                                        <div style={{ fontWeight: 800, color: isOut ? '#ef4444' : '#0f172a', fontSize: '0.88rem' }}>
+                                          {ctn} {pSym}{loose > 0 ? ` + ${loose} ${sSym}` : ''}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                          ({cur} {sSym})
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <span style={{ fontWeight: 800, color: isOut ? '#ef4444' : '#0f172a' }}>
+                                      {cur} {sp.unit?.symbol || ''}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td style={{ textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
                                 {sp.monthlyBurnRate}

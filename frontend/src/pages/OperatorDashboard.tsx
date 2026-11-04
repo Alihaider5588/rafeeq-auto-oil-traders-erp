@@ -155,8 +155,8 @@ export const OperatorDashboard: React.FC = () => {
                   <th>SKU / Code</th>
                   <th>Product Name</th>
                   <th>Category & Brand</th>
-                  <th style={{ textAlign: 'right' }}>Current Stock</th>
-                  <th style={{ textAlign: 'right' }}>Min Threshold</th>
+                  <th style={{ textAlign: 'right' }}>Current Stock (موجودہ اسٹاک)</th>
+                  <th style={{ textAlign: 'right' }}>Min Threshold (کم سے کم حد)</th>
                   <th style={{ textAlign: 'center' }}>Urgency Level</th>
                   <th style={{ textAlign: 'center' }}>Action</th>
                 </tr>
@@ -174,6 +174,17 @@ export const OperatorDashboard: React.FC = () => {
                     const min = Number(p.minimumStockLevel);
                     const isZero = stock <= 0;
 
+                    const conv = Number(p.conversionFactor) || 1;
+                    const hasPackaging = (!!p.primaryUnit || !!p.primaryUnitId) && conv > 1;
+                    const primarySymbol = p.primaryUnit?.symbol || 'Ctn';
+                    const secSymbol = p.unit?.symbol || 'Pcs';
+
+                    const stockCartons = Math.floor(stock / conv);
+                    const remStock = stock % conv;
+
+                    const minCartons = Math.floor(min / conv);
+                    const remMin = min % conv;
+
                     return (
                       <tr key={p.id} style={{ backgroundColor: isZero ? '#fff1f2' : '#fffbeb' }}>
                         <td className="font-mono" style={{ fontWeight: 700, color: '#d97706' }}>
@@ -186,14 +197,47 @@ export const OperatorDashboard: React.FC = () => {
                           )}
                         </td>
                         <td>
-                          <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{p.category?.name || 'General'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{p.category?.name || 'General'}</span>
+                            {hasPackaging && (
+                              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0284c7', backgroundColor: '#e0f2fe', padding: '1px 6px', borderRadius: '4px' }}>
+                                1 {primarySymbol} = {conv} {secSymbol}
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{p.brand}</div>
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: isZero ? '#dc2626' : '#d97706', fontSize: '0.95rem' }}>
-                          {stock} {p.unit?.symbol || 'Pcs'}
+                        <td style={{ textAlign: 'right', padding: '8px 12px' }}>
+                          {hasPackaging ? (
+                            <>
+                              <div style={{ fontWeight: 800, color: isZero ? '#dc2626' : '#d97706', fontSize: '0.96rem' }}>
+                                {stockCartons} {primarySymbol}{remStock > 0 ? ` + ${remStock} ${secSymbol}` : ''}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: isZero ? '#dc2626' : '#64748b', fontWeight: 600, marginTop: '2px' }}>
+                                Total: {stock} {secSymbol}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ fontWeight: 800, color: isZero ? '#dc2626' : '#d97706', fontSize: '0.95rem' }}>
+                              {stock} {p.unit?.symbol || 'Pcs'}
+                            </div>
+                          )}
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: '#64748b' }}>
-                          {min} {p.unit?.symbol || 'Pcs'}
+                        <td style={{ textAlign: 'right', padding: '8px 12px' }}>
+                          {hasPackaging ? (
+                            <>
+                              <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.92rem' }}>
+                                {minCartons} {primarySymbol}{remMin > 0 ? ` + ${remMin} ${secSymbol}` : ''}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
+                                Total: {min} {secSymbol}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ fontWeight: 600, color: '#64748b' }}>
+                              {min} {p.unit?.symbol || 'Pcs'}
+                            </div>
+                          )}
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           {isZero ? (

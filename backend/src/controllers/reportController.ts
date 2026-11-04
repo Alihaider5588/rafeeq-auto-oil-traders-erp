@@ -106,6 +106,9 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           currentStock: true,
           minimumStockLevel: true,
           purchasePrice: true,
+          conversionFactor: true,
+          unit: { select: { id: true, name: true, symbol: true } },
+          primaryUnit: { select: { id: true, name: true, symbol: true } },
         },
       }),
 
@@ -483,6 +486,9 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
           currentStock: true,
           minimumStockLevel: true,
           purchasePrice: true,
+          conversionFactor: true,
+          unit: { select: { id: true, name: true, symbol: true } },
+          primaryUnit: { select: { id: true, name: true, symbol: true } },
           salePrice: true,
         },
       }),
@@ -555,6 +561,9 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
       urgency: 'CRITICAL' | 'WARNING' | 'HEALTHY' | 'DEAD_STOCK';
       recommendation: string;
       recommendationUrdu: string;
+      conversionFactor?: number | null;
+      unit?: { id: string; name: string; symbol: string } | null;
+      primaryUnit?: { id: string; name: string; symbol: string } | null;
     }> = [];
 
     allProducts.forEach((p) => {
@@ -620,6 +629,9 @@ export const getAiPredictionsAndGrowthTips = async (_req: AuthenticatedRequest, 
         urgency,
         recommendation,
         recommendationUrdu,
+        conversionFactor: p.conversionFactor ? Number(p.conversionFactor) : 1,
+        unit: p.unit,
+        primaryUnit: p.primaryUnit,
       });
     });
 

@@ -507,46 +507,90 @@ export const AdminDashboard: React.FC = () => {
 
           {/* Quick list of low stock items */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
-            {(alerts?.outOfStockProducts || []).map((p: any) => (
-              <div key={p.id} style={{
-                backgroundColor: '#fee2e2',
-                color: '#991b1b',
-                border: '1.5px solid #fca5a5',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.84rem' }}>{p.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#b91c1c' }}>SKU: {p.sku} | Min Alert: {p.minimumStockLevel}</div>
+            {(alerts?.outOfStockProducts || []).map((p: any) => {
+              const conv = Number(p.conversionFactor) || 1;
+              const hasPkg = (!!p.primaryUnit || !!p.primaryUnitId) && conv > 1;
+              const pSym = p.primaryUnit?.symbol || 'Ctn';
+              const sSym = p.unit?.symbol || 'Pcs';
+              const min = Number(p.minimumStockLevel || 0);
+              const minCtn = Math.floor(min / conv);
+              const minLoose = min % conv;
+              const minDisplay = hasPkg
+                ? (minCtn > 0 ? `${minCtn} ${pSym}${minLoose > 0 ? ` + ${minLoose} ${sSym}` : ''} (${min} ${sSym})` : `${min} ${sSym}`)
+                : `${min} ${sSym}`;
+
+              return (
+                <div key={p.id} style={{
+                  backgroundColor: '#fee2e2',
+                  color: '#991b1b',
+                  border: '1.5px solid #fca5a5',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.84rem' }}>{p.name}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#b91c1c' }}>
+                      SKU: {p.sku} | Min Alert: {minDisplay}
+                    </div>
+                  </div>
+                  <span style={{ backgroundColor: '#dc2626', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 900 }}>
+                    0 OUT OF STOCK
+                  </span>
                 </div>
-                <span style={{ backgroundColor: '#dc2626', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 900 }}>
-                  0 OUT OF STOCK
-                </span>
-              </div>
-            ))}
-            {(alerts?.lowStockProducts || []).map((p: any) => (
-              <div key={p.id} style={{
-                backgroundColor: '#fff1f2',
-                color: '#991b1b',
-                border: '1px solid #fecaca',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>{p.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>SKU: {p.sku} | Min Alert: <b>{p.minimumStockLevel}</b></div>
+              );
+            })}
+            {(alerts?.lowStockProducts || []).map((p: any) => {
+              const conv = Number(p.conversionFactor) || 1;
+              const hasPkg = (!!p.primaryUnit || !!p.primaryUnitId) && conv > 1;
+              const pSym = p.primaryUnit?.symbol || 'Ctn';
+              const sSym = p.unit?.symbol || 'Pcs';
+              const stock = Number(p.currentStock || 0);
+              const min = Number(p.minimumStockLevel || 0);
+              const stockCtn = Math.floor(stock / conv);
+              const stockLoose = stock % conv;
+              const minCtn = Math.floor(min / conv);
+              const minLoose = min % conv;
+
+              const stockDisplay = hasPkg
+                ? `${stockCtn} ${pSym}${stockLoose > 0 ? ` + ${stockLoose} ${sSym}` : ''}`
+                : `${stock} ${sSym}`;
+              const minDisplay = hasPkg
+                ? (minCtn > 0 ? `${minCtn} ${pSym}${minLoose > 0 ? ` + ${minLoose} ${sSym}` : ''} (${min} ${sSym})` : `${min} ${sSym}`)
+                : `${min} ${sSym}`;
+
+              return (
+                <div key={p.id} style={{
+                  backgroundColor: '#fff1f2',
+                  color: '#991b1b',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>{p.name}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                      SKU: {p.sku} | Min Alert: <b>{minDisplay}</b>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #f87171', padding: '3px 8px', borderRadius: '4px', fontSize: '0.76rem', fontWeight: 800, display: 'inline-block' }}>
+                      ⚠️ {stockDisplay} left
+                    </span>
+                    {hasPkg && (
+                      <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
+                        Total: {stock} {sSym}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #f87171', padding: '3px 8px', borderRadius: '4px', fontSize: '0.76rem', fontWeight: 800 }}>
-                  ⚠️ {p.currentStock} {p.unit?.symbol || 'Pcs'} left
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
