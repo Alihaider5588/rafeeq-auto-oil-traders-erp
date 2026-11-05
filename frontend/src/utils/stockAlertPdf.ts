@@ -150,3 +150,4 @@ export const exportStockAlertsPDF = (products: Product[], title = 'CRITICAL MINI
 
   doc.save(`Rafiq_Oil_Critical_Stock_Alerts_${new Date().toISOString().slice(0, 10)}.pdf`);
 };
+

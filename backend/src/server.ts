@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
 import authRoutes from './routes/authRoutes';
@@ -18,6 +19,7 @@ import publicRoutes from './routes/publicRoutes';
 import ownerBrandRoutes from './routes/ownerBrandRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import employeeRoutes from './routes/employeeRoutes';
+import syncRoutes from './routes/syncRoutes';
 
 import { getAllowedCorsOrigins } from './utils/security';
 import { apiLimiter } from './middlewares/rateLimiter';
@@ -187,6 +189,19 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/owner-brand', ownerBrandRoutes); // Confidential Admin-only owner brand module
 app.use('/api/expenses', expenseRoutes); // Small business cashbook & expenses
 app.use('/api/hr', employeeRoutes); // Employees, Attendance & Payroll
+app.use('/api/sync', syncRoutes); // Local-to-Neon Cloud Two-Way Sync Engine
+
+// Local Standalone Production: Serve compiled React frontend directly from port 5000 if dist exists
+const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
 
 // Global Error Handler (Sanitizes errors in production to avoid leaking database details)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

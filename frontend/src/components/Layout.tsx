@@ -27,6 +27,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
+import { SyncButton } from './SyncButton';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
@@ -478,9 +479,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span className="badge badge-success">
-              ● Server Online
-            </span>
+            <SyncButton />
             <div className="topbar-date" style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>
               {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </div>
