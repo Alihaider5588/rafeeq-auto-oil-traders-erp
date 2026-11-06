@@ -23,7 +23,9 @@ import {
   Sparkles,
   ShieldAlert,
   CreditCard,
-  FileDown
+  FileDown,
+  Store,
+  Truck
 } from 'lucide-react';
 import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
@@ -50,7 +52,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const { today, monthly, overall, alerts, topSellingProducts, recentSales } = stats || {
-    today: { totalSales: 0, salesCount: 0, cashReceived: 0, creditSales: 0, grossProfit: 0 },
+    today: { totalSales: 0, salesCount: 0, counterSales: 0, counterSalesCount: 0, vanSales: 0, vanSalesCount: 0, cashReceived: 0, creditSales: 0, grossProfit: 0 },
     monthly: { sales: 0, purchases: 0, grossProfit: 0 },
     overall: { customerReceivables: 0, supplierPayables: 0, currentStockValue: 0, totalProducts: 0, totalCustomers: 0, pendingOrdersCount: 0 },
     alerts: { lowStockCount: 0, outOfStockCount: 0 },
@@ -136,6 +138,26 @@ export const AdminDashboard: React.FC = () => {
           <div className="stat-value">Rs. {Number(today?.totalSales || 0).toLocaleString()}</div>
           <div className="stat-sub">
             <TrendingUp size={14} color="#d97706" /> {today?.salesCount || 0} completed transactions
+          </div>
+        </div>
+
+        <div className="stat-card emerald" style={{ borderLeft: '4px solid #059669' }}>
+          <div className="stat-label">Today's Counter Sales (دکان سیلز)</div>
+          <div className="stat-value" style={{ color: '#059669' }}>
+            Rs. {Number(today?.counterSales || 0).toLocaleString()}
+          </div>
+          <div className="stat-sub">
+            <Store size={14} color="#059669" /> {today?.counterSalesCount || 0} shop counter bills
+          </div>
+        </div>
+
+        <div className="stat-card purple" style={{ borderLeft: '4px solid #7c3aed' }}>
+          <div className="stat-label">Today's Van Sales (وین سپلائی)</div>
+          <div className="stat-value" style={{ color: '#7c3aed' }}>
+            Rs. {Number(today?.vanSales || 0).toLocaleString()}
+          </div>
+          <div className="stat-sub">
+            <Truck size={14} color="#7c3aed" /> {today?.vanSalesCount || 0} field delivery orders
           </div>
         </div>
 

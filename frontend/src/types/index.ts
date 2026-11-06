@@ -130,6 +130,7 @@ export interface Sale {
   grossProfit?: string | number;
   paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE';
   status: 'COMPLETED' | 'PENDING_APPROVAL' | 'CANCELLED';
+  saleType?: 'COUNTER' | 'VAN';
   notes?: string;
   items: SaleItem[];
 }

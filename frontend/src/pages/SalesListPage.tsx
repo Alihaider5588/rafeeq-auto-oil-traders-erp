@@ -19,6 +19,7 @@ export const SalesListPage: React.FC = () => {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterSaleType, setFilterSaleType] = useState<string>('');
 
   // Products & Customers
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -34,6 +35,7 @@ export const SalesListPage: React.FC = () => {
   // Admin Edit Invoice Modal
   const [editModalSale, setEditModalSale] = useState<Sale | null>(null);
   const [editCustomerId, setEditCustomerId] = useState('');
+  const [editSaleType, setEditSaleType] = useState<'COUNTER' | 'VAN'>('VAN');
   const [editItems, setEditItems] = useState<Array<{
     productId: string;
     quantity: number;
@@ -174,6 +176,7 @@ export const SalesListPage: React.FC = () => {
     loadProducts();
     setEditModalSale(sale);
     setEditCustomerId(sale.customerId);
+    setEditSaleType((sale.saleType as any) || 'VAN');
     setEditItems(
       (sale.items || []).map((it: any) => ({
         productId: it.productId,
@@ -237,6 +240,7 @@ export const SalesListPage: React.FC = () => {
       await api.put(`/sales/${editModalSale.id}/edit`, {
         customerId: editCustomerId,
         items: editItems,
+        saleType: editSaleType,
         discount: Number(editDiscount),
         receivedAmount: Number(editReceivedAmount),
         paymentMethod: editPaymentMethod,
@@ -349,8 +353,12 @@ export const SalesListPage: React.FC = () => {
       s.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
       (s.customer?.shopName && s.customer.shopName.toLowerCase().includes(search.toLowerCase()));
     const matchesStatus = filterStatus ? s.status === filterStatus : true;
-    return matchesSearch && matchesStatus;
+    const matchesType = filterSaleType ? (s.saleType || 'VAN') === filterSaleType : true;
+    return matchesSearch && matchesStatus && matchesType;
   });
+
+  const counterSalesCount = sales.filter((s) => s.saleType === 'COUNTER').length;
+  const vanSalesCount = sales.filter((s) => s.saleType !== 'COUNTER').length;
 
   return (
     <div>
@@ -444,7 +452,38 @@ export const SalesListPage: React.FC = () => {
 
       {/* Filter and Search Bar */}
       <div className="card" style={{ marginBottom: '20px', padding: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '14px', alignItems: 'center' }}>
+        {/* Quick Filter Buttons for Counter vs Van Sales */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginRight: '4px' }}>
+            Filter Sales:
+          </span>
+          <button
+            type="button"
+            onClick={() => setFilterSaleType('')}
+            className={`btn btn-sm ${filterSaleType === '' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+          >
+            📋 All Sales ({sales.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterSaleType('COUNTER')}
+            className={`btn btn-sm ${filterSaleType === 'COUNTER' ? 'btn-success' : 'btn-outline'}`}
+            style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+          >
+            🏪 Counter Sales ({counterSalesCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterSaleType('VAN')}
+            className={`btn btn-sm ${filterSaleType === 'VAN' ? 'btn-info' : 'btn-outline'}`}
+            style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+          >
+            🚐 Van Sales ({vanSalesCount})
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '14px', alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
             <input
               type="text"
@@ -454,6 +493,16 @@ export const SalesListPage: React.FC = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+
+          <select
+            className="form-control"
+            value={filterSaleType}
+            onChange={(e) => setFilterSaleType(e.target.value)}
+          >
+            <option value="">All Types (Sab)</option>
+            <option value="COUNTER">🏪 Counter Sales (Shop)</option>
+            <option value="VAN">🚐 Van Sales (Field)</option>
+          </select>
 
           <select
             className="form-control"
@@ -478,7 +527,7 @@ export const SalesListPage: React.FC = () => {
               <th>Invoice #</th>
               <th>Date</th>
               <th>Customer / Shop</th>
-              <th>Salesman</th>
+              <th>Salesman / Type</th>
               <th style={{ textAlign: 'right' }}>Total Bill</th>
               <th style={{ textAlign: 'right' }}>Received</th>
               <th style={{ textAlign: 'right' }}>Balance</th>
@@ -512,7 +561,20 @@ export const SalesListPage: React.FC = () => {
                     </div>
                   </td>
                   <td style={{ fontWeight: 600 }}>{s.customer?.shopName}</td>
-                  <td>{s.salesman?.fullName || 'Direct Counter'}</td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{s.salesman?.fullName || 'Direct Counter'}</div>
+                    <div style={{ marginTop: '2px' }}>
+                      {s.saleType === 'COUNTER' ? (
+                        <span className="badge badge-success" style={{ fontSize: '0.68rem', padding: '2px 6px' }}>
+                          🏪 Counter
+                        </span>
+                      ) : (
+                        <span className="badge badge-info" style={{ fontSize: '0.68rem', padding: '2px 6px' }}>
+                          🚐 Van
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>
                     Rs. {Number(s.netAmount).toLocaleString()}
                   </td>
@@ -715,6 +777,9 @@ export const SalesListPage: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
                   <span><b>REP:</b> {selectedSale.salesman?.fullName || 'Desk POS'}</span>
                   <span><b>MODE:</b> {selectedSale.paymentMethod}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                  <span><b>TYPE:</b> <b>{selectedSale.saleType === 'COUNTER' ? 'COUNTER SALE (SHOP)' : 'VAN SALE (FIELD)'}</b></span>
                 </div>
               </div>
 
@@ -1077,23 +1142,39 @@ export const SalesListPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveEditInvoice}>
-              {/* Customer Selection */}
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
-                  Customer / Party Name:
-                </label>
-                <select
-                  className="form-control"
-                  value={editCustomerId}
-                  onChange={(e) => setEditCustomerId(e.target.value)}
-                  required
-                >
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.shopName} ({c.ownerName}) - Bal: Rs. {Number(c.currentReceivable).toLocaleString()}
-                    </option>
-                  ))}
-                </select>
+              {/* Customer & Sale Type Selection */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '18px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Customer / Party Name:
+                  </label>
+                  <select
+                    className="form-control"
+                    value={editCustomerId}
+                    onChange={(e) => setEditCustomerId(e.target.value)}
+                    required
+                  >
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.shopName} ({c.ownerName}) - Bal: Rs. {Number(c.currentReceivable).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Sale Type (سیلز قسم):
+                  </label>
+                  <select
+                    className="form-control"
+                    value={editSaleType}
+                    onChange={(e) => setEditSaleType(e.target.value as any)}
+                  >
+                    <option value="COUNTER">🏪 Counter Sale (Shop)</option>
+                    <option value="VAN">🚐 Van Sale (Field)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Items Table */}

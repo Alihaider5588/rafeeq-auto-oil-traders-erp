@@ -30,6 +30,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
     // Run parallel database queries for real data
     const [
       todaySales,
+      todayCounterSales,
+      todayVanSales,
       todayPurchases,
       todayPayments,
       todayExpenses,
@@ -42,11 +44,33 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       recentSales,
       recentAuditLogs,
     ] = await Promise.all([
-      // Today Sales
+      // Today Sales (Combined)
       prisma.sale.aggregate({
         where: {
           saleDate: { gte: startOfToday, lte: endOfToday },
           status: OrderStatus.COMPLETED,
+        },
+        _sum: { netAmount: true, receivedAmount: true, remainingBalance: true, grossProfit: true },
+        _count: { id: true },
+      }),
+
+      // Today Counter Sales (Shop)
+      prisma.sale.aggregate({
+        where: {
+          saleDate: { gte: startOfToday, lte: endOfToday },
+          status: OrderStatus.COMPLETED,
+          saleType: 'COUNTER',
+        },
+        _sum: { netAmount: true, receivedAmount: true, remainingBalance: true, grossProfit: true },
+        _count: { id: true },
+      }),
+
+      // Today Van Sales (Field / Supply)
+      prisma.sale.aggregate({
+        where: {
+          saleDate: { gte: startOfToday, lte: endOfToday },
+          status: OrderStatus.COMPLETED,
+          saleType: { not: 'COUNTER' },
         },
         _sum: { netAmount: true, receivedAmount: true, remainingBalance: true, grossProfit: true },
         _count: { id: true },
@@ -198,6 +222,10 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         today: {
           totalSales: Number(todaySales._sum.netAmount || 0),
           salesCount: todaySales._count.id || 0,
+          counterSales: Number(todayCounterSales._sum.netAmount || 0),
+          counterSalesCount: todayCounterSales._count.id || 0,
+          vanSales: Number(todayVanSales._sum.netAmount || 0),
+          vanSalesCount: todayVanSales._count.id || 0,
           totalPurchases: Number(todayPurchases._sum.netAmount || 0),
           cashReceived: Number(todaySales._sum.receivedAmount || 0) + Number(todayPayments._sum.amount || 0),
           creditSales: Number(todaySales._sum.remainingBalance || 0),

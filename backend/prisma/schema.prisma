@@ -212,6 +212,7 @@ model Sale {
   grossProfit      Decimal        @default(0)
   paymentMethod    String         @default("CASH")
   status           String         @default("COMPLETED")
+  saleType         String         @default("VAN") // "COUNTER" (Shop POS) or "VAN" (Field Supply)
   notes            String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -222,6 +223,7 @@ model Sale {
   @@index([invoiceNumber])
   @@index([saleDate])
   @@index([status])
+  @@index([saleType])
   @@map("sales")
 }
 

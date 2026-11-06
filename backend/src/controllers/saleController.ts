@@ -19,6 +19,7 @@ const saleSchema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
   salesmanId: z.string().min(1).optional().nullable(),
   saleDate: z.string().optional(),
+  saleType: z.string().optional().default('VAN'), // 'COUNTER' or 'VAN'
   items: z.array(saleItemSchema).min(1, 'At least one item is required'),
   discount: z.number().min(0).default(0),
   receivedAmount: z.number().min(0).default(0),
@@ -29,7 +30,7 @@ const saleSchema = z.object({
 
 export const getSales = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { customerId, salesmanId, status, startDate, endDate, page = '1', limit = '50' } = req.query;
+    const { customerId, salesmanId, status, startDate, endDate, saleType, page = '1', limit = '50' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
     const limitNum = Math.min(200, Math.max(1, parseInt(limit as string, 10) || 50));
     const skip = (pageNum - 1) * limitNum;
@@ -43,6 +44,7 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
     }
 
     if (customerId) where.customerId = customerId as string;
+    if (saleType) where.saleType = saleType as string;
     if (status) where.status = status as string;
     if (startDate || endDate) {
       where.saleDate = {
@@ -523,6 +525,7 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
           grossProfit: new Prisma.Decimal(totalGrossProfit),
           paymentMethod: data.paymentMethod,
           status: orderStatus,
+          saleType: data.saleType || 'VAN',
           notes: data.notes,
           items: {
             create: itemDetails.map((it) => ({
@@ -1114,6 +1117,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
           totalCost: new Prisma.Decimal(totalSaleCost),
           grossProfit: new Prisma.Decimal(totalGrossProfit),
           paymentMethod: data.paymentMethod,
+          saleType: data.saleType || existingSale.saleType || 'VAN',
           notes: data.notes || existingSale.notes,
           items: {
             create: newItemDetails.map((it) => ({

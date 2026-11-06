@@ -38,6 +38,7 @@ export interface PosDraftOrder {
   cart: CartItem[];
   receivedPayment: number;
   paymentMethod: 'CASH' | 'ONLINE' | 'CHEQUE';
+  isCounterSale?: boolean;
   notes: string;
   totalBill: number;
   itemsCount: number;
@@ -98,6 +99,7 @@ export const SalesmanPortal: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [receivedPayment, setReceivedPayment] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'CHEQUE'>('CASH');
+  const [isCounterSale, setIsCounterSale] = useState<boolean>(false);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -195,6 +197,7 @@ export const SalesmanPortal: React.FC = () => {
           if (backup.customer) setSelectedCustomer(backup.customer);
           if (backup.receivedPayment !== undefined) setReceivedPayment(backup.receivedPayment);
           if (backup.paymentMethod) setPaymentMethod(backup.paymentMethod);
+          if (backup.isCounterSale !== undefined) setIsCounterSale(backup.isCounterSale);
           if (backup.notes) setNotes(backup.notes);
           if (backup.activeDraftId) setActiveDraftId(backup.activeDraftId);
           setSuccessMsg('ℹ️ Pichli session ka in-progress order restore kar diya gaya hai!');
@@ -213,6 +216,7 @@ export const SalesmanPortal: React.FC = () => {
           customer: selectedCustomer,
           receivedPayment,
           paymentMethod,
+          isCounterSale,
           notes,
           activeDraftId,
           savedAt: Date.now()
@@ -223,7 +227,7 @@ export const SalesmanPortal: React.FC = () => {
         localStorage.removeItem('rot_pos_active_cart_backup');
       } catch (e) {}
     }
-  }, [cart, selectedCustomer, receivedPayment, paymentMethod, notes, activeDraftId]);
+  }, [cart, selectedCustomer, receivedPayment, paymentMethod, isCounterSale, notes, activeDraftId]);
 
   const sanitizeCustomerList = (list: any[]): Customer[] => {
     if (!Array.isArray(list)) return [];
@@ -530,6 +534,7 @@ export const SalesmanPortal: React.FC = () => {
       cart: [...cart],
       receivedPayment,
       paymentMethod,
+      isCounterSale,
       notes,
       totalBill,
       itemsCount: cart.length,
@@ -547,6 +552,7 @@ export const SalesmanPortal: React.FC = () => {
     setCart([]);
     setSelectedCustomer(null);
     setReceivedPayment(0);
+    setIsCounterSale(false);
     setNotes('');
     setActiveDraftId(null);
     setSuccessMsg(`✓ Draft order "${draftName}" mehfooz ho gaya hai! Aap kisi bhi waqt 'Draft Orders' se ise wapis load ya delete kar saktay hain.`);
@@ -565,6 +571,7 @@ export const SalesmanPortal: React.FC = () => {
     setCart(draft.cart || []);
     setReceivedPayment(draft.receivedPayment || 0);
     setPaymentMethod(draft.paymentMethod || 'CASH');
+    setIsCounterSale(Boolean(draft.isCounterSale));
     setNotes(draft.notes || '');
     setActiveDraftId(draft.id);
     setShowDraftsModal(false);
@@ -855,6 +862,7 @@ export const SalesmanPortal: React.FC = () => {
 
       const payload = {
         customerId: targetCustomerId,
+        saleType: isCounterSale ? 'COUNTER' : 'VAN',
         items: cart.map((it) => ({
           productId: it.product.id,
           quantity: it.quantity,
@@ -963,6 +971,7 @@ export const SalesmanPortal: React.FC = () => {
 
         setCart([]);
         setReceivedPayment(0);
+        setIsCounterSale(false);
         setNotes('');
         setSelectedCustomer(null);
         setAppliedDiscountSummary('');
@@ -2435,6 +2444,61 @@ export const SalesmanPortal: React.FC = () => {
                 </div>
               </div>
 
+              {/* SALE TYPE CHECK OPTION: Checkin = Counter Sale (Shop), Checkout/Unchecked = Van Sale */}
+              <div 
+                style={{
+                  marginTop: '14px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  backgroundColor: isCounterSale ? '#ecfdf5' : '#f8fafc',
+                  border: isCounterSale ? '2px solid #10b981' : '1.5px solid #cbd5e1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease-in-out'
+                }}
+                onClick={() => setIsCounterSale(!isCounterSale)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <input
+                    type="checkbox"
+                    id="counterSaleCheckInput"
+                    checked={isCounterSale}
+                    onChange={(e) => setIsCounterSale(e.target.checked)}
+                    style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#10b981' }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div>
+                    <label 
+                      htmlFor="counterSaleCheckInput" 
+                      style={{ 
+                        fontWeight: 800, 
+                        fontSize: '0.92rem', 
+                        cursor: 'pointer', 
+                        color: isCounterSale ? '#065f46' : '#1e293b', 
+                        display: 'block', 
+                        marginBottom: '2px' 
+                      }}
+                    >
+                      {isCounterSale ? '🏪 Counter Sale (Shop / Dukan ki Sale)' : '🚐 Van Sale (Field / Supply Delivery)'}
+                    </label>
+                    <div style={{ fontSize: '0.76rem', color: isCounterSale ? '#047857' : '#64748b' }}>
+                      {isCounterSale 
+                        ? '✓ Check-in Active: Ye sale shop counter sale me shamil hogi aur Admin panel me Counter Sales me show hogi.' 
+                        : '○ Checkout / Unchecked: Ye sale Van Sales me shamil hogi aur Admin panel me Van Sales me show hogi.'}
+                    </div>
+                  </div>
+                </div>
+                <span 
+                  className={`badge ${isCounterSale ? 'badge-success' : 'badge-secondary'}`} 
+                  style={{ fontSize: '0.8rem', padding: '6px 10px', fontWeight: 800, whiteSpace: 'nowrap' }}
+                >
+                  {isCounterSale ? '🏪 COUNTER' : '🚐 VAN'}
+                </span>
+              </div>
+
               {/* Net Remaining Debt or Empty Ledger Status Card */}
               {netRemainingDebt <= 0 ? (
                 <div style={{
@@ -3166,6 +3230,9 @@ export const SalesmanPortal: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
                     <span><b>SALESMAN:</b> {completedSale.salesman?.fullName || 'Sales Portal'}</span>
                     <span><b>MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span><b>TYPE:</b> <b>{completedSale.saleType === 'COUNTER' ? 'COUNTER SALE (SHOP)' : 'VAN SALE (FIELD)'}</b></span>
                   </div>
                 </div>
 
