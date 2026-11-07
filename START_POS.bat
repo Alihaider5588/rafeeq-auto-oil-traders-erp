@@ -25,18 +25,18 @@ echo Launching POS Desktop Interface...
 
 :: Check if Google Chrome exists, open in standalone app mode
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000
+    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000/login
 ) else if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000
+    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000/login
 ) else if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" (
-    start "" "%LocalAppData%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000
+    start "" "%LocalAppData%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000/login
 ) else if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5000
+    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5000/login
 ) else if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5000
+    start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5000/login
 ) else (
     :: Fallback to default system browser
-    start http://localhost:5000
+    start http://localhost:5000/login
 )
 
 exit

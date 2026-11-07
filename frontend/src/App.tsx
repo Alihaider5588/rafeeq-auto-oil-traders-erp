@@ -114,14 +114,20 @@ const RouteLoadingFallback = () => (
 );
 
 export const App: React.FC = () => {
+  const isLocalApp = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.port === '5000'
+  );
+
   return (
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
           <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
-          {/* Public Website Routes (No Login Required) */}
-          <Route path="/" element={<PublicLayout><HomePage /></PublicLayout>} />
+          {/* Public Website Routes (On Local POS Shop PC, '/' routes directly to POS App/Login) */}
+          <Route path="/" element={isLocalApp ? <Navigate to="/app" replace /> : <PublicLayout><HomePage /></PublicLayout>} />
           <Route path="/website" element={<PublicLayout><HomePage /></PublicLayout>} />
           <Route path="/website/products" element={<PublicLayout><ProductsCatalogPage /></PublicLayout>} />
           <Route path="/website/products/:id" element={<PublicLayout><ProductDetailPage /></PublicLayout>} />
