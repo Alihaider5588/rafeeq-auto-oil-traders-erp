@@ -44,6 +44,9 @@ echo [3/5] Installing Backend components and SQLite engine...
 cd backend
 call npm install --omit=dev --silent
 call npx prisma generate
+if not exist "dist\server.js" (
+    call npm run build
+)
 cd ..
 echo [OK] Database engine ready.
 echo.
@@ -67,7 +70,7 @@ set SCRIPT_DIR=%~dp0
 set TARGET_BAT=%SCRIPT_DIR%START_POS.bat
 set SHORTCUT_PATH=%USERPROFILE%\Desktop\Rafiq Auto POS.lnk
 
-powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT_PATH%'); $s.TargetPath = '%TARGET_BAT%'; $s.WorkingDirectory = '%SCRIPT_DIR%'; $s.WindowStyle = 7; $s.Save()"
+powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT_PATH%'); $s.TargetPath = '%TARGET_BAT%'; $s.WorkingDirectory = '%SCRIPT_DIR%'; $s.Description = 'Rafiq Auto & Oil Traders POS'; $s.IconLocation = 'shell32.dll,13'; $s.WindowStyle = 7; $s.Save()"
 
 echo.
 echo =====================================================================

@@ -20,6 +20,7 @@ import ownerBrandRoutes from './routes/ownerBrandRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import employeeRoutes from './routes/employeeRoutes';
 import syncRoutes from './routes/syncRoutes';
+import { getSyncMetadata, getPendingLocalCount, runTwoWaySync } from './services/syncService';
 
 import { getAllowedCorsOrigins } from './utils/security';
 import { apiLimiter } from './middlewares/rateLimiter';
@@ -101,70 +102,6 @@ if (process.env.NODE_ENV !== 'test') {
 // Global API Rate Limiter
 app.use('/api', apiLimiter);
 
-// Root and health check endpoints
-app.get('/', (_req, res) => {
-  res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rafiq Auto & Oil Traders - Central Server</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px 20px; display: flex; justify-content: center; align-items: center; min-height: 80vh; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 36px; max-width: 600px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #059669; border-radius: 20px; font-weight: 700; font-size: 0.85rem; }
-    h1 { margin: 16px 0 6px 0; font-size: 1.6rem; font-weight: 800; color: #fff; }
-    .subtitle { color: #d97706; font-size: 1rem; font-weight: 700; margin-bottom: 20px; }
-    p { color: #94a3b8; font-size: 0.9rem; line-height: 1.5; margin: 0 0 20px 0; }
-    .btn-group { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 0.9rem; transition: all 0.2s; }
-    .btn-primary { background: #d97706; color: #fff; }
-    .btn-primary:hover { background: #b45309; }
-    .btn-secondary { background: #334155; color: #f8fafc; }
-    .btn-secondary:hover { background: #475569; }
-    .meta-box { background: #0f172a; border-radius: 10px; padding: 16px; border: 1px solid #334155; }
-    .meta-item { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid #1e293b; }
-    .meta-item:last-child { border-bottom: none; }
-    .meta-label { color: #64748b; }
-    .meta-val { color: #cbd5e1; font-weight: 600; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge">● Central Server Online (Port 5000)</span>
-    <h1>RAFIQ AUTO & OIL TRADERS</h1>
-    <div class="subtitle">رفیق آٹو اینڈ آئل ٹریڈرز - اوکاڑہ</div>
-    <p>The backend REST API and database engine are running securely. Authorized operators and administrators can access the system via the secure web interface.</p>
-    
-    <div class="btn-group">
-      <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/login" class="btn btn-primary" target="_blank">Open POS & ERP App ↗</a>
-      <a href="https://rafeeq-auto-oil-traders-erp-fr1b.vercel.app/website" class="btn btn-secondary" target="_blank">Public Website Catalog ↗</a>
-      <a href="/api/public/products" class="btn btn-secondary">Public Products JSON</a>
-    </div>
-
-    <div class="meta-box">
-      <div class="meta-item">
-        <span class="meta-label">Backend Service:</span>
-        <span class="meta-val">Node.js Express + Prisma ORM</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Local Depot:</span>
-        <span class="meta-val">54-Stop Near MCB Bank, Dipalpur Road, Okara</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Proprietors:</span>
-        <span class="meta-val">0306-9258573 / 0327-7497457</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Security Status:</span>
-        <span class="meta-val" style="color: #10b981;">● Endpoints Hardened &amp; Rate-Limited</span>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`);
-});
-
 // Health check endpoint
 app.get(['/health', '/api/health'], (_req, res) => {
   res.json({
@@ -201,6 +138,14 @@ if (fs.existsSync(frontendDistPath)) {
     }
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
+} else {
+  app.get('/', (_req, res) => {
+    res.json({
+      status: 'online',
+      system: 'RAFIQ AUTO & OIL TRADERS ERP Backend API',
+      timestamp: new Date().toISOString(),
+    });
+  });
 }
 
 // Global Error Handler (Sanitizes errors in production to avoid leaking database details)
@@ -220,6 +165,40 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
+// =========================================================================
+// HOURLY BACKGROUND AUTO-SYNC SERVICE (Only active in Local Offline Mode)
+// =========================================================================
+function startHourlyAutoSync() {
+  const isLocalMode = process.env.USE_POSTGRES !== 'true';
+  const neonConfigured = !!(process.env.NEON_DATABASE_URL && process.env.NEON_DATABASE_URL.trim() !== '');
+
+  if (!isLocalMode || !neonConfigured) {
+    return;
+  }
+
+  const ONE_HOUR = 60 * 60 * 1000;
+  console.log('[Auto-Sync] Background hourly sync service initialized (Interval: 1 hour).');
+
+  setInterval(async () => {
+    try {
+      const meta = getSyncMetadata();
+      const lastSyncDate = meta.lastSyncTime ? new Date(meta.lastSyncTime) : null;
+      const pendingCount = await getPendingLocalCount(lastSyncDate);
+
+      if (pendingCount > 0) {
+        console.log(`[Auto-Sync] Found ${pendingCount} pending local record(s). Attempting hourly cloud sync...`);
+        const result = await runTwoWaySync();
+        console.log('[Auto-Sync] Hourly sync completed successfully:', result.pushed);
+      } else {
+        console.log('[Auto-Sync] No new local transactions since last sync. Skipping cloud wake-up to save compute hours.');
+      }
+    } catch (err: any) {
+      // Gracefully catch network / DNS errors if shop is currently offline
+      console.log(`[Auto-Sync] Internet unavailable or sync paused: ${err.message || 'Offline'}. Will retry next hour.`);
+    }
+  }, ONE_HOUR);
+}
+
 export default app;
 
 // Only start HTTP listener when running as a standalone server (not on Vercel Serverless)
@@ -231,5 +210,7 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     console.log(` Network: http://0.0.0.0:${port} (Accessible from Mobile/Laptop)`);
     console.log(` Security: Rate Limiting & Whitelist CORS Active`);
     console.log(`=======================================================`);
+
+    startHourlyAutoSync();
   });
 }

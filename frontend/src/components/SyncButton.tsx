@@ -68,28 +68,9 @@ export const SyncButton: React.FC = () => {
 
   if (!status) return null;
 
-  // Cloud Direct Mode (Vercel Production)
+  // Cloud Direct Mode (Vercel Production): Hide sync button on online Vercel
   if (!status.isLocalMode) {
-    return (
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          fontSize: '0.74rem',
-          color: '#059669',
-          backgroundColor: '#ecfdf5',
-          border: '1px solid #a7f3d0',
-          padding: '3px 9px',
-          borderRadius: '16px',
-          fontWeight: 700,
-        }}
-        title="Operating in Direct Cloud Mode (Neon PostgreSQL Live)"
-      >
-        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }} />
-        Cloud Live
-      </div>
-    );
+    return null;
   }
 
   // Local Offline-First Mode

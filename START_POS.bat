@@ -10,13 +10,17 @@ echo Starting Local Database and API Server...
 
 cd /d "%~dp0backend"
 
-:: Start Node.js backend silently in a background process
-start /b "" node dist/server.js > server_output.log 2>&1
+:: Check if port 5000 is already running
+netstat -ano | findstr :5000 | findstr LISTENING >nul
+if %errorlevel% neq 0 (
+    echo Starting Local Database and API Server...
+    start /b "" node dist/server.js > server_output.log 2>&1
+    timeout /t 2 /nobreak >nul
+) else (
+    echo Local POS Server is already running.
+)
 
-:: Wait 2 seconds for server port 5000 to bind
-timeout /t 2 /nobreak >nul
-
-echo Server online at http://localhost:5000
+echo.
 echo Launching POS Desktop Interface...
 
 :: Check if Google Chrome exists, open in standalone app mode
@@ -26,6 +30,10 @@ if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
     start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000
 ) else if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" (
     start "" "%LocalAppData%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5000
+) else if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
+    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5000
+) else if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
+    start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5000
 ) else (
     :: Fallback to default system browser
     start http://localhost:5000
