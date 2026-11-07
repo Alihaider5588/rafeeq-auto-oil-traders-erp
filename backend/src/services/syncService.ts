@@ -103,39 +103,113 @@ export async function pullAllFromCloud(): Promise<any> {
   try {
     console.log('[Sync] Initiating full cloud pull from Neon to local SQLite...');
     await neon.$connect();
+    await local.$executeRawUnsafe('PRAGMA foreign_keys = OFF;');
 
     // 1. Users
     const users = await neon.user.findMany();
     for (const u of users) {
-      await local.user.upsert({ where: { id: u.id }, create: u, update: u });
+      const existing = await local.user.findFirst({
+        where: { OR: [{ id: u.id }, { username: u.username }] },
+      });
+      if (existing) {
+        await local.$executeRawUnsafe(
+          'UPDATE users SET id = ?, fullName = ?, phone = ?, passwordHash = ?, role = ?, permissions = ?, isActive = ? WHERE id = ?',
+          u.id,
+          u.fullName,
+          u.phone,
+          u.passwordHash,
+          u.role,
+          u.permissions,
+          u.isActive ? 1 : 0,
+          existing.id
+        );
+      } else {
+        await local.user.create({ data: u });
+      }
     }
     pulledStats.users = users.length;
 
     // 2. Categories
     const categories = await neon.category.findMany();
     for (const c of categories) {
-      await local.category.upsert({ where: { id: c.id }, create: c, update: c });
+      const existing = await local.category.findFirst({
+        where: { OR: [{ id: c.id }, { name: c.name }] },
+      });
+      if (existing) {
+        if (existing.id !== c.id) {
+          await local.$executeRawUnsafe('UPDATE products SET categoryId = ? WHERE categoryId = ?', c.id, existing.id);
+          await local.$executeRawUnsafe('DELETE FROM categories WHERE id = ?', existing.id);
+          await local.category.create({ data: c });
+        } else {
+          await local.category.update({ where: { id: c.id }, data: c });
+        }
+      } else {
+        await local.category.create({ data: c });
+      }
     }
     pulledStats.categories = categories.length;
 
     // 3. Units
     const units = await neon.unit.findMany();
     for (const un of units) {
-      await local.unit.upsert({ where: { id: un.id }, create: un, update: un });
+      const existing = await local.unit.findFirst({
+        where: { OR: [{ id: un.id }, { name: un.name }, { symbol: un.symbol }] },
+      });
+      if (existing) {
+        if (existing.id !== un.id) {
+          await local.$executeRawUnsafe('UPDATE products SET unitId = ? WHERE unitId = ?', un.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE products SET primaryUnitId = ? WHERE primaryUnitId = ?', un.id, existing.id);
+          await local.$executeRawUnsafe('DELETE FROM units WHERE id = ?', existing.id);
+          await local.unit.create({ data: un });
+        } else {
+          await local.unit.update({ where: { id: un.id }, data: un });
+        }
+      } else {
+        await local.unit.create({ data: un });
+      }
     }
     pulledStats.units = units.length;
 
     // 4. Suppliers
     const suppliers = await neon.supplier.findMany();
     for (const s of suppliers) {
-      await local.supplier.upsert({ where: { id: s.id }, create: s, update: s });
+      const existing = await local.supplier.findFirst({
+        where: { OR: [{ id: s.id }, { companyName: s.companyName }] },
+      });
+      if (existing) {
+        if (existing.id !== s.id) {
+          await local.$executeRawUnsafe('UPDATE purchases SET supplierId = ? WHERE supplierId = ?', s.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE supplier_ledgers SET supplierId = ? WHERE supplierId = ?', s.id, existing.id);
+          await local.$executeRawUnsafe('DELETE FROM suppliers WHERE id = ?', existing.id);
+          await local.supplier.create({ data: s });
+        } else {
+          await local.supplier.update({ where: { id: s.id }, data: s });
+        }
+      } else {
+        await local.supplier.create({ data: s });
+      }
     }
     pulledStats.suppliers = suppliers.length;
 
     // 5. Customers
     const customers = await neon.customer.findMany();
     for (const cust of customers) {
-      await local.customer.upsert({ where: { id: cust.id }, create: cust, update: cust });
+      const existing = await local.customer.findFirst({
+        where: { OR: [{ id: cust.id }, { phone: cust.phone }] },
+      });
+      if (existing) {
+        if (existing.id !== cust.id) {
+          await local.$executeRawUnsafe('UPDATE sales SET customerId = ? WHERE customerId = ?', cust.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE customer_ledgers SET customerId = ? WHERE customerId = ?', cust.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE customer_product_rates SET customerId = ? WHERE customerId = ?', cust.id, existing.id);
+          await local.$executeRawUnsafe('DELETE FROM customers WHERE id = ?', existing.id);
+          await local.customer.create({ data: cust });
+        } else {
+          await local.customer.update({ where: { id: cust.id }, data: cust });
+        }
+      } else {
+        await local.customer.create({ data: cust });
+      }
     }
     pulledStats.customers = customers.length;
 
@@ -149,7 +223,23 @@ export async function pullAllFromCloud(): Promise<any> {
     // 7. Products
     const products = await neon.product.findMany();
     for (const p of products) {
-      await local.product.upsert({ where: { id: p.id }, create: p, update: p });
+      const existing = await local.product.findFirst({
+        where: { OR: [{ id: p.id }, { sku: p.sku }] },
+      });
+      if (existing) {
+        if (existing.id !== p.id) {
+          await local.$executeRawUnsafe('UPDATE sale_items SET productId = ? WHERE productId = ?', p.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE purchase_items SET productId = ? WHERE productId = ?', p.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE stock_movements SET productId = ? WHERE productId = ?', p.id, existing.id);
+          await local.$executeRawUnsafe('UPDATE customer_product_rates SET productId = ? WHERE productId = ?', p.id, existing.id);
+          await local.$executeRawUnsafe('DELETE FROM products WHERE id = ?', existing.id);
+          await local.product.create({ data: p });
+        } else {
+          await local.product.update({ where: { id: p.id }, data: p });
+        }
+      } else {
+        await local.product.create({ data: p });
+      }
     }
     pulledStats.products = products.length;
 
@@ -173,6 +263,8 @@ export async function pullAllFromCloud(): Promise<any> {
       await local.customerLedger.upsert({ where: { id: cl.id }, create: cl, update: cl });
     }
     pulledStats.customerLedgers = ledgers.length;
+
+    await local.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
 
     const syncTime = new Date().toISOString();
     saveSyncMetadata(syncTime, 'SUCCESS', { mode: 'FULL_PULL', stats: pulledStats });

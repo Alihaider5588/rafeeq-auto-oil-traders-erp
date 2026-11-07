@@ -3,13 +3,28 @@ import axios from 'axios';
 const LIVE_BACKEND_HOST = 'https://rafeeq-auto-oil-traders-erp.vercel.app';
 const LIVE_BACKEND_URL = `${LIVE_BACKEND_HOST}/api`;
 
+const isLocalHost = (host: string) => {
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.startsWith('192.168.') ||
+    host.startsWith('10.') ||
+    host.startsWith('172.')
+  );
+};
+
 // Automatically use the device's hostname (e.g. 192.168.1.147 or localhost) or cloud backend
 const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
-    return import.meta.env.VITE_API_URL.trim();
-  }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
+    // When running locally on PC or shop local network, ALWAYS target local backend
+    if (isLocalHost(host)) {
+      if (window.location.port === '5000' || !window.location.port) {
+        return '/api';
+      }
+      return `http://${host}:5000/api`;
+    }
+
     // When running in production on Vercel or custom domain or any HTTPS cloud domain
     if (
       host.includes('rafiquautoandoiltraders.com') ||
@@ -20,22 +35,24 @@ const getApiBaseUrl = () => {
     ) {
       return LIVE_BACKEND_URL;
     }
-    return `http://${host}:5000/api`;
   }
+
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
+    return import.meta.env.VITE_API_URL.trim();
+  }
+
   return LIVE_BACKEND_URL;
 };
 
 export const getBackendHost = () => {
-  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
-    try {
-      const url = new URL(import.meta.env.VITE_API_URL);
-      return `${url.protocol}//${url.host}`;
-    } catch {
-      // fallback
-    }
-  }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
+    if (isLocalHost(host)) {
+      if (window.location.port === '5000' || !window.location.port) {
+        return window.location.origin;
+      }
+      return `http://${host}:5000`;
+    }
     if (
       host.includes('rafiquautoandoiltraders.com') ||
       host.includes('rafiqautoandoiltraders.com') ||
@@ -45,7 +62,14 @@ export const getBackendHost = () => {
     ) {
       return LIVE_BACKEND_HOST;
     }
-    return `http://${host}:5000`;
+  }
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
+    try {
+      const url = new URL(import.meta.env.VITE_API_URL);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      // fallback
+    }
   }
   return LIVE_BACKEND_HOST;
 };
