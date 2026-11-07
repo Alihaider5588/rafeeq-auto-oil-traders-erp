@@ -840,7 +840,7 @@ export const LedgersPage: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="any"
                   className="form-control"
                   placeholder="Enter settlement amount..."
                   value={contraAmount}
@@ -938,7 +938,7 @@ export const LedgersPage: React.FC = () => {
                 <label className="form-label">Payment Amount (Rs.) *</label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="any"
                   className="form-control"
                   placeholder="e.g. 50000"
                   value={payAmount}

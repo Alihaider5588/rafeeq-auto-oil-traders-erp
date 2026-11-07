@@ -22,7 +22,7 @@ export const OnlineOrderModal: React.FC<OrderModalProps> = ({ product, onClose }
   const [cityArea, setCityArea] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [unitType, setUnitType] = useState<'SECONDARY' | 'PRIMARY'>('SECONDARY');
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState<number | string>(1);
   const [notes, setNotes] = useState('');
   
   const [submitting, setSubmitting] = useState(false);
@@ -34,7 +34,8 @@ export const OnlineOrderModal: React.FC<OrderModalProps> = ({ product, onClose }
   const unitPrice = unitType === 'PRIMARY' && product.conversionFactor > 1 
     ? basePrice * product.conversionFactor 
     : basePrice;
-  const totalAmount = unitPrice * Math.max(1, quantity);
+  const numQty = parseFloat(String(quantity)) || 0;
+  const totalAmount = unitPrice * numQty;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +49,8 @@ export const OnlineOrderModal: React.FC<OrderModalProps> = ({ product, onClose }
       setError('Please enter your contact mobile number.');
       return;
     }
-    if (quantity <= 0) {
-      setError('Quantity must be at least 1.');
+    if (numQty <= 0) {
+      setError('Quantity must be greater than 0.');
       return;
     }
 
@@ -65,7 +66,7 @@ export const OnlineOrderModal: React.FC<OrderModalProps> = ({ product, onClose }
         items: [
           {
             productId: product.id,
-            quantity: Number(quantity),
+            quantity: numQty,
             unitType,
           },
         ],
@@ -316,9 +317,10 @@ export const OnlineOrderModal: React.FC<OrderModalProps> = ({ product, onClose }
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <input
                   type="number"
-                  min="1"
+                  min="0.001"
+                  step="any"
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => setQuantity(e.target.value)}
                   style={{
                     width: '140px',
                     padding: '10px 12px',

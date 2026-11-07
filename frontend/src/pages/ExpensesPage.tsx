@@ -459,8 +459,9 @@ export const ExpensesPage: React.FC = () => {
                   </span>
                   <input
                     type="number"
+                    step="any"
                     required
-                    min="1"
+                    min="0.01"
                     value={form.amount}
                     onChange={e => setForm({ ...form, amount: e.target.value })}
                     style={{

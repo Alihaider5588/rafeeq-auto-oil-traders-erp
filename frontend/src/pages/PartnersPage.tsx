@@ -784,6 +784,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     </label>
                     <input
                       type="number"
+                      step="any"
                       className="form-control"
                       placeholder="0"
                       value={formDual.openingReceivable}
@@ -797,6 +798,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     </label>
                     <input
                       type="number"
+                      step="any"
                       className="form-control"
                       placeholder="0"
                       value={formDual.openingPayable}
@@ -882,6 +884,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     <label className="form-label">Opening Udhar Balance (Rs.)</label>
                     <input
                       type="number"
+                      step="any"
                       className="form-control"
                       value={formCustomer.openingBalance}
                       onChange={(e) => setFormCustomer({ ...formCustomer, openingBalance: e.target.value })}
@@ -891,6 +894,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     <label className="form-label">Credit Limit (Rs.)</label>
                     <input
                       type="number"
+                      step="any"
                       className="form-control"
                       value={formCustomer.creditLimit}
                       onChange={(e) => setFormCustomer({ ...formCustomer, creditLimit: e.target.value })}
@@ -944,6 +948,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   <label className="form-label">Opening Payable Balance (Rs.)</label>
                   <input
                     type="number"
+                    step="any"
                     className="form-control"
                     value={formSupplier.openingBalance}
                     onChange={(e) => setFormSupplier({ ...formSupplier, openingBalance: e.target.value })}
@@ -1105,7 +1110,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   <input
                     type="number"
                     min="0"
-                    step="1000"
+                    step="any"
                     className="form-control"
                     style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0369a1', backgroundColor: '#ffffff' }}
                     value={editCustomerForm.creditLimit}

@@ -36,7 +36,7 @@ export interface PosDraftOrder {
   name: string;
   customer: Customer | null;
   cart: CartItem[];
-  receivedPayment: number;
+  receivedPayment: number | string;
   paymentMethod: 'CASH' | 'ONLINE' | 'CHEQUE';
   isCounterSale?: boolean;
   notes: string;
@@ -52,9 +52,9 @@ interface ExtendedProduct extends Product {
 
 interface CartItem {
   product: ExtendedProduct;
-  quantity: number;
+  quantity: number | string;
   unitType: 'PRIMARY' | 'SECONDARY';
-  unitPrice: number;
+  unitPrice: number | string;
   standardRate: number;
   discountPercent?: number;
   rateInfo?: {
@@ -97,7 +97,7 @@ export const SalesmanPortal: React.FC = () => {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [receivedPayment, setReceivedPayment] = useState<number>(0);
+  const [receivedPayment, setReceivedPayment] = useState<number | string>(0);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'CHEQUE'>('CASH');
   const [isCounterSale, setIsCounterSale] = useState<boolean>(false);
   const [notes, setNotes] = useState('');
@@ -349,7 +349,7 @@ export const SalesmanPortal: React.FC = () => {
     const existingIndex = cart.findIndex((item) => item.product.id === product.id);
     if (existingIndex > -1) {
       const updated = [...cart];
-      updated[existingIndex].quantity += 1;
+      updated[existingIndex].quantity = (parseFloat(String(updated[existingIndex].quantity)) || 0) + 1;
       setCart(updated);
       return;
     }
@@ -409,10 +409,11 @@ export const SalesmanPortal: React.FC = () => {
     let targetPrice = cachedRate?.suggestedRate ? Number(cachedRate.suggestedRate) : 0;
     if (!targetPrice) {
       if (item.unitType !== newUnit) {
+        const currentItemPrice = parseFloat(String(item.unitPrice)) || 0;
         if (newUnit === 'PRIMARY') {
-          targetPrice = item.unitPrice > 0 ? Math.round(item.unitPrice * conv) : newStandardRate;
+          targetPrice = currentItemPrice > 0 ? Math.round(currentItemPrice * conv) : newStandardRate;
         } else {
-          targetPrice = item.unitPrice > 0 ? Math.round(item.unitPrice / conv) : newStandardRate;
+          targetPrice = currentItemPrice > 0 ? Math.round(currentItemPrice / conv) : newStandardRate;
         }
       } else {
         targetPrice = newStandardRate;
@@ -446,7 +447,8 @@ export const SalesmanPortal: React.FC = () => {
 
   const updateQuantity = (index: number, delta: number) => {
     const updated = [...cart];
-    const newQty = updated[index].quantity + delta;
+    const currentQty = parseFloat(String(updated[index].quantity)) || 0;
+    const newQty = Math.round((currentQty + delta) * 1000) / 1000;
     if (newQty > 0) {
       updated[index].quantity = newQty;
       setCart(updated);
@@ -455,13 +457,13 @@ export const SalesmanPortal: React.FC = () => {
     }
   };
 
-  const setDirectQuantity = (index: number, qty: number) => {
+  const setDirectQuantity = (index: number, qty: number | string) => {
     const updated = [...cart];
     updated[index].quantity = qty;
     setCart(updated);
   };
 
-  const updatePrice = (index: number, newPrice: number) => {
+  const updatePrice = (index: number, newPrice: number | string) => {
     const updated = [...cart];
     updated[index].unitPrice = newPrice;
     setCart(updated);
@@ -507,14 +509,15 @@ export const SalesmanPortal: React.FC = () => {
   const customerCreditLimit = isWalkIn ? 0 : Number(selectedCustomer?.creditLimit || 0);
 
   const totalBill = cart.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
+    (sum, item) => sum + (parseFloat(String(item.unitPrice)) || 0) * (parseFloat(String(item.quantity)) || 0),
     0
   );
 
+  const numReceived = parseFloat(String(receivedPayment)) || 0;
   const totalPayableWithDebt = isWalkIn ? totalBill : (totalBill + previousDebt);
-  const netRemainingDebt = isWalkIn ? Math.max(0, totalBill - receivedPayment) : (totalPayableWithDebt - receivedPayment);
+  const netRemainingDebt = isWalkIn ? Math.max(0, totalBill - numReceived) : (totalPayableWithDebt - numReceived);
   const isCreditExceeded = !isWalkIn && customerCreditLimit > 0 && netRemainingDebt > customerCreditLimit;
-  const isWalkInCreditAttempt = isWalkIn && totalBill > 0 && (totalBill - receivedPayment) > 0;
+  const isWalkInCreditAttempt = isWalkIn && totalBill > 0 && (totalBill - numReceived) > 0;
 
   // Drafts Management Handlers
   const handleSaveAsDraft = () => {
@@ -778,18 +781,21 @@ export const SalesmanPortal: React.FC = () => {
       errors.cart = 'Order me kam az kam 1 product add karna lazmi hai';
     }
     cart.forEach((it, idx) => {
-      if (it.quantity <= 0 || isNaN(it.quantity)) {
-        errors[`qty_${idx}`] = 'Tadaad (Quantity) kam az kam 1 honi chahiye';
+      const q = parseFloat(String(it.quantity)) || 0;
+      const p = parseFloat(String(it.unitPrice)) || 0;
+      if (q <= 0 || isNaN(q)) {
+        errors[`qty_${idx}`] = 'Tadaad (Quantity) kam az kam 0 se barhi honi chahiye';
       }
-      if (it.unitPrice < 0 || isNaN(it.unitPrice)) {
+      if (p < 0 || isNaN(p)) {
         errors[`price_${idx}`] = 'Unit rate 0 ya is se barhi raqam honi chahiye';
       }
     });
-    if (receivedPayment < 0 || isNaN(receivedPayment)) {
+    const numReceivedVal = parseFloat(String(receivedPayment)) || 0;
+    if (numReceivedVal < 0 || isNaN(numReceivedVal)) {
       errors.receivedPayment = 'Received payment minus me nahi ho sakti';
     }
     if (isWalkInCreditAttempt) {
-      errors.receivedPayment = `Walk-in customer ko udhar dena sakht mana hai (Baqaya: Rs. ${(totalBill - receivedPayment).toLocaleString()}). Customer list me shamil karein ya poora cash wasool karein.`;
+      errors.receivedPayment = `Walk-in customer ko udhar dena sakht mana hai (Baqaya: Rs. ${(totalBill - numReceivedVal).toLocaleString()}). Customer list me shamil karein ya poora cash wasool karein.`;
     }
     if (isCreditExceeded) {
       errors.customer = `⛔ Customer ka udhar credit limit (Rs. ${customerCreditLimit.toLocaleString()}) se barh gaya hai. Bill creation disabled hai!`;
@@ -814,7 +820,8 @@ export const SalesmanPortal: React.FC = () => {
     const belowCostItems = cart.filter((it) => {
       const conv = Number(it.product.conversionFactor) || 1;
       const cost = it.unitType === 'PRIMARY' ? (Number(it.product.purchasePrice || 0) * conv) : Number(it.product.purchasePrice || 0);
-      return cost > 0 && it.unitPrice > 0 && it.unitPrice < cost;
+      const up = parseFloat(String(it.unitPrice)) || 0;
+      return cost > 0 && up > 0 && up < cost;
     });
 
     if (belowCostItems.length > 0) {
@@ -822,8 +829,9 @@ export const SalesmanPortal: React.FC = () => {
         .map(it => {
           const conv = Number(it.product.conversionFactor) || 1;
           const cost = it.unitType === 'PRIMARY' ? (Number(it.product.purchasePrice || 0) * conv) : Number(it.product.purchasePrice || 0);
-          const loss = cost - it.unitPrice;
-          return `• ${it.product.name}: Sale Rate Rs. ${it.unitPrice.toLocaleString()} (Khareed Rs. ${cost.toLocaleString()} → Nuksaan Rs. ${loss.toLocaleString()}/unit)`;
+          const up = parseFloat(String(it.unitPrice)) || 0;
+          const loss = cost - up;
+          return `• ${it.product.name}: Sale Rate Rs. ${up.toLocaleString()} (Khareed Rs. ${cost.toLocaleString()} → Nuksaan Rs. ${loss.toLocaleString()}/unit)`;
         })
         .join('\n');
 
@@ -863,15 +871,19 @@ export const SalesmanPortal: React.FC = () => {
       const payload = {
         customerId: targetCustomerId,
         saleType: isCounterSale ? 'COUNTER' : 'VAN',
-        items: cart.map((it) => ({
-          productId: it.product.id,
-          quantity: it.quantity,
-          unitType: it.unitType,
-          unitPrice: Number(it.unitPrice),
-          isRateOverridden: it.unitPrice !== it.standardRate,
-          originalRate: it.standardRate,
-        })),
-        receivedAmount: Number(receivedPayment),
+        items: cart.map((it) => {
+          const q = parseFloat(String(it.quantity)) || 0;
+          const p = parseFloat(String(it.unitPrice)) || 0;
+          return {
+            productId: it.product.id,
+            quantity: q,
+            unitType: it.unitType,
+            unitPrice: p,
+            isRateOverridden: p !== it.standardRate,
+            originalRate: it.standardRate,
+          };
+        }),
+        receivedAmount: parseFloat(String(receivedPayment)) || 0,
         paymentMethod,
         notes,
       };
@@ -899,7 +911,7 @@ export const SalesmanPortal: React.FC = () => {
         // Optimistic local stock & debt update (completely eliminates heavy Neon re-fetch after sale)
         const soldItems = cart.map((it) => ({
           productId: it.product.id,
-          qtyBase: it.unitType === 'PRIMARY' ? it.quantity * (Number(it.product.conversionFactor) || 1) : it.quantity,
+          qtyBase: it.unitType === 'PRIMARY' ? (parseFloat(String(it.quantity)) || 0) * (Number(it.product.conversionFactor) || 1) : (parseFloat(String(it.quantity)) || 0),
         }));
 
         setProducts((prevProducts) => {
@@ -1221,7 +1233,7 @@ export const SalesmanPortal: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  <ShoppingBag size={14} /> Bill Cart ({cart.reduce((s, i) => s + i.quantity, 0)} Items)
+                  <ShoppingBag size={14} /> Bill Cart ({cart.reduce((s, i) => s + (parseFloat(String(i.quantity)) || 0), 0)} Items)
                 </button>
               )}
 
@@ -1985,7 +1997,7 @@ export const SalesmanPortal: React.FC = () => {
                     type="number"
                     min="0"
                     max="100"
-                    step="0.5"
+                    step="any"
                     className="form-control"
                     style={{ fontSize: '0.85rem', padding: '6px 26px 6px 8px', fontWeight: 700, backgroundColor: '#ffffff' }}
                     placeholder="0"
@@ -2060,9 +2072,11 @@ export const SalesmanPortal: React.FC = () => {
                 const currentUnitSymbol = item.unitType === 'PRIMARY' ? primarySymbol : secondarySymbol;
                 const basePurchasePrice = Number(item.product.purchasePrice) || 0;
                 const effectivePurchasePrice = item.unitType === 'PRIMARY' ? (basePurchasePrice * conv) : basePurchasePrice;
-                const isBelowCost = effectivePurchasePrice > 0 && item.unitPrice > 0 && item.unitPrice < effectivePurchasePrice;
-                const lossPerUnit = Math.max(0, effectivePurchasePrice - item.unitPrice);
-                const totalLoss = lossPerUnit * item.quantity;
+                const itemUnitPrice = parseFloat(String(item.unitPrice)) || 0;
+                const itemQuantity = parseFloat(String(item.quantity)) || 0;
+                const isBelowCost = effectivePurchasePrice > 0 && itemUnitPrice > 0 && itemUnitPrice < effectivePurchasePrice;
+                const lossPerUnit = Math.max(0, effectivePurchasePrice - itemUnitPrice);
+                const totalLoss = lossPerUnit * itemQuantity;
                 return (
                   <div
                     key={`${item.product.id}-${index}`}
@@ -2197,21 +2211,21 @@ export const SalesmanPortal: React.FC = () => {
                           </button>
                           <input
                             type="number"
-                            min="1"
+                            min="0.001"
                             step="any"
-                            value={item.quantity === 0 ? '' : item.quantity}
+                            value={item.quantity === 0 || item.quantity === '' ? '' : item.quantity}
                             onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                              setDirectQuantity(index, isNaN(val) ? 0 : val);
+                              setDirectQuantity(index, e.target.value);
                             }}
                             onBlur={() => {
-                              if (!item.quantity || item.quantity <= 0) {
+                              const num = parseFloat(String(item.quantity));
+                              if (isNaN(num) || num <= 0) {
                                 setDirectQuantity(index, 1);
                               }
                             }}
                             className="form-control"
                             style={{
-                              width: '56px',
+                              width: '64px',
                               height: '32px',
                               textAlign: 'center',
                               fontWeight: 800,
@@ -2242,6 +2256,8 @@ export const SalesmanPortal: React.FC = () => {
                         </div>
                         <input
                           type="number"
+                          step="any"
+                          min="0"
                           className="form-control"
                           style={{
                             fontSize: '0.85rem',
@@ -2253,14 +2269,13 @@ export const SalesmanPortal: React.FC = () => {
                               ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' }
                               : {})
                           }}
-                          value={item.unitPrice === 0 ? '' : item.unitPrice}
+                          value={item.unitPrice === 0 || item.unitPrice === '' ? '' : item.unitPrice}
                           placeholder="0"
                           onChange={(e) => {
                             if (fieldErrors[`price_${index}`]) {
                               setFieldErrors(prev => ({ ...prev, [`price_${index}`]: '' }));
                             }
-                            const val = e.target.value === '' ? 0 : Number(e.target.value);
-                            updatePrice(index, val);
+                            updatePrice(index, e.target.value);
                           }}
                         />
                         {renderFieldErrorTag(`price_${index}`)}
@@ -2272,7 +2287,7 @@ export const SalesmanPortal: React.FC = () => {
                           {item.quantity} {currentUnitSymbol} Total
                         </div>
                         <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
-                          Rs. {(item.unitPrice * item.quantity).toLocaleString()}
+                          Rs. {(itemUnitPrice * itemQuantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                     </div>
@@ -2410,15 +2425,16 @@ export const SalesmanPortal: React.FC = () => {
                   <label className="form-label">Payment Received / Wasool (Rs.) *</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     className="form-control"
                     placeholder="0"
-                    value={receivedPayment === 0 ? '' : receivedPayment}
+                    value={receivedPayment === 0 || receivedPayment === '0' ? '' : receivedPayment}
                     onChange={(e) => {
                       if (fieldErrors.receivedPayment) {
                         setFieldErrors(prev => ({ ...prev, receivedPayment: '' }));
                       }
-                      const val = e.target.value === '' ? 0 : Number(e.target.value);
-                      setReceivedPayment(val);
+                      setReceivedPayment(e.target.value);
                     }}
                     style={{
                       fontSize: '1.15rem',
@@ -2516,9 +2532,9 @@ export const SalesmanPortal: React.FC = () => {
                   <div style={{ fontSize: '0.82rem', marginTop: '4px', color: '#166534' }}>
                     Customer ne apna current bill aur sabqa udhar mukammal ada kar diya hai. Is invoice ke save hotay hi customer ka ledger 0 ho jaye ga.
                   </div>
-                  {receivedPayment > totalPayableWithDebt && (
+                  {(parseFloat(String(receivedPayment)) || 0) > totalPayableWithDebt && (
                     <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed #86efac', fontWeight: 800, fontSize: '0.92rem', color: '#047857' }}>
-                      Baqaya Wapsi (Change Return): Rs. {(receivedPayment - totalPayableWithDebt).toLocaleString()}
+                      Baqaya Wapsi (Change Return): Rs. {((parseFloat(String(receivedPayment)) || 0) - totalPayableWithDebt).toLocaleString()}
                     </div>
                   )}
                 </div>
@@ -2578,7 +2594,7 @@ export const SalesmanPortal: React.FC = () => {
                     </button>
                   </div>
                   <div style={{ fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
-                    Walk-in counter customer ka koi pichla khata / record nahi hota. Baqaya udhar: <b>Rs. {(totalBill - receivedPayment).toLocaleString()}</b>.
+                    Walk-in counter customer ka koi pichla khata / record nahi hota. Baqaya udhar: <b>Rs. {(totalBill - (parseFloat(String(receivedPayment)) || 0)).toLocaleString()}</b>.
                     <br />
                     Agar is customer ko udhar lena hai to pehle isay <b>Customer List</b> me shamil karein taake iska proper khata aur ledger maintain ho sakay.
                   </div>
@@ -2896,6 +2912,8 @@ export const SalesmanPortal: React.FC = () => {
                   <label className="form-label">Credit Limit (Rs.)</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     className="form-control"
                     value={quickCustForm.creditLimit}
                     onChange={(e) => setQuickCustForm({ ...quickCustForm, creditLimit: e.target.value })}
@@ -3014,7 +3032,7 @@ export const SalesmanPortal: React.FC = () => {
                 <input
                   type="number"
                   min="0"
-                  step="1000"
+                  step="any"
                   className="form-control"
                   style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0369a1' }}
                   value={newCreditLimitInput}

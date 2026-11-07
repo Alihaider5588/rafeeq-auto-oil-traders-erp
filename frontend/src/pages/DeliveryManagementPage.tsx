@@ -91,14 +91,14 @@ export const DeliveryManagementPage: React.FC = () => {
   const [dispatchRouteArea, setDispatchRouteArea] = useState('');
   const [dispatchSalesmanId, setDispatchSalesmanId] = useState('');
   const [totalCustomers, setTotalCustomers] = useState(0);
-  const [paymentReceived, setPaymentReceived] = useState(0);
-  const [creditAmount, setCreditAmount] = useState(0);
-  const [returnedGoods, setReturnedGoods] = useState(0);
+  const [paymentReceived, setPaymentReceived] = useState<number | string>(0);
+  const [creditAmount, setCreditAmount] = useState<number | string>(0);
+  const [returnedGoods, setReturnedGoods] = useState<number | string>(0);
   const [dispatchNotes, setDispatchNotes] = useState('');
   const [dispatchItems, setDispatchItems] = useState<Array<{
     productId: string;
-    quantity: number;
-    unitPrice: number;
+    quantity: number | string;
+    unitPrice: number | string;
     isAdditional: boolean;
     notes: string;
   }>>([{ productId: '', quantity: 1, unitPrice: 0, isAdditional: false, notes: '' }]);
@@ -1443,11 +1443,12 @@ export const DeliveryManagementPage: React.FC = () => {
                     <div>
                       <input
                         type="number"
-                        min="1"
+                        min="0"
+                        step="any"
                         className="form-control"
                         placeholder="Qty"
                         value={it.quantity}
-                        onChange={(e) => updateDispatchItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                        onChange={(e) => updateDispatchItem(idx, 'quantity', e.target.value)}
                         required
                         style={{ fontSize: '0.85rem' }}
                       />
@@ -1456,11 +1457,12 @@ export const DeliveryManagementPage: React.FC = () => {
                     <div>
                       <input
                         type="number"
-                        step="0.01"
+                        min="0"
+                        step="any"
                         className="form-control"
                         placeholder="Rate (Rs.)"
                         value={it.unitPrice}
-                        onChange={(e) => updateDispatchItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        onChange={(e) => updateDispatchItem(idx, 'unitPrice', e.target.value)}
                         required
                         style={{ fontSize: '0.85rem' }}
                       />
@@ -1523,9 +1525,10 @@ export const DeliveryManagementPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     className="form-control"
                     value={paymentReceived}
-                    onChange={(e) => setPaymentReceived(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => setPaymentReceived(e.target.value)}
                   />
                 </div>
 
@@ -1534,9 +1537,10 @@ export const DeliveryManagementPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     className="form-control"
                     value={creditAmount}
-                    onChange={(e) => setCreditAmount(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => setCreditAmount(e.target.value)}
                   />
                 </div>
 
@@ -1545,9 +1549,10 @@ export const DeliveryManagementPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     className="form-control"
                     value={returnedGoods}
-                    onChange={(e) => setReturnedGoods(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => setReturnedGoods(e.target.value)}
                   />
                 </div>
               </div>

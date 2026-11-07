@@ -814,7 +814,7 @@ export const PurchasesPage: React.FC = () => {
                   <label className="form-label">Amount Paid to Supplier Now (Rs.)</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="any"
                     className="form-control"
                     placeholder="0"
                     value={paidAmount === '0' ? '' : paidAmount}
@@ -1063,7 +1063,7 @@ export const PurchasesPage: React.FC = () => {
                   <label className="form-label">Purchase / Cost Price (Rs.) *</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="any"
                     className="form-control"
                     placeholder="e.g. 4200"
                     value={quickProductForm.purchasePrice}
@@ -1076,7 +1076,7 @@ export const PurchasesPage: React.FC = () => {
                   <label className="form-label">Sale Retail Price (Rs.) *</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="any"
                     className="form-control"
                     placeholder="e.g. 4800"
                     value={quickProductForm.salePrice}

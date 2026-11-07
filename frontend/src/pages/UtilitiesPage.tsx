@@ -47,7 +47,7 @@ export const UtilitiesPage: React.FC = () => {
   const [generatedBarcodes, setGeneratedBarcodes] = useState<string[]>([]);
 
   // Bulk Update State
-  const [rateAdjustmentPercent, setRateAdjustmentPercent] = useState<number>(0);
+  const [rateAdjustmentPercent, setRateAdjustmentPercent] = useState<number | string>(0);
 
   // Verify Data State
   const [verifyResult, setVerifyResult] = useState<any>(null);
@@ -712,26 +712,27 @@ export const UtilitiesPage: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <input
                     type="number"
-                    step="0.5"
+                    step="any"
                     className="form-control"
                     placeholder="e.g. 5 for +5% increase or -3 for decrease"
                     value={rateAdjustmentPercent}
-                    onChange={(e) => setRateAdjustmentPercent(Number(e.target.value) || 0)}
+                    onChange={(e) => setRateAdjustmentPercent(e.target.value)}
                     style={{ maxWidth: '240px' }}
                   />
                   <button
                     onClick={() => {
-                      if (!rateAdjustmentPercent || rateAdjustmentPercent === 0) {
+                      const numAdjust = parseFloat(String(rateAdjustmentPercent)) || 0;
+                      if (!numAdjust || numAdjust === 0) {
                         alert('Please enter a valid percentage adjustment (e.g. +5 or -2)');
                         return;
                       }
                       const confirm = window.confirm(
-                        `Are you sure you want to adjust ALL product selling prices by ${rateAdjustmentPercent > 0 ? `+${rateAdjustmentPercent}` : rateAdjustmentPercent}%?`
+                        `Are you sure you want to adjust ALL product selling prices by ${numAdjust > 0 ? `+${numAdjust}` : numAdjust}%?`
                       );
                       if (!confirm) return;
                       setLoading(true);
                       setStatusMsg(null);
-                      api.post('/settings/utilities/bulk-update-items', { percentageAdjustment: rateAdjustmentPercent })
+                      api.post('/settings/utilities/bulk-update-items', { percentageAdjustment: numAdjust })
                         .then(res => setStatusMsg({ type: 'success', text: res.data.message }))
                         .catch(e => setStatusMsg({ type: 'error', text: e.response?.data?.message || 'Failed to bulk update product rates' }))
                         .finally(() => setLoading(false));

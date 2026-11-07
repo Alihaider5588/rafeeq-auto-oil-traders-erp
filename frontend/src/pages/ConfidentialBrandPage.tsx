@@ -98,9 +98,9 @@ export const ConfidentialBrandPage: React.FC = () => {
     code: string;
     category: string;
     unit: string;
-    costPrice: number | '';
-    sellingPrice: number | '';
-    stockQty: number | '';
+    costPrice: number | string;
+    sellingPrice: number | string;
+    stockQty: number | string;
     batchNumber: string;
     formulaNotes: string;
   }>({
@@ -119,8 +119,8 @@ export const ConfidentialBrandPage: React.FC = () => {
   const [purchaseForm, setPurchaseForm] = useState<{
     supplierId: string;
     productId: string;
-    quantity: number | '';
-    unitCost: number | '';
+    quantity: number | string;
+    unitCost: number | string;
     notes: string;
     invoiceNumber: string;
     receiptUrl: string;
@@ -218,8 +218,8 @@ export const ConfidentialBrandPage: React.FC = () => {
   const [saleForm, setSaleForm] = useState<{
     customerName: string;
     productId: string;
-    quantity: number | '';
-    unitPrice: number | '';
+    quantity: number | string;
+    unitPrice: number | string;
     notes: string;
   }>({
     customerName: '',
@@ -1201,8 +1201,9 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     value={newProduct.stockQty === '' ? '' : newProduct.stockQty}
-                    onChange={e => setNewProduct({ ...newProduct, stockQty: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setNewProduct({ ...newProduct, stockQty: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="0"
                   />
@@ -1217,9 +1218,10 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     required
                     value={newProduct.costPrice === '' ? '' : newProduct.costPrice}
-                    onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="Enter confidential cost"
                   />
@@ -1231,9 +1233,10 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     required
                     value={newProduct.sellingPrice === '' ? '' : newProduct.sellingPrice}
-                    onChange={e => setNewProduct({ ...newProduct, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setNewProduct({ ...newProduct, sellingPrice: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="Enter target sale rate"
                   />
@@ -1466,10 +1469,11 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>Quantity</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    step="any"
                     required
                     value={purchaseForm.quantity === '' ? '' : purchaseForm.quantity}
-                    onChange={e => setPurchaseForm({ ...purchaseForm, quantity: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setPurchaseForm({ ...purchaseForm, quantity: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="Enter qty"
                   />
@@ -1479,9 +1483,10 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     required
                     value={purchaseForm.unitCost === '' ? '' : purchaseForm.unitCost}
-                    onChange={e => setPurchaseForm({ ...purchaseForm, unitCost: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setPurchaseForm({ ...purchaseForm, unitCost: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="Unit purchase cost"
                   />
@@ -1595,10 +1600,11 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>Quantity</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    step="any"
                     required
                     value={saleForm.quantity === '' ? '' : saleForm.quantity}
-                    onChange={e => setSaleForm({ ...saleForm, quantity: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setSaleForm({ ...saleForm, quantity: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="Enter qty"
                   />
@@ -1608,9 +1614,10 @@ export const ConfidentialBrandPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     required
                     value={saleForm.unitPrice === '' ? '' : saleForm.unitPrice}
-                    onChange={e => setSaleForm({ ...saleForm, unitPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setSaleForm({ ...saleForm, unitPrice: e.target.value })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem' }}
                     placeholder="Sale rate"
                   />

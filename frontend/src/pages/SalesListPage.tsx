@@ -42,8 +42,8 @@ export const SalesListPage: React.FC = () => {
     unitPrice: number;
     unitType: string;
   }>>([]);
-  const [editDiscount, setEditDiscount] = useState(0);
-  const [editReceivedAmount, setEditReceivedAmount] = useState(0);
+  const [editDiscount, setEditDiscount] = useState<number | string>(0);
+  const [editReceivedAmount, setEditReceivedAmount] = useState<number | string>(0);
   const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
   const [editNotes, setEditNotes] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
@@ -59,7 +59,7 @@ export const SalesListPage: React.FC = () => {
     returnQty: number;
     unitPrice: number;
   }>>([]);
-  const [refundCashAmount, setRefundCashAmount] = useState(0);
+  const [refundCashAmount, setRefundCashAmount] = useState<number | string>(0);
   const [processingReturn, setProcessingReturn] = useState(false);
 
   // Top Page Operation Notification Banners
@@ -218,9 +218,9 @@ export const SalesListPage: React.FC = () => {
         updated[index].unitPrice = Number(found.salePrice || 0);
       }
     } else if (field === 'quantity') {
-      updated[index].quantity = Math.max(1, Number(val) || 1);
+      updated[index].quantity = val;
     } else if (field === 'unitPrice') {
-      updated[index].unitPrice = Math.max(0, Number(val) || 0);
+      updated[index].unitPrice = val;
     } else if (field === 'unitType') {
       updated[index].unitType = val;
     }
@@ -239,10 +239,15 @@ export const SalesListPage: React.FC = () => {
       setSavingEdit(true);
       await api.put(`/sales/${editModalSale.id}/edit`, {
         customerId: editCustomerId,
-        items: editItems,
+        items: editItems.map((it) => ({
+          productId: it.productId,
+          quantity: parseFloat(String(it.quantity)) || 0,
+          unitPrice: parseFloat(String(it.unitPrice)) || 0,
+          unitType: it.unitType,
+        })),
         saleType: editSaleType,
-        discount: Number(editDiscount),
-        receivedAmount: Number(editReceivedAmount),
+        discount: parseFloat(String(editDiscount)) || 0,
+        receivedAmount: parseFloat(String(editReceivedAmount)) || 0,
         paymentMethod: editPaymentMethod,
         notes: editNotes,
       });
@@ -276,16 +281,14 @@ export const SalesListPage: React.FC = () => {
     );
   };
 
-  const handleReturnQtyChange = (index: number, qty: number) => {
+  const handleReturnQtyChange = (index: number, qty: any) => {
     const updated = [...returnItems];
-    const maxQty = updated[index].soldQty;
-    const safeQty = Math.max(0, Math.min(maxQty, Number(qty) || 0));
-    updated[index].returnQty = safeQty;
+    updated[index].returnQty = qty;
     setReturnItems(updated);
   };
 
   const calculateReturnTotal = () => {
-    return returnItems.reduce((acc, it) => acc + it.returnQty * it.unitPrice, 0);
+    return returnItems.reduce((acc, it) => acc + (parseFloat(String(it.returnQty)) || 0) * (parseFloat(String(it.unitPrice)) || 0), 0);
   };
 
   const handleProcessSalesReturn = async (e: React.FormEvent) => {
@@ -293,11 +296,11 @@ export const SalesListPage: React.FC = () => {
     if (!returnModalSale) return;
 
     const itemsToReturn = returnItems
-      .filter((it) => it.returnQty > 0)
+      .filter((it) => (parseFloat(String(it.returnQty)) || 0) > 0)
       .map((it) => ({
         productId: it.productId,
-        quantity: it.returnQty,
-        unitPrice: it.unitPrice,
+        quantity: parseFloat(String(it.returnQty)) || 0,
+        unitPrice: parseFloat(String(it.unitPrice)) || 0,
       }));
 
     if (itemsToReturn.length === 0) {
@@ -315,7 +318,7 @@ export const SalesListPage: React.FC = () => {
         saleId: returnModalSale.id,
         reason: fullReason,
         items: itemsToReturn,
-        refundAmount: Number(refundCashAmount) || 0,
+        refundAmount: parseFloat(String(refundCashAmount)) || 0,
       });
 
       sessionStorage.removeItem('rot_cached_products');
@@ -1205,7 +1208,7 @@ export const SalesListPage: React.FC = () => {
                     </thead>
                     <tbody>
                       {editItems.map((item, idx) => {
-                        const lineTotal = item.quantity * item.unitPrice;
+                        const lineTotal = (parseFloat(String(item.quantity)) || 0) * (parseFloat(String(item.unitPrice)) || 0);
                         return (
                           <tr key={idx}>
                             <td>
@@ -1235,8 +1238,9 @@ export const SalesListPage: React.FC = () => {
                             <td>
                               <input
                                 type="number"
+                                step="any"
+                                min="0.001"
                                 className="form-control"
-                                min="1"
                                 value={item.quantity}
                                 onChange={(e) => handleEditItemChange(idx, 'quantity', e.target.value)}
                                 required
@@ -1245,8 +1249,9 @@ export const SalesListPage: React.FC = () => {
                             <td>
                               <input
                                 type="number"
-                                className="form-control"
+                                step="any"
                                 min="0"
+                                className="form-control"
                                 value={item.unitPrice}
                                 onChange={(e) => handleEditItemChange(idx, 'unitPrice', e.target.value)}
                                 required
@@ -1284,10 +1289,11 @@ export const SalesListPage: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    className="form-control"
+                    step="any"
                     min="0"
+                    className="form-control"
                     value={editDiscount}
-                    onChange={(e) => setEditDiscount(Number(e.target.value) || 0)}
+                    onChange={(e) => setEditDiscount(e.target.value)}
                   />
                 </div>
                 <div>
@@ -1296,10 +1302,11 @@ export const SalesListPage: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    className="form-control"
+                    step="any"
                     min="0"
+                    className="form-control"
                     value={editReceivedAmount}
-                    onChange={(e) => setEditReceivedAmount(Number(e.target.value) || 0)}
+                    onChange={(e) => setEditReceivedAmount(e.target.value)}
                   />
                 </div>
                 <div>
@@ -1447,11 +1454,12 @@ export const SalesListPage: React.FC = () => {
                           <td>
                             <input
                               type="number"
+                              step="any"
                               className="form-control"
                               min="0"
                               max={item.soldQty}
                               value={item.returnQty}
-                              onChange={(e) => handleReturnQtyChange(idx, Number(e.target.value))}
+                              onChange={(e) => handleReturnQtyChange(idx, e.target.value)}
                               style={{ textAlign: 'center', fontWeight: 700, borderColor: item.returnQty > 0 ? '#f59e0b' : '#cbd5e1' }}
                             />
                           </td>
@@ -1482,11 +1490,12 @@ export const SalesListPage: React.FC = () => {
                   </label>
                   <input
                     type="number"
+                    step="any"
                     className="form-control"
                     min="0"
                     max={calculateReturnTotal()}
                     value={refundCashAmount}
-                    onChange={(e) => setRefundCashAmount(Number(e.target.value) || 0)}
+                    onChange={(e) => setRefundCashAmount(e.target.value)}
                     placeholder="0 if adjusting in customer balance ledger"
                   />
                   <small style={{ color: '#64748b', fontSize: '0.75rem' }}>
@@ -1497,7 +1506,7 @@ export const SalesListPage: React.FC = () => {
                 <div style={{ backgroundColor: '#f1f5f9', padding: '12px', borderRadius: '8px' }}>
                   <div style={{ fontSize: '0.85rem', color: '#475569' }}>Ledger Balance Adjustment:</div>
                   <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#059669', marginTop: '4px' }}>
-                    Rs. {(calculateReturnTotal() - (refundCashAmount || 0)).toLocaleString()} Credit
+                    Rs. {(calculateReturnTotal() - (parseFloat(String(refundCashAmount)) || 0)).toLocaleString()} Credit
                   </div>
                   <small style={{ color: '#64748b', fontSize: '0.75rem' }}>
                     Will reduce party balance automatically.

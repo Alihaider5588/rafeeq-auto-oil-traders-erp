@@ -169,7 +169,10 @@ export const EmployeesPage: React.FC = () => {
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await api.post('/hr/employees', empForm);
+      const res = await api.post('/hr/employees', {
+        ...empForm,
+        basicSalary: parseFloat(String(empForm.basicSalary)) || 0,
+      });
       if (res.data?.success) {
         setShowEmployeeModal(false);
         setEmpForm({
@@ -278,7 +281,7 @@ export const EmployeesPage: React.FC = () => {
     if (!selectedPayroll) return;
     try {
       const res = await api.post(`/hr/payroll/${selectedPayroll.id}/pay`, {
-        paidAmount: Number(disburseAmount),
+        paidAmount: parseFloat(String(disburseAmount)) || 0,
         paymentMethod: disburseMethod,
         notes: `Disbursed on ${new Date().toLocaleDateString()}`,
       });
@@ -1116,9 +1119,11 @@ export const EmployeesPage: React.FC = () => {
                   </label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     required
                     value={empForm.basicSalary}
-                    onChange={(e) => setEmpForm({ ...empForm, basicSalary: Number(e.target.value) })}
+                    onChange={(e) => setEmpForm({ ...empForm, basicSalary: e.target.value as any })}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
                   />
                 </div>
@@ -1178,9 +1183,11 @@ export const EmployeesPage: React.FC = () => {
                 </label>
                 <input
                   type="number"
+                  step="any"
+                  min="0"
                   required
                   value={disburseAmount}
-                  onChange={(e) => setDisburseAmount(Number(e.target.value))}
+                  onChange={(e) => setDisburseAmount(e.target.value as any)}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
                 />
               </div>

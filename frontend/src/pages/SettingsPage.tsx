@@ -108,6 +108,8 @@ export const SettingsPage: React.FC = () => {
     try {
       const payload = {
         ...settings,
+        taxRatePercent: parseFloat(String(settings.taxRatePercent)) || 0,
+        exchangeRate: parseFloat(String(settings.exchangeRate)) || 1,
         facebookUrl: formatUrl(settings.facebookUrl),
         tiktokUrl: formatUrl(settings.tiktokUrl),
       };
@@ -754,9 +756,9 @@ export const SettingsPage: React.FC = () => {
                     type="number"
                     className="form-control"
                     min="0"
-                    step="0.1"
+                    step="any"
                     value={settings.taxRatePercent}
-                    onChange={(e) => setSettings({ ...settings, taxRatePercent: Number(e.target.value) || 0 })}
+                    onChange={(e) => setSettings({ ...settings, taxRatePercent: e.target.value as any })}
                   />
                 </div>
 
@@ -1021,9 +1023,9 @@ export const SettingsPage: React.FC = () => {
                     <input
                       type="number"
                       className="form-control"
-                      step="0.1"
+                      step="any"
                       value={settings.exchangeRate}
-                      onChange={(e) => setSettings({ ...settings, exchangeRate: Number(e.target.value) || 1 })}
+                      onChange={(e) => setSettings({ ...settings, exchangeRate: e.target.value as any })}
                     />
                     <span style={{ fontWeight: 700, color: '#64748b' }}>PKR</span>
                   </div>

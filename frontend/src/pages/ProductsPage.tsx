@@ -1460,6 +1460,7 @@ export const ProductsPage: React.FC = () => {
                         type="number"
                         min="1"
                         max="500"
+                        step="any"
                         className="form-control"
                         placeholder="e.g. 25"
                         style={{
@@ -1509,7 +1510,7 @@ export const ProductsPage: React.FC = () => {
                           <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             className="form-control"
                             placeholder="e.g. 6000"
                             style={{ fontWeight: 800, color: '#1e293b' }}
@@ -1526,7 +1527,7 @@ export const ProductsPage: React.FC = () => {
                           <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             className="form-control"
                             placeholder="e.g. 500"
                             value={formData.purchasePrice === '0' ? '' : formData.purchasePrice}
@@ -1551,7 +1552,7 @@ export const ProductsPage: React.FC = () => {
                           <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             className="form-control"
                             placeholder="e.g. 7200"
                             style={{ fontWeight: 800, color: '#0f172a' }}
@@ -1568,7 +1569,7 @@ export const ProductsPage: React.FC = () => {
                           <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             className="form-control"
                             placeholder="e.g. 600"
                             value={formData.salePrice === '0' ? '' : formData.salePrice}
@@ -1593,7 +1594,7 @@ export const ProductsPage: React.FC = () => {
                           <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             className="form-control"
                             placeholder="e.g. 6600"
                             style={{ fontWeight: 800, color: '#b45309' }}
@@ -1610,7 +1611,7 @@ export const ProductsPage: React.FC = () => {
                           <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Rs.</span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             className="form-control"
                             placeholder="e.g. 550"
                             value={formData.wholesalePrice === '0' ? '' : formData.wholesalePrice}
@@ -1630,7 +1631,7 @@ export const ProductsPage: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="any"
                       className="form-control"
                       placeholder="e.g. 6200"
                       style={{ ...(fieldErrors.purchasePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
@@ -1653,7 +1654,7 @@ export const ProductsPage: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="any"
                       className="form-control"
                       placeholder="e.g. 7500"
                       style={{ ...(fieldErrors.salePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
@@ -1676,7 +1677,7 @@ export const ProductsPage: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="any"
                       className="form-control"
                       placeholder="e.g. 6800"
                       style={{ ...(fieldErrors.wholesalePrice ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {}) }}
