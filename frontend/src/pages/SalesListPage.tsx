@@ -11,8 +11,9 @@ import {
 export const SalesListPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canEditInvoice = isAdmin || Boolean(user?.permissions?.includes('action:edit_invoice'));
-  const canDeleteInvoice = isAdmin || Boolean(user?.permissions?.includes('action:delete_invoice'));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditInvoice = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_invoice')) : user?.role === 'OPERATOR');
+  const canDeleteInvoice = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_invoice')) : false);
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +133,10 @@ export const SalesListPage: React.FC = () => {
   };
 
   const handleCancelSale = async (saleId: string) => {
+    if (!canDeleteInvoice && !canEditInvoice) {
+      alert('Aapke pas invoice cancel karne ki ijazat nahi hai (No Permission).');
+      return;
+    }
     const reason = window.prompt('Enter reason for voiding/cancelling this sale invoice:');
     if (!reason) return;
 
@@ -149,6 +154,10 @@ export const SalesListPage: React.FC = () => {
   };
 
   const handleDeleteSalePermanent = async (saleId: string, invoiceNumber: string) => {
+    if (!canDeleteInvoice) {
+      alert('Aapke pas invoice delete karne ki ijazat nahi hai (No Delete Permission).');
+      return;
+    }
     const confirmed = window.confirm(
       `⚠️ KYA AAP IS SALE INVOICE KO DATABASE AUR POS SE PERMANENTLY DELETE KARNA CHAHTE HAIN?\n\nInvoice: #${invoiceNumber}\n\nIs se stock wapis add ho jaye ga aur customer ledger se bhi invoice mukammal khatam ho jaye gi.`
     );
@@ -172,6 +181,10 @@ export const SalesListPage: React.FC = () => {
 
   // Open Edit Invoice Modal (Admin Only)
   const openEditModal = (sale: Sale) => {
+    if (!canEditInvoice) {
+      alert('Aapke pas invoice edit karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     loadCustomers();
     loadProducts();
     setEditModalSale(sale);
@@ -266,6 +279,10 @@ export const SalesListPage: React.FC = () => {
 
   // Open Sales Return (Order Wapsi) Modal
   const openReturnModal = (sale: Sale) => {
+    if (!canEditInvoice) {
+      alert('Aapke pas order return process karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     setReturnModalSale(sale);
     setReturnReason('Wrong Item Delivered');
     setCustomReasonNotes('');

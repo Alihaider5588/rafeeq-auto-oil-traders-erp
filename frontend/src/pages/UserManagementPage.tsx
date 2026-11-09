@@ -279,8 +279,10 @@ export const PERMISSION_MODULES: TabPermissionModule[] = [
 ];
 
 export const UserManagementPage: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, updateUser } = useAuth();
   const isAdmin = currentUser?.role === 'ADMIN';
+  const canEditUser = isAdmin || Boolean(currentUser?.permissions?.includes('action:edit_user'));
+  const canDeleteUser = isAdmin || Boolean(currentUser?.permissions?.includes('action:delete_user'));
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -349,8 +351,18 @@ export const UserManagementPage: React.FC = () => {
   };
 
   const toggleTabPerm = (path: string) => {
+    const mod = PERMISSION_MODULES.find(m => m.path === path);
     if (userPerms.includes(path)) {
-      setUserPerms(userPerms.filter(p => p !== path));
+      const keysToRemove = new Set<string>([path]);
+      if (mod?.editAction) {
+        keysToRemove.add(mod.editAction.key);
+        if (mod.editAction.alias) keysToRemove.add(mod.editAction.alias);
+      }
+      if (mod?.deleteAction) {
+        keysToRemove.add(mod.deleteAction.key);
+        if (mod.deleteAction.alias) keysToRemove.add(mod.deleteAction.alias);
+      }
+      setUserPerms(userPerms.filter(p => !keysToRemove.has(p)));
     } else {
       setUserPerms([...userPerms, path]);
     }
@@ -480,6 +492,9 @@ export const UserManagementPage: React.FC = () => {
       await api.put(`/auth/users/${selectedUserForPerms.id}`, {
         permissions: userPerms,
       });
+      if (currentUser && selectedUserForPerms.id === currentUser.id) {
+        updateUser({ ...currentUser, permissions: userPerms });
+      }
       setShowPermModal(false);
       setSelectedUserForPerms(null);
       fetchUsers();
@@ -567,9 +582,11 @@ export const UserManagementPage: React.FC = () => {
           </div>
         </div>
 
-        <button onClick={() => { setModalError(''); setShowModal(true); }} className="btn btn-primary" style={{ padding: '10px 18px', fontWeight: 800, borderRadius: '8px' }}>
-          <Plus size={18} /> Add New User
-        </button>
+        {canEditUser && (
+          <button onClick={() => { setModalError(''); setShowModal(true); }} className="btn btn-primary" style={{ padding: '10px 18px', fontWeight: 800, borderRadius: '8px' }}>
+            <Plus size={18} /> Add New User
+          </button>
+        )}
       </div>
 
       {/* KPI Stats Overview */}
@@ -634,8 +651,8 @@ export const UserManagementPage: React.FC = () => {
                     )}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {u.role !== 'ADMIN' && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {u.role !== 'ADMIN' && isAdmin && (
                         <button
                           onClick={() => handleOpenPermsModal(u)}
                           className="btn btn-outline btn-sm"
@@ -646,7 +663,7 @@ export const UserManagementPage: React.FC = () => {
                         </button>
                       )}
 
-                      {(isAdmin || u.role !== 'ADMIN') && (
+                      {(isAdmin || (canEditUser && u.role !== 'ADMIN')) && (
                         <button
                           onClick={() => {
                             setSelectedUserForPassword(u);
@@ -663,7 +680,7 @@ export const UserManagementPage: React.FC = () => {
                         </button>
                       )}
 
-                      {u.role !== 'ADMIN' && (
+                      {u.role !== 'ADMIN' && canDeleteUser && (
                         <button
                           onClick={() => toggleUserStatus(u)}
                           className={`btn btn-sm ${u.isActive ? 'btn-danger' : 'btn-success'}`}
@@ -671,6 +688,12 @@ export const UserManagementPage: React.FC = () => {
                         >
                           {u.isActive ? 'Disable' : 'Enable'}
                         </button>
+                      )}
+
+                      {!isAdmin && !canEditUser && !canDeleteUser && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                          View Only
+                        </span>
                       )}
                     </div>
                   </td>

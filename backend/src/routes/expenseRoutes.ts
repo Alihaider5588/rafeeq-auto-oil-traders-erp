@@ -9,7 +9,7 @@ router.use(authenticate);
 
 router.get('/summary', getExpenseSummary);
 router.get('/', getExpenses);
-router.post('/', authorize([Role.ADMIN, Role.CASHIER, Role.OPERATOR]), createExpense);
+router.post('/', authorize([Role.ADMIN, Role.CASHIER, Role.OPERATOR], 'action:edit_expense'), createExpense);
 router.delete('/:id', authorize([Role.ADMIN], 'action:delete_expense'), deleteExpense);
 
 export default router;

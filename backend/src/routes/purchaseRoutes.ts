@@ -8,7 +8,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', getPurchases);
-router.post('/', authorize([Role.ADMIN, Role.OPERATOR]), createPurchase);
+router.post('/', authorize([Role.ADMIN, Role.OPERATOR], 'action:edit_purchase'), createPurchase);
 router.delete('/:id', authorize([Role.ADMIN], 'action:delete_purchase'), deletePurchase);
 
 export default router;

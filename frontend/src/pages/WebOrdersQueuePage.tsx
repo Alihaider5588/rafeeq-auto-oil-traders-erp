@@ -59,6 +59,9 @@ interface WebOrder {
 
 export const WebOrdersQueuePage: React.FC = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canDeleteWebOrder = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_web_order')) : user?.role === 'OPERATOR');
   const [orders, setOrders] = useState<WebOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'REJECTED'>('PENDING');
@@ -375,7 +378,7 @@ export const WebOrdersQueuePage: React.FC = () => {
                   {/* Actions for Pending Orders */}
                   {isPending && (user?.role === 'ADMIN' || user?.role === 'OPERATOR') && (
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      {user?.role === 'ADMIN' && (
+                      {canDeleteWebOrder && (
                         <button
                           onClick={() => handleRejectOrder(ord)}
                           disabled={actionLoadingId === ord.id}
@@ -439,7 +442,7 @@ export const WebOrdersQueuePage: React.FC = () => {
                       <span style={{ fontSize: '0.82rem', color: '#dc2626', fontWeight: 600 }}>
                         ✗ Rejected (10 din bad auto remove ho jaye ga)
                       </span>
-                      {user?.role === 'ADMIN' && (
+                      {canDeleteWebOrder && (
                         <button
                           onClick={() => handleDeleteOrder(ord)}
                           style={{

@@ -76,8 +76,9 @@ interface Payroll {
 export const EmployeesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canEditEmployee = isAdmin || Boolean(user?.permissions?.includes('action:edit_employee'));
-  const canDeleteEmployee = isAdmin || Boolean(user?.permissions?.includes('action:delete_employee'));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditEmployee = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_employee')) : user?.role === 'OPERATOR');
+  const canDeleteEmployee = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_employee')) : false);
 
   const [activeTab, setActiveTab] = useState<'employees' | 'attendance' | 'payroll'>('employees');
 
@@ -149,6 +150,10 @@ export const EmployeesPage: React.FC = () => {
   };
 
   const handleDeleteEmployee = async (emp: Employee) => {
+    if (!canDeleteEmployee) {
+      alert('Aapke pas employee delete karne ki ijazat nahi hai (No Delete Permission).');
+      return;
+    }
     if (!window.confirm(`Are you sure you want to completely remove "${emp.fullName}" (${emp.employeeCode}) from the system?`)) {
       return;
     }
@@ -168,6 +173,10 @@ export const EmployeesPage: React.FC = () => {
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditEmployee) {
+      alert('Aapke pas employee add/edit karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     try {
       const res = await api.post('/hr/employees', {
         ...empForm,
@@ -224,6 +233,10 @@ export const EmployeesPage: React.FC = () => {
   };
 
   const handleDeleteAttendanceRecord = async (attId: string) => {
+    if (!canDeleteEmployee) {
+      alert('Aapke pas attendance delete karne ki ijazat nahi hai (No Delete Permission).');
+      return;
+    }
     if (!window.confirm('Delete this attendance entry?')) return;
     try {
       await api.delete(`/hr/attendance/${attId}`);
@@ -235,6 +248,10 @@ export const EmployeesPage: React.FC = () => {
   };
 
   const handleMarkAttendance = async (employeeId: string, status: string) => {
+    if (!canEditEmployee) {
+      alert('Aapke pas attendance mark karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     try {
       await api.post('/hr/attendance', {
         employeeId,
@@ -261,6 +278,10 @@ export const EmployeesPage: React.FC = () => {
   };
 
   const handleGeneratePayroll = async () => {
+    if (!canEditEmployee) {
+      alert('Aapke pas payroll generate karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     if (!window.confirm(`Generate payroll for all active staff for ${selectedMonth}/${selectedYear}?`)) return;
     try {
       const res = await api.post('/hr/payroll/generate', {
@@ -278,6 +299,10 @@ export const EmployeesPage: React.FC = () => {
 
   const handleSettlePayroll = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditEmployee) {
+      alert('Aapke pas payroll settle/disburse karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     if (!selectedPayroll) return;
     try {
       const res = await api.post(`/hr/payroll/${selectedPayroll.id}/pay`, {
@@ -308,7 +333,7 @@ export const EmployeesPage: React.FC = () => {
           </p>
         </div>
 
-        {activeTab === 'employees' && (
+        {activeTab === 'employees' && canEditEmployee && (
           <button
             onClick={() => setShowEmployeeModal(true)}
             style={{
@@ -330,7 +355,7 @@ export const EmployeesPage: React.FC = () => {
           </button>
         )}
 
-        {activeTab === 'payroll' && (
+        {activeTab === 'payroll' && canEditEmployee && (
           <button
             onClick={handleGeneratePayroll}
             style={{
@@ -616,68 +641,72 @@ export const EmployeesPage: React.FC = () => {
                             )}
                           </td>
                           <td>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button
-                                onClick={() => handleMarkAttendance(emp.id, 'PRESENT')}
-                                style={{
-                                  backgroundColor: marked?.status === 'PRESENT' ? '#15803d' : '#f1f5f9',
-                                  color: marked?.status === 'PRESENT' ? '#fff' : '#0f172a',
-                                  border: '1px solid #cbd5e1',
-                                  padding: '5px 10px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Present
-                              </button>
-                              <button
-                                onClick={() => handleMarkAttendance(emp.id, 'ABSENT')}
-                                style={{
-                                  backgroundColor: marked?.status === 'ABSENT' ? '#b91c1c' : '#f1f5f9',
-                                  color: marked?.status === 'ABSENT' ? '#fff' : '#0f172a',
-                                  border: '1px solid #cbd5e1',
-                                  padding: '5px 10px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Absent
-                              </button>
-                              <button
-                                onClick={() => handleMarkAttendance(emp.id, 'HALF_DAY')}
-                                style={{
-                                  backgroundColor: marked?.status === 'HALF_DAY' ? '#b45309' : '#f1f5f9',
-                                  color: marked?.status === 'HALF_DAY' ? '#fff' : '#0f172a',
-                                  border: '1px solid #cbd5e1',
-                                  padding: '5px 10px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Half Day
-                              </button>
-                              <button
-                                onClick={() => handleMarkAttendance(emp.id, 'LEAVE')}
-                                style={{
-                                  backgroundColor: marked?.status === 'LEAVE' ? '#0369a1' : '#f1f5f9',
-                                  color: marked?.status === 'LEAVE' ? '#fff' : '#0f172a',
-                                  border: '1px solid #cbd5e1',
-                                  padding: '5px 10px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Paid Leave
-                              </button>
-                            </div>
+                            {canEditEmployee ? (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={() => handleMarkAttendance(emp.id, 'PRESENT')}
+                                  style={{
+                                    backgroundColor: marked?.status === 'PRESENT' ? '#15803d' : '#f1f5f9',
+                                    color: marked?.status === 'PRESENT' ? '#fff' : '#0f172a',
+                                    border: '1px solid #cbd5e1',
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Present
+                                </button>
+                                <button
+                                  onClick={() => handleMarkAttendance(emp.id, 'ABSENT')}
+                                  style={{
+                                    backgroundColor: marked?.status === 'ABSENT' ? '#b91c1c' : '#f1f5f9',
+                                    color: marked?.status === 'ABSENT' ? '#fff' : '#0f172a',
+                                    border: '1px solid #cbd5e1',
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Absent
+                                </button>
+                                <button
+                                  onClick={() => handleMarkAttendance(emp.id, 'HALF_DAY')}
+                                  style={{
+                                    backgroundColor: marked?.status === 'HALF_DAY' ? '#b45309' : '#f1f5f9',
+                                    color: marked?.status === 'HALF_DAY' ? '#fff' : '#0f172a',
+                                    border: '1px solid #cbd5e1',
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Half Day
+                                </button>
+                                <button
+                                  onClick={() => handleMarkAttendance(emp.id, 'LEAVE')}
+                                  style={{
+                                    backgroundColor: marked?.status === 'LEAVE' ? '#0369a1' : '#f1f5f9',
+                                    color: marked?.status === 'LEAVE' ? '#fff' : '#0f172a',
+                                    border: '1px solid #cbd5e1',
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Paid Leave
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontStyle: 'italic' }}>View Only</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -984,25 +1013,29 @@ export const EmployeesPage: React.FC = () => {
                       </td>
                       <td>
                         {Number(p.balanceDue) > 0 ? (
-                          <button
-                            onClick={() => {
-                              setSelectedPayroll(p);
-                              setDisburseAmount(Number(p.balanceDue));
-                              setShowPayModal(true);
-                            }}
-                            style={{
-                              backgroundColor: '#16a34a',
-                              color: '#fff',
-                              border: 'none',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontWeight: 700,
-                              fontSize: '0.75rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Disburse Cash
-                          </button>
+                          canEditEmployee ? (
+                            <button
+                              onClick={() => {
+                                setSelectedPayroll(p);
+                                setDisburseAmount(Number(p.balanceDue));
+                                setShowPayModal(true);
+                              }}
+                              style={{
+                                backgroundColor: '#16a34a',
+                                color: '#fff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Disburse Cash
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 600 }}>Unpaid (No Disburse Perm)</span>
+                          )
                         ) : (
                           <span style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>Fully Paid ✓</span>
                         )}

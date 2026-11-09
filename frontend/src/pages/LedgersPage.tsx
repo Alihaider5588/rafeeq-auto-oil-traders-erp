@@ -7,7 +7,9 @@ import { useAuth } from '../context/AuthContext';
 export const LedgersPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canDeleteLedger = isAdmin || Boolean(user?.permissions?.includes('action:delete_ledger'));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditLedger = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_ledger')) : (user?.role === 'OPERATOR' || user?.role === 'CASHIER'));
+  const canDeleteLedger = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_ledger')) : false);
 
   const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'SUPPLIERS' | 'DUAL_PARTNERS'>('CUSTOMERS');
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -348,7 +350,7 @@ export const LedgersPage: React.FC = () => {
           
           {selectedEntityId && (
             <>
-              {activeTab === 'DUAL_PARTNERS' && (
+              {activeTab === 'DUAL_PARTNERS' && canEditLedger && (
                 <button
                   type="button"
                   onClick={handleOpenContraModal}
@@ -370,17 +372,19 @@ export const LedgersPage: React.FC = () => {
                 <Printer size={16} /> Print Statement (پرنٹ / پی ڈی ایف)
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPayTargetType('CUSTOMER');
-                  setShowPaymentModal(true);
-                }}
-                className="btn btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <DollarSign size={18} /> Record Payment / Receipt
-              </button>
+              {canEditLedger && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayTargetType('CUSTOMER');
+                    setShowPaymentModal(true);
+                  }}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <DollarSign size={18} /> Record Payment / Receipt
+                </button>
+              )}
             </>
           )}
         </div>

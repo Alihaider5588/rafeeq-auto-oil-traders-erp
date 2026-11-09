@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { 
   Settings as SettingsIcon, Save, CheckCircle, Search, 
   Receipt, Printer, Percent, MessageSquare, Users, Package, 
@@ -20,6 +21,11 @@ type SettingTab =
   | 'MULTI_CURRENCY';
 
 export const SettingsPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditSettings = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_settings')) : false);
+
   const [activeTab, setActiveTab] = useState<SettingTab>('GENERAL');
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
@@ -103,6 +109,10 @@ export const SettingsPage: React.FC = () => {
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!canEditSettings) {
+      alert('Aapke pas system settings save karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     setSaving(true);
     setMsg('');
     try {
@@ -166,15 +176,17 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            type="button" 
-            onClick={() => handleSave()} 
-            disabled={saving} 
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, padding: '10px 20px' }}
-          >
-            <Save size={18} /> {saving ? 'Saving Changes...' : 'Save Settings'}
-          </button>
+          {canEditSettings && (
+            <button 
+              type="button" 
+              onClick={() => handleSave()} 
+              disabled={saving} 
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, padding: '10px 20px' }}
+            >
+              <Save size={18} /> {saving ? 'Saving Changes...' : 'Save Settings'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1039,15 +1051,21 @@ export const SettingsPage: React.FC = () => {
 
           {/* Save Action Bar */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '18px' }}>
-            <button
-              type="button"
-              onClick={() => handleSave()}
-              disabled={saving}
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', fontWeight: 700 }}
-            >
-              <Save size={18} /> {saving ? 'Saving...' : `Save ${tabs.find(t => t.id === activeTab)?.label} Settings`}
-            </button>
+            {canEditSettings ? (
+              <button
+                type="button"
+                onClick={() => handleSave()}
+                disabled={saving}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', fontWeight: 700 }}
+              >
+                <Save size={18} /> {saving ? 'Saving...' : `Save ${tabs.find(t => t.id === activeTab)?.label} Settings`}
+              </button>
+            ) : (
+              <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic', padding: '10px 0' }}>
+                Settings are View-Only (Admin editing required)
+              </span>
+            )}
           </div>
 
         </div>

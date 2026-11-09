@@ -11,8 +11,9 @@ import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canEditProduct = true;
-  const canDeleteProduct = true;
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditProduct = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_product')) : user?.role === 'OPERATOR');
+  const canDeleteProduct = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_product')) : false);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -367,6 +368,10 @@ export const ProductsPage: React.FC = () => {
   };
 
   const handleOpenAdd = () => {
+    if (!canEditProduct) {
+      triggerOperationError('Aap ke pas naya product add karne ki permission nahi hai!');
+      return;
+    }
     loadMetadata();
     setIsEditing(false);
     setEditingId(null);
@@ -405,6 +410,10 @@ export const ProductsPage: React.FC = () => {
   };
 
   const handleOpenEdit = (prod: Product) => {
+    if (!canEditProduct) {
+      triggerOperationError('Aap ke pas product edit karne ki permission nahi hai!');
+      return;
+    }
     setIsEditing(true);
     setEditingId(prod.id);
     const totalStock = Number(prod.currentStock) || 0;
@@ -521,6 +530,10 @@ export const ProductsPage: React.FC = () => {
   };
 
   const handleDeleteProduct = async (prod: Product) => {
+    if (!canDeleteProduct) {
+      triggerOperationError('Aap ke pas product permanently delete karne ki permission nahi hai!');
+      return;
+    }
     const confirmed = window.confirm(
       `⚠️ KYA AAP IS PRODUCT KO DATABASE AUR POS SE PERMANENTLY DELETE KARNA CHAHTE HAIN?\n\n"${prod.name}" (${prod.sku})\n\nIs product ka tamam stock aur catalog record mukammal delete ho jaye ga.`
     );
@@ -561,6 +574,10 @@ export const ProductsPage: React.FC = () => {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditProduct) {
+      setModalError('Aap ke pas product save/edit karne ki permission nahi hai!');
+      return;
+    }
     setModalError('');
     setFieldErrors({});
 
@@ -658,6 +675,10 @@ export const ProductsPage: React.FC = () => {
 
   const handleAdjustStock = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditProduct) {
+      triggerOperationError('Aap ke pas stock audit adjustment ki permission nahi hai!');
+      return;
+    }
     if (!selectedProductForStock || !stockAdjustData.quantity) return;
 
     try {
@@ -809,15 +830,21 @@ export const ProductsPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setShowUnitModal(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Layers size={16} /> Packaging Units
-          </button>
-          <button onClick={() => setShowCategoryModal(true)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <FolderPlus size={16} /> Manage Categories
-          </button>
-          <button onClick={handleOpenAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={18} /> Add New Product
-          </button>
+          {canEditProduct && (
+            <button onClick={() => setShowUnitModal(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Layers size={16} /> Packaging Units
+            </button>
+          )}
+          {canEditProduct && (
+            <button onClick={() => setShowCategoryModal(true)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FolderPlus size={16} /> Manage Categories
+            </button>
+          )}
+          {canEditProduct && (
+            <button onClick={handleOpenAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={18} /> Add New Product
+            </button>
+          )}
         </div>
       </div>
 
@@ -1196,7 +1223,7 @@ export const ProductsPage: React.FC = () => {
                       </div>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         {canEditProduct && (
                           <button
                             onClick={() => handleOpenEdit(p)}
@@ -1207,18 +1234,20 @@ export const ProductsPage: React.FC = () => {
                             <Edit2 size={14} />
                           </button>
                         )}
-                        <button
-                          onClick={() => {
-                            setSelectedProductForStock(p);
-                            setStockAdjustData({ type: 'ADD', quantity: '', notes: '' });
-                            setShowAdjustStockModal(true);
-                          }}
-                          className="btn btn-outline"
-                          style={{ padding: '5px 8px' }}
-                          title="Audit Stock Adjustment"
-                        >
-                          <Sliders size={14} />
-                        </button>
+                        {canEditProduct && (
+                          <button
+                            onClick={() => {
+                              setSelectedProductForStock(p);
+                              setStockAdjustData({ type: 'ADD', quantity: '', notes: '' });
+                              setShowAdjustStockModal(true);
+                            }}
+                            className="btn btn-outline"
+                            style={{ padding: '5px 8px' }}
+                            title="Audit Stock Adjustment"
+                          >
+                            <Sliders size={14} />
+                          </button>
+                        )}
                         {canDeleteProduct && (
                           <button
                             onClick={() => handleDeleteProduct(p)}
@@ -1228,6 +1257,11 @@ export const ProductsPage: React.FC = () => {
                           >
                             <Trash2 size={14} />
                           </button>
+                        )}
+                        {!canEditProduct && !canDeleteProduct && (
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic', padding: '4px 6px' }}>
+                            View Only
+                          </span>
                         )}
                       </div>
                     </td>

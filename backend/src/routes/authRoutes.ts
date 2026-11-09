@@ -12,7 +12,7 @@ router.post('/change-password', authenticate, passwordLimiter, changePassword);
 
 // User management (Admin & Operator)
 router.get('/users', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), getUsers);
-router.post('/users', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), createUser);
-router.put('/users/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), updateUser);
+router.post('/users', authenticate, authorize([Role.ADMIN], 'action:edit_user'), createUser);
+router.put('/users/:id', authenticate, authorize([Role.ADMIN], 'action:edit_user'), updateUser);
 
 export default router;

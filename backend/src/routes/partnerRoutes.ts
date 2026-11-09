@@ -23,13 +23,13 @@ router.use(authenticate);
 
 // Dual Partners (Customer + Supplier Both)
 router.get('/dual', getDualPartners);
-router.post('/dual', authorize([Role.ADMIN, Role.OPERATOR]), createDualPartner);
-router.post('/link-dual', authorize([Role.ADMIN, Role.OPERATOR]), linkExistingPartners);
+router.post('/dual', authorize([Role.ADMIN, Role.OPERATOR], 'action:edit_customer'), createDualPartner);
+router.post('/link-dual', authorize([Role.ADMIN, Role.OPERATOR], 'action:edit_customer'), linkExistingPartners);
 
 // Suppliers
 router.get('/suppliers', getSuppliers);
 router.get('/suppliers/:id', getSupplierById);
-router.post('/suppliers', authorize([Role.ADMIN, Role.OPERATOR]), createSupplier);
+router.post('/suppliers', authorize([Role.ADMIN, Role.OPERATOR], 'action:edit_supplier'), createSupplier);
 router.put('/suppliers/:id', authorize([Role.ADMIN], 'action:edit_supplier'), updateSupplier);
 router.patch('/suppliers/:id', authorize([Role.ADMIN], 'action:edit_supplier'), updateSupplier);
 router.delete('/suppliers/:id', authorize([Role.ADMIN], 'action:delete_supplier'), deleteSupplier);
@@ -37,7 +37,7 @@ router.delete('/suppliers/:id', authorize([Role.ADMIN], 'action:delete_supplier'
 // Customers
 router.get('/customers', getCustomers);
 router.get('/customers/:id', getCustomerById);
-router.post('/customers', authorize([Role.ADMIN, Role.OPERATOR, Role.SALESMAN]), createCustomer);
+router.post('/customers', authorize([Role.ADMIN, Role.OPERATOR, Role.SALESMAN], 'action:edit_customer'), createCustomer);
 router.put('/customers/:id', authorize([Role.ADMIN], 'action:edit_customer'), updateCustomer);
 router.patch('/customers/:id', authorize([Role.ADMIN], 'action:edit_customer'), updateCustomer);
 router.delete('/customers/:id', authorize([Role.ADMIN], 'action:delete_customer'), deleteCustomer);

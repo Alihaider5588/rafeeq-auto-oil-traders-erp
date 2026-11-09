@@ -18,8 +18,8 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', getSettings);
-router.put('/', authorize([Role.ADMIN], '/admin/settings'), updateSettings);
-router.post('/', authorize([Role.ADMIN], '/admin/settings'), updateSettings);
+router.put('/', authorize([Role.ADMIN], 'action:edit_settings'), updateSettings);
+router.post('/', authorize([Role.ADMIN], 'action:edit_settings'), updateSettings);
 router.get('/audit-logs', authorize([Role.ADMIN], '/admin/audit'), getAuditLogs);
 
 // Vyapaar Utilities

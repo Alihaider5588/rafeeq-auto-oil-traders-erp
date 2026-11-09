@@ -16,12 +16,12 @@ router.use(authenticate);
 
 // Dual Partner (Mutual / Contra) Ledger
 router.get('/dual/:id', getDualPartnerLedger);
-router.post('/contra-offset', authorize([Role.ADMIN, Role.OPERATOR]), recordContraOffset);
+router.post('/contra-offset', authorize([Role.ADMIN, Role.OPERATOR], 'action:edit_ledger'), recordContraOffset);
 
 // Customer & Supplier Individual Ledgers
 router.get('/customer/:customerId', getCustomerLedger);
 router.get('/supplier/:supplierId', getSupplierLedger);
-router.post('/payment', recordPayment);
+router.post('/payment', authorize([Role.ADMIN, Role.OPERATOR, Role.CASHIER], 'action:edit_ledger'), recordPayment);
 router.delete('/entry/:id', authorize([Role.ADMIN], 'action:delete_ledger'), deleteLedgerEntry);
 
 export default router;

@@ -8,8 +8,13 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const isCustomer = type === 'CUSTOMERS';
-  const canEdit = isAdmin || (isCustomer ? Boolean(user?.permissions?.includes('action:edit_customer')) : Boolean(user?.permissions?.includes('action:edit_supplier')));
-  const canDelete = isAdmin || (isCustomer ? Boolean(user?.permissions?.includes('action:delete_customer')) : Boolean(user?.permissions?.includes('action:delete_supplier')));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEdit = isAdmin || (hasCustomPerms
+    ? (isCustomer ? Boolean(user?.permissions?.includes('action:edit_customer')) : Boolean(user?.permissions?.includes('action:edit_supplier')))
+    : (user?.role === 'OPERATOR' || (isCustomer && user?.role === 'SALESMAN')));
+  const canDelete = isAdmin || (hasCustomPerms
+    ? (isCustomer ? Boolean(user?.permissions?.includes('action:delete_customer')) : Boolean(user?.permissions?.includes('action:delete_supplier')))
+    : false);
   const [data, setData] = useState<any[]>([]);
   const [salesmen, setSalesmen] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -408,9 +413,11 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
               : 'Authorized oil distributors, lubricant importers and direct suppliers'}
           </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
-          <Plus size={18} /> Add New {type === 'CUSTOMERS' ? 'Customer' : 'Supplier'}
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowModal(true)} className="btn btn-primary">
+            <Plus size={18} /> Add New {type === 'CUSTOMERS' ? 'Customer' : 'Supplier'}
+          </button>
+        )}
       </div>
 
       {/* Search Bar */}

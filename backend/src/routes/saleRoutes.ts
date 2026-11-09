@@ -45,8 +45,8 @@ router.put('/:id/edit', authorize([Role.ADMIN], ['action:edit_sale', 'action:edi
 router.delete('/:id', authorize([Role.ADMIN], ['action:delete_sale', 'action:delete_invoice']), deleteSale);
 
 // Sales Return / Order Wapsi with reason tracking
-router.post('/:id/return', authorize([Role.ADMIN, Role.OPERATOR]), createSalesReturn);
-router.post('/returns', authorize([Role.ADMIN, Role.OPERATOR]), createSalesReturn);
+router.post('/:id/return', authorize([Role.ADMIN, Role.OPERATOR], ['action:edit_sale', 'action:edit_invoice']), createSalesReturn);
+router.post('/returns', authorize([Role.ADMIN, Role.OPERATOR], ['action:edit_sale', 'action:edit_invoice']), createSalesReturn);
 
 export default router;
 

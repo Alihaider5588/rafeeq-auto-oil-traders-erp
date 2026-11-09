@@ -35,8 +35,9 @@ import { useAuth } from '../context/AuthContext';
 export const DeliveryManagementPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canEditDelivery = isAdmin || Boolean(user?.permissions?.includes('action:edit_delivery'));
-  const canDeleteDelivery = isAdmin || Boolean(user?.permissions?.includes('action:delete_delivery'));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditDelivery = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_delivery')) : user?.role === 'OPERATOR');
+  const canDeleteDelivery = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_delivery')) : false);
   const [activeTab, setActiveTab] = useState<'DISPATCHES' | 'WEEKLY_SCHEDULES' | 'VEHICLES'>('DISPATCHES');
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
@@ -208,6 +209,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const openNewVehicleModal = () => {
+    if (!canEditDelivery) {
+      alert('Aapke pas vehicle register karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     setEditingVehicle(null);
     setVehicleNumber('');
     setDriverName('');
@@ -218,6 +223,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const openEditVehicleModal = (v: Vehicle) => {
+    if (!canEditDelivery) {
+      alert('Aapke pas vehicle edit karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     setEditingVehicle(v);
     setVehicleNumber(v.vehicleNumber);
     setDriverName(v.driverName);
@@ -253,6 +262,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const handleDeleteVehicle = async (id: string, number: string) => {
+    if (!canDeleteDelivery) {
+      alert('Aapke pas delivery vehicle delete karne ki ijazat nahi hai (No Delete Permission).');
+      return;
+    }
     if (!window.confirm(`Are you sure you want to remove delivery vehicle '${number}'? All attached schedules will also be removed.`)) {
       return;
     }
@@ -267,6 +280,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const openNewScheduleModal = (prefillVehicleId?: string, prefillDay?: string) => {
+    if (!canEditDelivery) {
+      alert('Aapke pas route schedule add karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     setEditingSchedule(null);
     setSchedVehicleId(prefillVehicleId || (vehicles[0]?.id || ''));
     setSchedDay(prefillDay || 'MONDAY');
@@ -278,6 +295,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const openEditScheduleModal = (s: RouteSchedule) => {
+    if (!canEditDelivery) {
+      alert('Aapke pas route schedule edit karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     setEditingSchedule(s);
     setSchedVehicleId(s.vehicleId);
     setSchedDay(s.dayOfWeek);
@@ -290,6 +311,10 @@ export const DeliveryManagementPage: React.FC = () => {
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditDelivery) {
+      alert('Aapke pas schedule save karne ki ijazat nahi hai.');
+      return;
+    }
     try {
       const payload = {
         vehicleId: schedVehicleId,
@@ -311,6 +336,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const handleDeleteSchedule = async (id: string) => {
+    if (!canDeleteDelivery) {
+      alert('Aapke pas route schedule delete karne ki ijazat nahi hai.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this weekly route assignment?')) return;
     try {
       await api.delete(`/logistics/route-schedules/${id}`);
@@ -322,6 +351,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const openNewDispatchModal = () => {
+    if (!canEditDelivery) {
+      alert('Aapke pas new dispatch create karne ki ijazat nahi hai (No Edit Permission).');
+      return;
+    }
     const firstVehicle = vehicles[0]?.id || '';
     setDispatchVehicleId(firstVehicle);
     handleDispatchVehicleChange(firstVehicle);
@@ -405,6 +438,10 @@ export const DeliveryManagementPage: React.FC = () => {
   };
 
   const handleDeleteDelivery = async (id: string, deliveryNum: string) => {
+    if (!canDeleteDelivery) {
+      alert('Aapke pas dispatch delete karne ki ijazat nahi hai (No Delete Permission).');
+      return;
+    }
     if (!window.confirm(`Are you sure you want to cancel and delete dispatch run #${deliveryNum}?`)) {
       return;
     }
@@ -471,22 +508,26 @@ export const DeliveryManagementPage: React.FC = () => {
           >
             <RefreshCw size={15} className={loading ? 'spin' : ''} /> Refresh
           </button>
-          <button
-            type="button"
-            onClick={openNewDispatchModal}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
-          >
-            <Plus size={18} /> New Daily Van Dispatch
-          </button>
-          <button
-            type="button"
-            onClick={openNewVehicleModal}
-            className="btn btn-outline"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
-          >
-            <Truck size={16} /> + Add Delivery Van & Driver
-          </button>
+          {canEditDelivery && (
+            <>
+              <button
+                type="button"
+                onClick={openNewDispatchModal}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+              >
+                <Plus size={18} /> New Daily Van Dispatch
+              </button>
+              <button
+                type="button"
+                onClick={openNewVehicleModal}
+                className="btn btn-outline"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+              >
+                <Truck size={16} /> + Add Delivery Van & Driver
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -781,13 +822,15 @@ export const DeliveryManagementPage: React.FC = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => openNewScheduleModal()}
-              className="btn btn-primary btn-sm"
-              style={{ fontWeight: 800 }}
-            >
-              <Plus size={16} /> Assign New Weekly Route
-            </button>
+            {canEditDelivery && (
+              <button
+                onClick={() => openNewScheduleModal()}
+                className="btn btn-primary btn-sm"
+                style={{ fontWeight: 800 }}
+              >
+                <Plus size={16} /> Assign New Weekly Route
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
@@ -821,13 +864,15 @@ export const DeliveryManagementPage: React.FC = () => {
                         Driver: <b>{v.driverName}</b> | Supply: <b>{v.supplyManName}</b>
                       </div>
                     </div>
-                    <button
-                      onClick={() => openNewScheduleModal(v.id)}
-                      className="btn btn-outline btn-sm"
-                      style={{ fontSize: '0.78rem', padding: '4px 10px' }}
-                    >
-                      <Plus size={14} /> Add Day
-                    </button>
+                    {canEditDelivery && (
+                      <button
+                        onClick={() => openNewScheduleModal(v.id)}
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+                      >
+                        <Plus size={14} /> Add Day
+                      </button>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -868,14 +913,16 @@ export const DeliveryManagementPage: React.FC = () => {
                           <div>
                             {daySched ? (
                               <div style={{ display: 'flex', gap: '4px' }}>
-                                <button
-                                  onClick={() => openEditScheduleModal(daySched)}
-                                  className="btn btn-outline btn-sm"
-                                  style={{ padding: '4px 8px' }}
-                                  title="Edit Day Route"
-                                >
-                                  <Edit2 size={13} />
-                                </button>
+                                {canEditDelivery && (
+                                  <button
+                                    onClick={() => openEditScheduleModal(daySched)}
+                                    className="btn btn-outline btn-sm"
+                                    style={{ padding: '4px 8px' }}
+                                    title="Edit Day Route"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                )}
                                 {canDeleteDelivery && (
                                   <button
                                     onClick={() => handleDeleteSchedule(daySched.id)}
@@ -888,19 +935,21 @@ export const DeliveryManagementPage: React.FC = () => {
                                 )}
                               </div>
                             ) : (
-                              <button
-                                onClick={() => openNewScheduleModal(v.id, d.key)}
-                                style={{
-                                  border: 'none',
-                                  backgroundColor: 'transparent',
-                                  color: '#0284c7',
-                                  fontSize: '0.78rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                + Set Route
-                              </button>
+                              canEditDelivery && (
+                                <button
+                                  onClick={() => openNewScheduleModal(v.id, d.key)}
+                                  style={{
+                                    border: 'none',
+                                    backgroundColor: 'transparent',
+                                    color: '#0284c7',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  + Set Route
+                                </button>
+                              )
                             )}
                           </div>
                         </div>
@@ -938,24 +987,26 @@ export const DeliveryManagementPage: React.FC = () => {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={openNewVehicleModal}
-              className="btn btn-primary"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: 800,
-                backgroundColor: '#0284c7',
-                borderColor: '#0284c7',
-                padding: '9px 18px',
-                fontSize: '0.9rem',
-                boxShadow: '0 2px 6px rgba(2,132,199,0.3)'
-              }}
-            >
-              <Plus size={18} /> + Add New Delivery Van & Driver
-            </button>
+            {canEditDelivery && (
+              <button
+                type="button"
+                onClick={openNewVehicleModal}
+                className="btn btn-primary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: 800,
+                  backgroundColor: '#0284c7',
+                  borderColor: '#0284c7',
+                  padding: '9px 18px',
+                  fontSize: '0.9rem',
+                  boxShadow: '0 2px 6px rgba(2,132,199,0.3)'
+                }}
+              >
+                <Plus size={18} /> + Add New Delivery Van & Driver
+              </button>
+            )}
           </div>
 
           <div className="table-container">
@@ -981,14 +1032,16 @@ export const DeliveryManagementPage: React.FC = () => {
                       <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0 0 16px 0' }}>
                         Field billing aur rozana orders deliver karne ke liye nayi van aur driver register karein.
                       </p>
-                      <button
-                        type="button"
-                        onClick={openNewVehicleModal}
-                        className="btn btn-primary btn-sm"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
-                      >
-                        <Plus size={16} /> + Register New Delivery Van & Driver
-                      </button>
+                      {canEditDelivery && (
+                        <button
+                          type="button"
+                          onClick={openNewVehicleModal}
+                          className="btn btn-primary btn-sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                        >
+                          <Plus size={16} /> + Register New Delivery Van & Driver
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ) : (

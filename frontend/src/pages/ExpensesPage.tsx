@@ -61,7 +61,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 export const ExpensesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canDeleteExpense = isAdmin || Boolean(user?.permissions?.includes('action:delete_expense'));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditExpense = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_expense')) : (user?.role === 'OPERATOR' || user?.role === 'CASHIER'));
+  const canDeleteExpense = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_expense')) : false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -173,13 +175,15 @@ export const ExpensesPage: React.FC = () => {
           >
             <RefreshCw size={16} /> Refresh
           </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Plus size={16} /> Add Expense Voucher
-          </button>
+          {canEditExpense && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={16} /> Add Expense Voucher
+            </button>
+          )}
         </div>
       </div>
 

@@ -7,7 +7,9 @@ import { useAuth } from '../context/AuthContext';
 export const PurchasesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const canDeletePurchase = isAdmin || Boolean(user?.permissions?.includes('action:delete_purchase'));
+  const hasCustomPerms = Boolean(user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0);
+  const canEditPurchase = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_purchase')) : user?.role === 'OPERATOR');
+  const canDeletePurchase = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_purchase')) : false);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -263,6 +265,10 @@ export const PurchasesPage: React.FC = () => {
 
   const handleCreatePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditPurchase) {
+      setOperationError('Aap ke pas purchase create karne ki permission nahi hai.');
+      return;
+    }
     if (!supplierId || !invoiceNumber) {
       setOperationError('Supplier aur Invoice Number select karna lazmi hai.');
       return;
@@ -328,17 +334,19 @@ export const PurchasesPage: React.FC = () => {
             Record oil shipments received from refineries & distributors (automatically increases stock)
           </p>
         </div>
-        <button
-          onClick={() => {
-            if (suppliers.length === 0 || products.length === 0) {
-              loadMeta();
-            }
-            setShowModal(true);
-          }}
-          className="btn btn-primary"
-        >
-          <Plus size={18} /> New Purchase Entry
-        </button>
+        {canEditPurchase && (
+          <button
+            onClick={() => {
+              if (suppliers.length === 0 || products.length === 0) {
+                loadMeta();
+              }
+              setShowModal(true);
+            }}
+            className="btn btn-primary"
+          >
+            <Plus size={18} /> New Purchase Entry
+          </button>
+        )}
       </div>
 
       {/* Operation Feedback Alerts */}

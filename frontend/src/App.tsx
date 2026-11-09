@@ -73,9 +73,15 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[]; pa
     return <Layout>{children}</Layout>;
   }
 
-  // Granular Admin Permissions: if Admin assigned permission for this path to this user
-  if (path && user.permissions && Array.isArray(user.permissions) && user.permissions.includes(path)) {
-    return <Layout>{children}</Layout>;
+  // Granular Admin Permissions: if Admin assigned custom tab permissions to this user
+  if (path && user.permissions && Array.isArray(user.permissions)) {
+    const tabPerms = user.permissions.filter((p: string) => p.startsWith('/'));
+    if (tabPerms.length > 0) {
+      if (tabPerms.includes(path)) {
+        return <Layout>{children}</Layout>;
+      }
+      return <Navigate to="/app" replace />;
+    }
   }
 
   const userRole = (user.role || '').toUpperCase();
@@ -91,9 +97,22 @@ const RoleRedirect: React.FC = () => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
 
+  if (user.role === 'ADMIN') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  if (user.permissions && Array.isArray(user.permissions)) {
+    const tabPerms = user.permissions.filter((p: string) => p.startsWith('/'));
+    if (tabPerms.length > 0) {
+      const defaultRolePath = user.role === 'CASHIER' ? '/cashier' : user.role === 'OPERATOR' ? '/operator' : user.role === 'SALESMAN' ? '/salesman' : '/sales';
+      if (tabPerms.includes(defaultRolePath)) {
+        return <Navigate to={defaultRolePath} replace />;
+      }
+      return <Navigate to={tabPerms[0]} replace />;
+    }
+  }
+
   switch (user.role) {
-    case 'ADMIN':
-      return <Navigate to="/admin" replace />;
     case 'OPERATOR':
       return <Navigate to="/operator" replace />;
     case 'CASHIER':

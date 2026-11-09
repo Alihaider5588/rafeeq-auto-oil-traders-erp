@@ -126,11 +126,18 @@ export const authorize = (allowedRoles: Role[], requiredPerm?: string | string[]
       return next();
     }
 
-    // Granular permission check: if user has been granted permission by Admin for this tab/module/action
-    if (requiredPerm && req.user.permissions && Array.isArray(req.user.permissions)) {
-      const perms = Array.isArray(requiredPerm) ? requiredPerm : [requiredPerm];
-      if (perms.some((p) => req.user!.permissions!.includes(p))) {
-        return next();
+    // Granular permission check: if user has custom permissions assigned by Admin
+    if (req.user.permissions && Array.isArray(req.user.permissions) && req.user.permissions.length > 0) {
+      if (requiredPerm) {
+        const perms = Array.isArray(requiredPerm) ? requiredPerm : [requiredPerm];
+        if (perms.some((p) => req.user!.permissions!.includes(p))) {
+          return next();
+        }
+        res.status(403).json({
+          success: false,
+          message: `Forbidden: permission '${perms.join(' or ')}' required`,
+        });
+        return;
       }
     }
 
