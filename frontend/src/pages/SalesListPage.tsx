@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../services/api';
 import { Sale, Customer, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { 
   ShoppingCart, Eye, Printer, Filter, CheckCircle2, 
   XCircle, History, Search, RefreshCw, AlertTriangle,
-  Edit3, RotateCcw, Plus, Trash2, Save
+  Edit3, RotateCcw, Plus, Trash2, Save,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 
 export const SalesListPage: React.FC = () => {
@@ -21,6 +22,18 @@ export const SalesListPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSaleType, setFilterSaleType] = useState<string>('');
+
+  // Pagination & Database Totals
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [limit, setLimit] = useState<number>(50);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [counts, setCounts] = useState<{ all: number; counter: number; van: number }>({
+    all: 0,
+    counter: 0,
+    van: 0,
+  });
+  const isInitialMount = useRef(true);
 
   // Products & Customers
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -82,10 +95,22 @@ export const SalesListPage: React.FC = () => {
   const [settings, setSettings] = useState<any>(null);
 
   useEffect(() => {
-    fetchSales();
+    fetchSales(1, limit, '', '', '');
     fetchSettings();
     loadCustomers();
   }, []);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      fetchSales(1, limit, search, filterSaleType, filterStatus);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchSettings = async () => {
     try {
@@ -98,13 +123,48 @@ export const SalesListPage: React.FC = () => {
     }
   };
 
-  const fetchSales = async () => {
+  const fetchSales = async (
+    targetPage: number = currentPage,
+    targetLimit: number = limit,
+    targetSearch: string = search,
+    targetSaleType: string = filterSaleType,
+    targetStatus: string = filterStatus
+  ) => {
     try {
       setLoading(true);
-      const res = await api.get('/sales');
-      setSales(res.data.data || []);
+      const params: any = {
+        page: targetPage,
+        limit: targetLimit,
+      };
+      if (targetSearch.trim()) params.search = targetSearch.trim();
+      if (targetSaleType) params.saleType = targetSaleType;
+      if (targetStatus) params.status = targetStatus;
+
+      const res = await api.get('/sales', { params });
+      const saleList = res.data?.data || [];
+      setSales(saleList);
+
+      if (res.data?.pagination) {
+        setTotalCount(res.data.pagination.total || 0);
+        setTotalPages(res.data.pagination.totalPages || 1);
+        setCurrentPage(res.data.pagination.page || targetPage);
+      } else {
+        setTotalCount(saleList.length);
+        setTotalPages(1);
+        setCurrentPage(1);
+      }
+
+      if (res.data?.counts) {
+        setCounts(res.data.counts);
+      } else {
+        setCounts({
+          all: res.data?.pagination?.total || saleList.length,
+          counter: saleList.filter((s: any) => s.saleType === 'COUNTER').length,
+          van: saleList.filter((s: any) => s.saleType !== 'COUNTER').length,
+        });
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load sales invoices:', e);
     } finally {
       setLoading(false);
     }
@@ -368,17 +428,47 @@ export const SalesListPage: React.FC = () => {
     }
   };
 
-  const filteredSales = sales.filter((s) => {
-    const matchesSearch =
-      s.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      (s.customer?.shopName && s.customer.shopName.toLowerCase().includes(search.toLowerCase()));
-    const matchesStatus = filterStatus ? s.status === filterStatus : true;
-    const matchesType = filterSaleType ? (s.saleType || 'VAN') === filterSaleType : true;
-    return matchesSearch && matchesStatus && matchesType;
-  });
+  const handleFilterSaleTypeChange = (newType: string) => {
+    setFilterSaleType(newType);
+    setCurrentPage(1);
+    fetchSales(1, limit, search, newType, filterStatus);
+  };
 
-  const counterSalesCount = sales.filter((s) => s.saleType === 'COUNTER').length;
-  const vanSalesCount = sales.filter((s) => s.saleType !== 'COUNTER').length;
+  const handleFilterStatusChange = (newStatus: string) => {
+    setFilterStatus(newStatus);
+    setCurrentPage(1);
+    fetchSales(1, limit, search, filterSaleType, newStatus);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    setCurrentPage(newPage);
+    fetchSales(newPage, limit, search, filterSaleType, filterStatus);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setCurrentPage(1);
+    fetchSales(1, newLimit, search, filterSaleType, filterStatus);
+  };
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages: (number | string)[] = [];
+    if (currentPage <= 4) {
+      pages.push(1, 2, 3, 4, 5, '...', totalPages);
+    } else if (currentPage >= totalPages - 3) {
+      pages.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+    } else {
+      pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+    }
+    return pages;
+  };
+
+  const filteredSales = sales;
 
   return (
     <div>
@@ -479,27 +569,27 @@ export const SalesListPage: React.FC = () => {
           </span>
           <button
             type="button"
-            onClick={() => setFilterSaleType('')}
+            onClick={() => handleFilterSaleTypeChange('')}
             className={`btn btn-sm ${filterSaleType === '' ? 'btn-primary' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
           >
-            📋 All Sales ({sales.length})
+            📋 All Sales ({counts.all})
           </button>
           <button
             type="button"
-            onClick={() => setFilterSaleType('COUNTER')}
+            onClick={() => handleFilterSaleTypeChange('COUNTER')}
             className={`btn btn-sm ${filterSaleType === 'COUNTER' ? 'btn-success' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
           >
-            🏪 Counter Sales ({counterSalesCount})
+            🏪 Counter Sales ({counts.counter})
           </button>
           <button
             type="button"
-            onClick={() => setFilterSaleType('VAN')}
+            onClick={() => handleFilterSaleTypeChange('VAN')}
             className={`btn btn-sm ${filterSaleType === 'VAN' ? 'btn-info' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
           >
-            🚐 Van Sales ({vanSalesCount})
+            🚐 Van Sales ({counts.van})
           </button>
         </div>
 
@@ -511,13 +601,47 @@ export const SalesListPage: React.FC = () => {
               placeholder="Search by invoice # or customer shop name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  setCurrentPage(1);
+                  fetchSales(1, limit, search, filterSaleType, filterStatus);
+                }
+              }}
+              style={{ paddingRight: search ? '30px' : '10px' }}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setCurrentPage(1);
+                  fetchSales(1, limit, '', filterSaleType, filterStatus);
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '0.9rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  padding: '2px 6px',
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <select
             className="form-control"
             value={filterSaleType}
-            onChange={(e) => setFilterSaleType(e.target.value)}
+            onChange={(e) => handleFilterSaleTypeChange(e.target.value)}
           >
             <option value="">All Types (Sab)</option>
             <option value="COUNTER">🏪 Counter Sales (Shop)</option>
@@ -527,15 +651,20 @@ export const SalesListPage: React.FC = () => {
           <select
             className="form-control"
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            onChange={(e) => handleFilterStatusChange(e.target.value)}
           >
             <option value="">All Statuses</option>
             <option value="COMPLETED">COMPLETED</option>
             <option value="CANCELLED">CANCELLED</option>
           </select>
 
-          <button onClick={fetchSales} className="btn btn-secondary" title="Refresh">
-            <RefreshCw size={16} />
+          <button
+            onClick={() => fetchSales(currentPage, limit, search, filterSaleType, filterStatus)}
+            className="btn btn-secondary"
+            title="Refresh Invoices"
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading ? 'spin' : ''} />
           </button>
         </div>
       </div>
@@ -702,6 +831,189 @@ export const SalesListPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {totalCount > 0 && (
+        <div
+          className="card"
+          style={{
+            marginTop: '16px',
+            marginBottom: '20px',
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px',
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          {/* Summary / Range Info */}
+          <div style={{ fontSize: '0.88rem', color: '#475569', fontWeight: 600 }}>
+            Showing{' '}
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>
+              {(currentPage - 1) * limit + 1}
+            </span>{' '}
+            to{' '}
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>
+              {Math.min(currentPage * limit, totalCount)}
+            </span>{' '}
+            of{' '}
+            <span style={{ fontWeight: 800, color: '#d97706' }}>
+              {totalCount}
+            </span>{' '}
+            invoices &nbsp;
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>
+              (Page {currentPage} of {totalPages})
+            </span>
+          </div>
+
+          {/* Page Navigation Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {/* First Page */}
+            <button
+              type="button"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage <= 1 || loading}
+              className="btn btn-outline btn-sm"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                opacity: currentPage <= 1 ? 0.4 : 1,
+                cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+              }}
+              title="First Page (Pehla Page)"
+            >
+              <ChevronsLeft size={16} />
+            </button>
+
+            {/* Prev Page */}
+            <button
+              type="button"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || loading}
+              className="btn btn-outline btn-sm"
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                opacity: currentPage <= 1 ? 0.4 : 1,
+                cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Previous Page (Pichla Page)"
+            >
+              <ChevronLeft size={15} /> Prev
+            </button>
+
+            {/* Page Number Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {getPageNumbers().map((pNum, idx) =>
+                pNum === '...' ? (
+                  <span
+                    key={`ellipsis-${idx}`}
+                    style={{ padding: '0 6px', color: '#94a3b8', fontWeight: 700, fontSize: '0.85rem' }}
+                  >
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={`page-${pNum}`}
+                    type="button"
+                    onClick={() => handlePageChange(Number(pNum))}
+                    disabled={loading}
+                    className="btn btn-sm"
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      fontWeight: 800,
+                      backgroundColor: currentPage === pNum ? '#d97706' : '#f8fafc',
+                      color: currentPage === pNum ? '#ffffff' : '#334155',
+                      border: currentPage === pNum ? '1px solid #d97706' : '1px solid #cbd5e1',
+                      minWidth: '36px',
+                      boxShadow: currentPage === pNum ? '0 2px 6px rgba(217, 119, 6, 0.35)' : 'none',
+                    }}
+                  >
+                    {pNum}
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* Next Page */}
+            <button
+              type="button"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || loading}
+              className="btn btn-outline btn-sm"
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                opacity: currentPage >= totalPages ? 0.4 : 1,
+                cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Next Page (Agla Page)"
+            >
+              Next <ChevronRight size={15} />
+            </button>
+
+            {/* Last Page */}
+            <button
+              type="button"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage >= totalPages || loading}
+              className="btn btn-outline btn-sm"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                opacity: currentPage >= totalPages ? 0.4 : 1,
+                cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+              }}
+              title="Last Page (Aakhri Page)"
+            >
+              <ChevronsRight size={16} />
+            </button>
+          </div>
+
+          {/* Rows Per Page Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#475569', fontWeight: 700 }}>
+            <span>Per page:</span>
+            <select
+              className="form-control form-control-sm"
+              style={{ width: '85px', padding: '5px 8px', fontWeight: 700, borderRadius: '8px' }}
+              value={limit}
+              onChange={(e) => handleLimitChange(Number(e.target.value))}
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Invoice Modal & Printable Document */}
       {selectedSale && (

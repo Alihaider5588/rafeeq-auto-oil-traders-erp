@@ -30,9 +30,9 @@ const saleSchema = z.object({
 
 export const getSales = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { customerId, salesmanId, status, startDate, endDate, saleType, page = '1', limit = '50' } = req.query;
+    const { customerId, salesmanId, status, startDate, endDate, saleType, search, page = '1', limit = '50' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(200, Math.max(1, parseInt(limit as string, 10) || 50));
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit as string, 10) || 50));
     const skip = (pageNum - 1) * limitNum;
 
     const where: Prisma.SaleWhereInput = {};
@@ -53,7 +53,24 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
       };
     }
 
-    const [total, sales] = await Promise.all([
+    if (search && typeof search === 'string' && search.trim().length > 0) {
+      const q = search.trim();
+      where.OR = [
+        { invoiceNumber: { contains: q } },
+        { customer: { shopName: { contains: q } } },
+        { customer: { ownerName: { contains: q } } },
+        { customer: { phone: { contains: q } } },
+      ];
+    }
+
+    const baseWhere: Prisma.SaleWhereInput = {};
+    if (req.user?.role === Role.SALESMAN) {
+      baseWhere.salesmanId = req.user.id;
+    } else if (salesmanId) {
+      baseWhere.salesmanId = salesmanId as string;
+    }
+
+    const [total, sales, totalAll, totalCounter, totalVan] = await Promise.all([
       prisma.sale.count({ where }),
       prisma.sale.findMany({
         where,
@@ -81,9 +98,12 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
         skip,
         take: limitNum,
       }),
+      prisma.sale.count({ where: baseWhere }),
+      prisma.sale.count({ where: { ...baseWhere, saleType: 'COUNTER' } }),
+      prisma.sale.count({ where: { ...baseWhere, saleType: { not: 'COUNTER' } } }),
     ]);
 
-    res.setHeader('Cache-Control', 'private, max-age=10, stale-while-revalidate=30');
+    res.setHeader('Cache-Control', 'private, max-age=5, stale-while-revalidate=15');
     res.json({
       success: true,
       data: sales,
@@ -91,7 +111,12 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
         total,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages: Math.ceil(total / limitNum) || 1,
+      },
+      counts: {
+        all: totalAll,
+        counter: totalCounter,
+        van: totalVan,
       },
     });
   } catch (error) {
