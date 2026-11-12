@@ -17,8 +17,10 @@ import {
   UserCheck,
   Shield,
   Phone,
-  RefreshCw
+  RefreshCw,
+  Search
 } from 'lucide-react';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 
 const DAYS_OF_WEEK = [
   { key: 'MONDAY', label: 'Monday (پیر)' },
@@ -48,6 +50,8 @@ export const DeliveryManagementPage: React.FC = () => {
   const [salesmen, setSalesmen] = useState<User[]>([]);
   const [schedules, setSchedules] = useState<RouteSchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchDispatches, setSearchDispatches] = useState('');
+  const [searchVehicles, setSearchVehicles] = useState('');
 
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [showVehicleModal, setShowVehicleModal] = useState(false);
@@ -463,6 +467,29 @@ export const DeliveryManagementPage: React.FC = () => {
 
   const grandDispatchTotal = regularItemsTotal + additionalItemsTotal;
 
+  const filteredDeliveries = deliveries.filter((del) => {
+    if (!searchDispatches.trim()) return true;
+    const q = searchDispatches.toLowerCase();
+    return (
+      del.deliveryNumber?.toLowerCase().includes(q) ||
+      del.routeArea?.toLowerCase().includes(q) ||
+      del.vehicle?.vehicleNumber?.toLowerCase().includes(q) ||
+      del.vehicle?.driverName?.toLowerCase().includes(q) ||
+      del.vehicle?.supplyManName?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredVehicles = vehicles.filter((v) => {
+    if (!searchVehicles.trim()) return true;
+    const q = searchVehicles.toLowerCase();
+    return (
+      v.vehicleNumber?.toLowerCase().includes(q) ||
+      v.driverName?.toLowerCase().includes(q) ||
+      v.supplyManName?.toLowerCase().includes(q) ||
+      v.notes?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '60px' }}>
       <div style={{
@@ -664,10 +691,22 @@ export const DeliveryManagementPage: React.FC = () => {
             border: '1px solid #e2e8f0',
             boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
           }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Filter Dispatches:</div>
+            <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search dispatch #, route, driver, van..."
+                className="form-control"
+                style={{ paddingLeft: '32px', width: '100%', fontSize: '0.85rem' }}
+                value={searchDispatches}
+                onChange={(e) => setSearchDispatches(e.target.value)}
+              />
+            </div>
+
+            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Filter:</div>
             <select
               className="form-control"
-              style={{ maxWidth: '220px' }}
+              style={{ maxWidth: '200px' }}
               value={filterVehicleId}
               onChange={(e) => setFilterVehicleId(e.target.value)}
             >
@@ -682,7 +721,7 @@ export const DeliveryManagementPage: React.FC = () => {
             <input
               type="date"
               className="form-control"
-              style={{ maxWidth: '180px' }}
+              style={{ maxWidth: '160px' }}
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
             />
@@ -718,14 +757,14 @@ export const DeliveryManagementPage: React.FC = () => {
                       Loading van delivery runs...
                     </td>
                   </tr>
-                ) : deliveries.length === 0 ? (
+                ) : filteredDeliveries.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                      No daily delivery runs logged yet. Click <b>"New Daily Van Dispatch"</b> to dispatch goods.
+                      No daily delivery runs found matching the filter.
                     </td>
                   </tr>
                 ) : (
-                  deliveries.map((del) => {
+                  filteredDeliveries.map((del) => {
                     const additionalItemsCount = (del.items || []).filter((it) => it.isAdditional).length;
                     return (
                       <tr key={del.id}>
@@ -1009,6 +1048,18 @@ export const DeliveryManagementPage: React.FC = () => {
             )}
           </div>
 
+          <div style={{ marginBottom: '14px', position: 'relative', maxWidth: '360px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Search vehicles, driver, phone, supply man..."
+              className="form-control"
+              style={{ paddingLeft: '32px', width: '100%', fontSize: '0.85rem' }}
+              value={searchVehicles}
+              onChange={(e) => setSearchVehicles(e.target.value)}
+            />
+          </div>
+
           <div className="table-container">
             <table className="data-table">
               <thead>
@@ -1023,11 +1074,11 @@ export const DeliveryManagementPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {vehicles.length === 0 ? (
+                {filteredVehicles.length === 0 ? (
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
                       <div style={{ fontSize: '1rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                        Abhi koi delivery van ya driver add nahi hua.
+                        No delivery vehicles found matching search.
                       </div>
                       <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0 0 16px 0' }}>
                         Field billing aur rozana orders deliver karne ke liye nayi van aur driver register karein.
@@ -1045,7 +1096,7 @@ export const DeliveryManagementPage: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  vehicles.map((v) => {
+                  filteredVehicles.map((v) => {
                     const countSchedules = (schedules || []).filter((s) => s.vehicleId === v.id).length;
                     return (
                       <tr key={v.id}>
@@ -1472,20 +1523,13 @@ export const DeliveryManagementPage: React.FC = () => {
                     }}
                   >
                     <div>
-                      <select
-                        className="form-control"
+                      <SearchableProductSelect
+                        products={products}
                         value={it.productId}
-                        onChange={(e) => updateDispatchItem(idx, 'productId', e.target.value)}
+                        onChange={(val) => updateDispatchItem(idx, 'productId', val)}
                         required
-                        style={{ fontSize: '0.85rem' }}
-                      >
-                        <option value="">Select Engine Oil / Product</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.sku}) - Avail: {Number(p.currentStock)}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Type to search oil / item..."
+                      />
                       {it.isAdditional && (
                         <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 800 }}>
                           ★ Extra Stock (For On-Spot Counter Sale)

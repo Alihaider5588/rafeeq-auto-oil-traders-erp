@@ -6,8 +6,10 @@ import {
   ShoppingCart, Eye, Printer, Filter, CheckCircle2, 
   XCircle, History, Search, RefreshCw, AlertTriangle,
   Edit3, RotateCcw, Plus, Trash2, Save,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download
 } from 'lucide-react';
+import { exportSalesPDF } from '../utils/pdfExportUtils';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 
 export const SalesListPage: React.FC = () => {
   const { user } = useAuth();
@@ -22,6 +24,8 @@ export const SalesListPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSaleType, setFilterSaleType] = useState<string>('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Pagination & Database Totals
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -59,6 +63,7 @@ export const SalesListPage: React.FC = () => {
   const [editDiscount, setEditDiscount] = useState<number | string>(0);
   const [editReceivedAmount, setEditReceivedAmount] = useState<number | string>(0);
   const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
+  const [editSaleDate, setEditSaleDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -95,7 +100,7 @@ export const SalesListPage: React.FC = () => {
   const [settings, setSettings] = useState<any>(null);
 
   useEffect(() => {
-    fetchSales(1, limit, '', '', '');
+    fetchSales(1, limit, '', '', '', '', '');
     fetchSettings();
     loadCustomers();
   }, []);
@@ -107,10 +112,10 @@ export const SalesListPage: React.FC = () => {
     }
     const timer = setTimeout(() => {
       setCurrentPage(1);
-      fetchSales(1, limit, search, filterSaleType, filterStatus);
+      fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, endDate);
     }, 400);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, startDate, endDate]);
 
   const fetchSettings = async () => {
     try {
@@ -128,7 +133,9 @@ export const SalesListPage: React.FC = () => {
     targetLimit: number = limit,
     targetSearch: string = search,
     targetSaleType: string = filterSaleType,
-    targetStatus: string = filterStatus
+    targetStatus: string = filterStatus,
+    targetStartDate: string = startDate,
+    targetEndDate: string = endDate
   ) => {
     try {
       setLoading(true);
@@ -139,6 +146,8 @@ export const SalesListPage: React.FC = () => {
       if (targetSearch.trim()) params.search = targetSearch.trim();
       if (targetSaleType) params.saleType = targetSaleType;
       if (targetStatus) params.status = targetStatus;
+      if (targetStartDate) params.startDate = targetStartDate;
+      if (targetEndDate) params.endDate = targetEndDate;
 
       const res = await api.get('/sales', { params });
       const saleList = res.data?.data || [];
@@ -261,6 +270,9 @@ export const SalesListPage: React.FC = () => {
     setEditDiscount(Number(sale.discount || 0));
     setEditReceivedAmount(Number(sale.receivedAmount || 0));
     setEditPaymentMethod((sale as any).paymentMethod || 'CASH');
+    const dt = sale.saleDate ? new Date(sale.saleDate) : new Date((sale as any).createdAt || Date.now());
+    const offset = dt.getTimezoneOffset() * 60000;
+    setEditSaleDate(new Date(dt.getTime() - offset).toISOString().slice(0, 16));
     setEditNotes(sale.notes || '');
   };
 
@@ -312,6 +324,7 @@ export const SalesListPage: React.FC = () => {
       setSavingEdit(true);
       await api.put(`/sales/${editModalSale.id}/edit`, {
         customerId: editCustomerId,
+        saleDate: editSaleDate ? new Date(editSaleDate).toISOString() : undefined,
         items: editItems.map((it) => ({
           productId: it.productId,
           quantity: parseFloat(String(it.quantity)) || 0,
@@ -593,78 +606,155 @@ export const SalesListPage: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '14px', alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', flex: 1 }}>
+            {/* Search Box */}
+            <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search by invoice # or customer shop name..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setCurrentPage(1);
+                    fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, endDate);
+                  }
+                }}
+                style={{ paddingLeft: '32px', paddingRight: search ? '30px' : '10px', height: '38px', fontSize: '0.85rem' }}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setCurrentPage(1);
+                    fetchSales(1, limit, '', filterSaleType, filterStatus, startDate, endDate);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    fontSize: '0.9rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    padding: '2px 6px',
+                  }}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <select
               className="form-control"
-              placeholder="Search by invoice # or customer shop name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
+              value={filterSaleType}
+              onChange={(e) => handleFilterSaleTypeChange(e.target.value)}
+              style={{ width: 'auto', minWidth: '150px', height: '38px', fontSize: '0.85rem' }}
+            >
+              <option value="">All Types (Sab)</option>
+              <option value="COUNTER">🏪 Counter Sales</option>
+              <option value="VAN">🚐 Van Sales</option>
+            </select>
+
+            <select
+              className="form-control"
+              value={filterStatus}
+              onChange={(e) => handleFilterStatusChange(e.target.value)}
+              style={{ width: 'auto', minWidth: '140px', height: '38px', fontSize: '0.85rem' }}
+            >
+              <option value="">All Statuses</option>
+              <option value="COMPLETED">COMPLETED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+
+            {/* Date Range: From */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>From:</span>
+              <input
+                type="date"
+                className="form-control"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
                   setCurrentPage(1);
-                  fetchSales(1, limit, search, filterSaleType, filterStatus);
-                }
-              }}
-              style={{ paddingRight: search ? '30px' : '10px' }}
-            />
-            {search && (
+                  fetchSales(1, limit, search, filterSaleType, filterStatus, e.target.value, endDate);
+                }}
+                style={{ width: 'auto', height: '38px', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            {/* Date Range: To */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>To:</span>
+              <input
+                type="date"
+                className="form-control"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setCurrentPage(1);
+                  fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, e.target.value);
+                }}
+                style={{ width: 'auto', height: '38px', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            {(search || filterSaleType || filterStatus || startDate || endDate) && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch('');
+                  setFilterSaleType('');
+                  setFilterStatus('');
+                  setStartDate('');
+                  setEndDate('');
                   setCurrentPage(1);
-                  fetchSales(1, limit, '', filterSaleType, filterStatus);
+                  fetchSales(1, limit, '', '', '', '', '');
                 }}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: '#94a3b8',
-                  fontSize: '0.9rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  padding: '2px 6px',
-                }}
-                title="Clear search"
+                className="btn btn-outline btn-sm"
+                style={{ height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
               >
-                ✕
+                Reset
               </button>
             )}
+
+            <button
+              onClick={() => fetchSales(currentPage, limit, search, filterSaleType, filterStatus, startDate, endDate)}
+              className="btn btn-secondary"
+              title="Refresh Invoices"
+              disabled={loading}
+              style={{ height: '38px' }}
+            >
+              <RefreshCw size={16} className={loading ? 'spin' : ''} />
+            </button>
           </div>
 
-          <select
-            className="form-control"
-            value={filterSaleType}
-            onChange={(e) => handleFilterSaleTypeChange(e.target.value)}
-          >
-            <option value="">All Types (Sab)</option>
-            <option value="COUNTER">🏪 Counter Sales (Shop)</option>
-            <option value="VAN">🚐 Van Sales (Field)</option>
-          </select>
-
-          <select
-            className="form-control"
-            value={filterStatus}
-            onChange={(e) => handleFilterStatusChange(e.target.value)}
-          >
-            <option value="">All Statuses</option>
-            <option value="COMPLETED">COMPLETED</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </select>
-
+          {/* Download Sales PDF */}
           <button
-            onClick={() => fetchSales(currentPage, limit, search, filterSaleType, filterStatus)}
-            className="btn btn-secondary"
-            title="Refresh Invoices"
-            disabled={loading}
+            type="button"
+            onClick={() => exportSalesPDF(sales, `Sales Invoices List (${sales.length} Bills)`)}
+            className="btn btn-outline"
+            style={{
+              height: '38px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 700,
+              color: '#0284c7',
+              borderColor: '#38bdf8',
+              backgroundColor: '#f0f9ff'
+            }}
           >
-            <RefreshCw size={16} className={loading ? 'spin' : ''} />
+            <Download size={16} /> Download Sales PDF ({sales.length})
           </button>
         </div>
       </div>
@@ -1474,8 +1564,8 @@ export const SalesListPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveEditInvoice}>
-              {/* Customer & Sale Type Selection */}
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '18px' }}>
+              {/* Customer, Sale Type & Date Selection */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '14px', marginBottom: '18px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
                     Customer / Party Name:
@@ -1506,6 +1596,19 @@ export const SalesListPage: React.FC = () => {
                     <option value="COUNTER">🏪 Counter Sale (Shop)</option>
                     <option value="VAN">🚐 Van Sale (Field)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Invoice Date & Time (تاریخ / وقت):
+                  </label>
+                  <input
+                    type="datetime-local"
+                    className="form-control"
+                    value={editSaleDate}
+                    onChange={(e) => setEditSaleDate(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
 
@@ -1540,19 +1643,14 @@ export const SalesListPage: React.FC = () => {
                         const lineTotal = (parseFloat(String(item.quantity)) || 0) * (parseFloat(String(item.unitPrice)) || 0);
                         return (
                           <tr key={idx}>
-                            <td>
-                              <select
-                                className="form-control"
+                            <td style={{ minWidth: '220px' }}>
+                              <SearchableProductSelect
+                                products={products}
                                 value={item.productId}
-                                onChange={(e) => handleEditItemChange(idx, 'productId', e.target.value)}
+                                onChange={(val) => handleEditItemChange(idx, 'productId', val)}
                                 required
-                              >
-                                {products.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} ({p.sku}) [Stock: {p.currentStock}]
-                                  </option>
-                                ))}
-                              </select>
+                                placeholder="Type to search product..."
+                              />
                             </td>
                             <td>
                               <select

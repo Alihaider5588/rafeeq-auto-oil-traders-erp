@@ -284,6 +284,7 @@ export const UserManagementPage: React.FC = () => {
   const canEditUser = isAdmin || Boolean(currentUser?.permissions?.includes('action:edit_user'));
   const canDeleteUser = isAdmin || Boolean(currentUser?.permissions?.includes('action:delete_user'));
   const [users, setUsers] = useState<User[]>([]);
+  const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
@@ -609,6 +610,19 @@ export const UserManagementPage: React.FC = () => {
         </div>
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', width: '320px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input
+            type="text"
+            placeholder="Search users by name, username, phone, role..."
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+          />
+        </div>
+      </div>
+
       <div className="table-container" style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
         <table className="data-table" style={{ margin: 0 }}>
           <thead style={{ backgroundColor: '#f8fafc' }}>
@@ -628,8 +642,27 @@ export const UserManagementPage: React.FC = () => {
                   Loading users...
                 </td>
               </tr>
-            ) : (
-              users.map((u) => (
+            ) : (() => {
+              const filteredUsers = users.filter((u) => {
+                if (!userSearch.trim()) return true;
+                const q = userSearch.toLowerCase();
+                return (
+                  u.fullName?.toLowerCase().includes(q) ||
+                  u.username?.toLowerCase().includes(q) ||
+                  u.phone?.toLowerCase().includes(q) ||
+                  u.role?.toLowerCase().includes(q)
+                );
+              });
+              if (filteredUsers.length === 0) {
+                return (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      No user accounts found matching "{userSearch}".
+                    </td>
+                  </tr>
+                );
+              }
+              return filteredUsers.map((u) => (
                 <tr key={u.id}>
                   <td style={{ fontWeight: 700 }}>{u.fullName}</td>
                   <td className="font-mono">{u.username}</td>
@@ -698,8 +731,8 @@ export const UserManagementPage: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
+              ));
+            })()}
           </tbody>
         </table>
       </div>

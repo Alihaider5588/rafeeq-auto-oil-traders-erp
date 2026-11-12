@@ -13,7 +13,8 @@ const paymentSchema = z.object({
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   reference: z.string().optional(),
-  notes: z.string().optional(),
+  notes: z.string().min(1, 'Reason / Narration (Wajah) likhna lazmi hai'),
+  date: z.string().optional().nullable(),
 });
 
 export const getCustomerLedger = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -140,6 +141,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const receiptNumber = `PAY-${Date.now().toString().slice(-8)}`;
+    const paymentDate = data.date ? new Date(data.date) : new Date();
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Customer Payment (Collection)
@@ -159,10 +161,10 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
         await tx.customerLedger.create({
           data: {
             customerId: customer.id,
-            date: new Date(),
+            date: paymentDate,
             transactionType: TransactionType.CUSTOMER_PAYMENT,
             referenceId: receiptNumber,
-            description: `Payment Receipt #${receiptNumber}${data.notes ? ` - ${data.notes}` : ''}`,
+            description: `Cash In / Payment Receipt #${receiptNumber} - ${data.notes}`,
             debit: new Prisma.Decimal(0),
             credit: new Prisma.Decimal(data.amount),
             runningBalance: new Prisma.Decimal(newRec),
@@ -175,6 +177,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             customerId: customer.id,
             amount: new Prisma.Decimal(data.amount),
             paymentMethod: data.paymentMethod,
+            paymentDate,
             reference: data.reference,
             notes: data.notes,
             recordedById: userId,
@@ -200,10 +203,10 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
         await tx.supplierLedger.create({
           data: {
             supplierId: supplier.id,
-            date: new Date(),
+            date: paymentDate,
             transactionType: TransactionType.SUPPLIER_PAYMENT,
             referenceId: receiptNumber,
-            description: `Payment to Supplier #${receiptNumber}${data.notes ? ` - ${data.notes}` : ''}`,
+            description: `Cash Out / Payment to Supplier #${receiptNumber} - ${data.notes}`,
             debit: new Prisma.Decimal(data.amount),
             credit: new Prisma.Decimal(0),
             runningBalance: new Prisma.Decimal(newPay),
@@ -216,6 +219,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             supplierId: supplier.id,
             amount: new Prisma.Decimal(data.amount),
             paymentMethod: data.paymentMethod,
+            paymentDate,
             reference: data.reference,
             notes: data.notes,
             recordedById: userId,
@@ -505,10 +509,15 @@ export const getDualPartnerLedger = async (req: AuthenticatedRequest, res: Respo
 
 export const recordContraOffset = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { customerId, supplierId, amount, notes } = req.body;
+    const { customerId, supplierId, amount, notes, date } = req.body;
     const offsetAmount = Number(amount);
     if (!offsetAmount || offsetAmount <= 0) {
       res.status(400).json({ success: false, message: 'Valid positive offset amount is required.' });
+      return;
+    }
+
+    if (!notes || typeof notes !== 'string' || !notes.trim()) {
+      res.status(400).json({ success: false, message: 'Reason / Narration (Wajah) likhna lazmi hai for contra settlement.' });
       return;
     }
 
@@ -526,6 +535,7 @@ export const recordContraOffset = async (req: AuthenticatedRequest, res: Respons
     const curPay = Number(supplier.currentPayable);
 
     const voucherNumber = `CONTRA-${Date.now().toString().slice(-8)}`;
+    const offsetDate = date ? new Date(date) : new Date();
 
     const result = await prisma.$transaction(async (tx) => {
       const newRec = curRec - offsetAmount;
@@ -540,10 +550,10 @@ export const recordContraOffset = async (req: AuthenticatedRequest, res: Respons
       await tx.customerLedger.create({
         data: {
           customerId: customer.id,
-          date: new Date(),
+          date: offsetDate,
           transactionType: TransactionType.ADJUSTMENT,
           referenceId: voucherNumber,
-          description: `Mutual Contra Settlement #${voucherNumber} (آپسی کٹائی with Supplier: ${supplier.companyName})${notes ? ` - ${notes}` : ''}`,
+          description: `Mutual Contra Settlement #${voucherNumber} (آپسی کٹائی with Supplier: ${supplier.companyName}) - ${notes.trim()}`,
           debit: new Prisma.Decimal(0),
           credit: new Prisma.Decimal(offsetAmount),
           runningBalance: new Prisma.Decimal(newRec),
@@ -559,10 +569,10 @@ export const recordContraOffset = async (req: AuthenticatedRequest, res: Respons
       await tx.supplierLedger.create({
         data: {
           supplierId: supplier.id,
-          date: new Date(),
+          date: offsetDate,
           transactionType: TransactionType.ADJUSTMENT,
           referenceId: voucherNumber,
-          description: `Mutual Contra Settlement #${voucherNumber} (آپسی کٹائی with Customer: ${customer.shopName})${notes ? ` - ${notes}` : ''}`,
+          description: `Mutual Contra Settlement #${voucherNumber} (آپسی کٹائی with Customer: ${customer.shopName}) - ${notes.trim()}`,
           debit: new Prisma.Decimal(offsetAmount),
           credit: new Prisma.Decimal(0),
           runningBalance: new Prisma.Decimal(newPay),
@@ -601,5 +611,150 @@ export const recordContraOffset = async (req: AuthenticatedRequest, res: Respons
   } catch (error: any) {
     console.error('recordContraOffset error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to record contra offset' });
+  }
+};
+
+export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { referenceId, type, id } = req.query;
+    const ref = (referenceId as string || '').trim();
+    const entryId = (id as string || '').trim();
+
+    // 1. Try finding Sale Invoice
+    if (ref || type === 'SALE_INVOICE' || type === 'SALE') {
+      const sale = await prisma.sale.findFirst({
+        where: {
+          OR: [
+            ...(ref ? [{ invoiceNumber: ref }, { id: ref }] : []),
+            ...(entryId ? [{ id: entryId }] : []),
+          ],
+        },
+        include: {
+          customer: true,
+          salesman: { select: { id: true, fullName: true, phone: true } },
+          createdBy: { select: { id: true, fullName: true } },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unit: true,
+                  primaryUnit: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (sale) {
+        res.json({
+          success: true,
+          kind: 'SALE',
+          sale,
+        });
+        return;
+      }
+    }
+
+    // 2. Try finding Purchase Invoice
+    if (ref || type === 'PURCHASE_INVOICE' || type === 'PURCHASE') {
+      const purchase = await prisma.purchase.findFirst({
+        where: {
+          OR: [
+            ...(ref ? [{ invoiceNumber: ref }, { id: ref }] : []),
+            ...(entryId ? [{ id: entryId }] : []),
+          ],
+        },
+        include: {
+          supplier: true,
+          createdBy: { select: { id: true, fullName: true } },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unit: true,
+                  primaryUnit: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (purchase) {
+        res.json({
+          success: true,
+          kind: 'PURCHASE',
+          purchase,
+        });
+        return;
+      }
+    }
+
+    // 3. Try finding Payment Record
+    if (ref || type === 'CUSTOMER_PAYMENT' || type === 'SUPPLIER_PAYMENT' || type === 'PAYMENT') {
+      const payment = await prisma.payment.findFirst({
+        where: {
+          OR: [
+            ...(ref ? [{ receiptNumber: ref }, { id: ref }] : []),
+            ...(entryId ? [{ id: entryId }] : []),
+          ],
+        },
+        include: {
+          customer: true,
+          supplier: true,
+        },
+      });
+
+      if (payment) {
+        let recordedBy = null;
+        if (payment.recordedById) {
+          recordedBy = await prisma.user.findUnique({
+            where: { id: payment.recordedById },
+            select: { id: true, fullName: true, username: true },
+          });
+        }
+
+        res.json({
+          success: true,
+          kind: 'PAYMENT',
+          payment: {
+            ...payment,
+            recordedBy,
+          },
+        });
+        return;
+      }
+    }
+
+    // 4. Try finding in CustomerLedger or SupplierLedger directly by ID
+    let ledgerEntry: any = null;
+    if (entryId) {
+      ledgerEntry = await prisma.customerLedger.findUnique({
+        where: { id: entryId },
+        include: { customer: true },
+      });
+
+      if (!ledgerEntry) {
+        ledgerEntry = await prisma.supplierLedger.findUnique({
+          where: { id: entryId },
+          include: { supplier: true },
+        });
+      }
+    }
+
+    if (ledgerEntry) {
+      res.json({
+        success: true,
+        kind: 'LEDGER_ENTRY',
+        ledgerEntry,
+      });
+      return;
+    }
+
+    res.status(404).json({ success: false, message: 'Transaction detail not found' });
+  } catch (error) {
+    console.error('getLedgerEntryDetail error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve transaction detail' });
   }
 };

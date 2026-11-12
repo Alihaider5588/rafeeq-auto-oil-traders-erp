@@ -1,8 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, LedgerEntry, DualPartner } from '../types';
-import { BookOpen, DollarSign, PlusCircle, CheckCircle, Search, RefreshCw, Printer, AlertCircle, Phone, Trash2, ShieldAlert, ArrowLeftRight, CheckCircle2 } from 'lucide-react';
+import {
+  BookOpen,
+  DollarSign,
+  PlusCircle,
+  CheckCircle,
+  Search,
+  RefreshCw,
+  Printer,
+  AlertCircle,
+  Phone,
+  Trash2,
+  ShieldAlert,
+  ArrowLeftRight,
+  CheckCircle2,
+  Download,
+  Eye,
+  X,
+  ShoppingCart,
+  ShoppingBag,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Calendar,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { exportConsolidatedAllPartyBalancesPDF, exportSingleLedgerStatementPDF } from '../utils/pdfExportUtils';
 
 export const LedgersPage: React.FC = () => {
   const { user } = useAuth();
@@ -22,6 +45,11 @@ export const LedgersPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Detail Modal State (Tafseel Dekhein)
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedEntryDetail, setSelectedEntryDetail] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
   // Payment voucher form modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showPrintStatement, setShowPrintStatement] = useState(false);
@@ -30,6 +58,12 @@ export const LedgersPage: React.FC = () => {
   const [payReference, setPayReference] = useState('');
   const [payNotes, setPayNotes] = useState('');
   const [payTargetType, setPayTargetType] = useState<'CUSTOMER' | 'SUPPLIER'>('CUSTOMER');
+  const [payDirection, setPayDirection] = useState<'IN' | 'OUT'>('IN');
+  const [payDate, setPayDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [paySubmitting, setPaySubmitting] = useState(false);
 
   // Contra settlement modal (Mutual offset)
@@ -42,9 +76,12 @@ export const LedgersPage: React.FC = () => {
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
 
-  // Search states
+  // Search & Filter states
   const [accountSearch, setAccountSearch] = useState('');
   const [ledgerSearch, setLedgerSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [filterType, setFilterType] = useState<string>('ALL');
 
   useEffect(() => {
     setAccountSearch('');
@@ -89,7 +126,7 @@ export const LedgersPage: React.FC = () => {
     }
   };
 
-  const loadLedger = async (id: string) => {
+  const loadLedger = async (id: string, sDate = startDate, eDate = endDate) => {
     if (!id) {
       setLedgerEntries([]);
       setEntitySummary(null);
@@ -98,14 +135,18 @@ export const LedgersPage: React.FC = () => {
     }
     try {
       setLoading(true);
+      const params: any = {};
+      if (sDate) params.startDate = sDate;
+      if (eDate) params.endDate = eDate;
+
       if (activeTab === 'DUAL_PARTNERS') {
-        const res = await api.get(`/ledgers/dual/${id}`);
+        const res = await api.get(`/ledgers/dual/${id}`, { params });
         setDualLedgerData(res.data);
         setLedgerEntries(res.data.timeline || []);
         setEntitySummary(res.data.summary || {});
       } else {
         const url = activeTab === 'CUSTOMERS' ? `/ledgers/customer/${id}` : `/ledgers/supplier/${id}`;
-        const res = await api.get(url);
+        const res = await api.get(url, { params });
         setLedgerEntries(res.data.entries || []);
         setEntitySummary(res.data.summary || {});
       }
@@ -118,6 +159,10 @@ export const LedgersPage: React.FC = () => {
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!payNotes.trim()) {
+      alert('Reason / Narration (Wajah) likhna lazmi hai!');
+      return;
+    }
     setPaySubmitting(true);
     try {
       const payload: any = {
@@ -125,6 +170,7 @@ export const LedgersPage: React.FC = () => {
         paymentMethod: payMethod,
         reference: payReference,
         notes: payNotes,
+        date: payDate,
       };
 
       if (activeTab === 'CUSTOMERS') {
@@ -238,6 +284,96 @@ export const LedgersPage: React.FC = () => {
     }
   };
 
+  const handleDownloadAllBalancesPDF = async () => {
+    try {
+      const [cRes, sRes] = await Promise.all([
+        api.get('/partners/customers'),
+        api.get('/partners/suppliers'),
+      ]);
+      const custs = cRes.data.customers || [];
+      const supps = sRes.data.suppliers || [];
+      exportConsolidatedAllPartyBalancesPDF(custs, supps);
+    } catch (err) {
+      console.error(err);
+      exportConsolidatedAllPartyBalancesPDF(customers, suppliers);
+    }
+  };
+
+  const handleDownloadStatementPDF = () => {
+    const partyName =
+      activeTab === 'CUSTOMERS'
+        ? selectedCustomer?.shopName || 'Customer'
+        : activeTab === 'SUPPLIERS'
+        ? selectedSupplier?.companyName || 'Supplier'
+        : selectedDualPartner?.name || 'Dual Partner';
+
+    const partyType =
+      activeTab === 'CUSTOMERS'
+        ? 'CUSTOMER'
+        : activeTab === 'SUPPLIERS'
+        ? 'SUPPLIER'
+        : 'DUAL_PARTNER';
+
+    const phone =
+      activeTab === 'CUSTOMERS'
+        ? selectedCustomer?.phone || ''
+        : activeTab === 'SUPPLIERS'
+        ? selectedSupplier?.phone || ''
+        : selectedDualPartner?.phone || '';
+
+    const address =
+      activeTab === 'CUSTOMERS'
+        ? selectedCustomer?.area || ''
+        : activeTab === 'SUPPLIERS'
+        ? selectedSupplier?.address || ''
+        : selectedDualPartner?.address || '';
+
+    const curBal = Number(
+      activeTab === 'CUSTOMERS'
+        ? entitySummary?.currentReceivable
+        : activeTab === 'SUPPLIERS'
+        ? entitySummary?.currentPayable
+        : entitySummary?.netMutualBalance || 0
+    );
+
+    exportSingleLedgerStatementPDF(partyName, partyType, phone, address, filteredLedgerEntries, curBal);
+  };
+
+  const handleViewEntryDetail = async (entry: any) => {
+    setLoadingDetail(true);
+    setDetailModalOpen(true);
+    setSelectedEntryDetail({ rawEntry: entry });
+
+    try {
+      const res = await api.get('/ledgers/entry-detail', {
+        params: {
+          referenceId: entry.referenceId || '',
+          type: entry.type || entry.transactionType || '',
+          id: entry.id || '',
+        },
+      });
+
+      if (res.data?.success) {
+        setSelectedEntryDetail({
+          rawEntry: entry,
+          kind: res.data.kind,
+          sale: res.data.sale,
+          purchase: res.data.purchase,
+          payment: res.data.payment,
+          ledgerEntry: res.data.ledgerEntry,
+        });
+      }
+    } catch (err: any) {
+      console.warn('Could not fetch server detail for ledger entry, displaying local entry info:', err);
+      setSelectedEntryDetail({
+        rawEntry: entry,
+        kind: 'FALLBACK',
+      });
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   const handleDeletePaymentRecord = async (entry: any) => {
     if (!canDeleteLedger) {
       alert('Aap ke pas ledger payment record delete karne ki permission nahi hai!');
@@ -301,11 +437,34 @@ export const LedgersPage: React.FC = () => {
   });
 
   const filteredLedgerEntries = ledgerEntries.filter((entry) => {
+    // 1. Date Range Filter
+    if (startDate) {
+      const eDate = new Date(entry.date).toISOString().slice(0, 10);
+      if (eDate < startDate) return false;
+    }
+    if (endDate) {
+      const eDate = new Date(entry.date).toISOString().slice(0, 10);
+      if (eDate > endDate) return false;
+    }
+
+    // 2. Type Filter
+    const typeStr = (entry.type || entry.transactionType || '').toUpperCase();
+    if (filterType === 'INVOICES' && !typeStr.includes('INVOICE') && !typeStr.includes('SALE') && !typeStr.includes('PURCHASE')) {
+      return false;
+    }
+    if (filterType === 'PAYMENTS' && !typeStr.includes('PAYMENT')) {
+      return false;
+    }
+    if (filterType === 'ADJUSTMENTS' && !typeStr.includes('OPENING') && !typeStr.includes('CONTRA') && !typeStr.includes('ADJUSTMENT')) {
+      return false;
+    }
+
+    // 3. Search Term Filter
     if (!ledgerSearch.trim()) return true;
     const term = ledgerSearch.toLowerCase();
     const ref = (entry.referenceId || '').toLowerCase();
     const desc = (entry.description || '').toLowerCase();
-    const typeStr = (entry.type || entry.transactionType || '').toLowerCase();
+    const tStr = typeStr.toLowerCase();
     const dateStr = entry.date ? new Date(entry.date).toLocaleDateString().toLowerCase() : '';
     const debitStr = entry.debit ? String(entry.debit) : '';
     const creditStr = entry.credit ? String(entry.credit) : '';
@@ -315,7 +474,7 @@ export const LedgersPage: React.FC = () => {
     return (
       ref.includes(term) ||
       desc.includes(term) ||
-      typeStr.includes(term) ||
+      tStr.includes(term) ||
       dateStr.includes(term) ||
       debitStr.includes(term) ||
       creditStr.includes(term) ||
@@ -334,7 +493,27 @@ export const LedgersPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* 1. All Parties Summary PDF (Lena/Dena) */}
+          <button
+            type="button"
+            onClick={handleDownloadAllBalancesPDF}
+            className="btn btn-outline"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 800,
+              color: '#047857',
+              borderColor: '#6ee7b7',
+              backgroundColor: '#ecfdf5',
+              fontSize: '0.84rem'
+            }}
+            title="Download consolidated all-parties customer receivables & supplier payables PDF"
+          >
+            <Download size={15} /> All Parties Balances PDF (لینا / دینا سمری)
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -362,6 +541,26 @@ export const LedgersPage: React.FC = () => {
                 </button>
               )}
 
+              {/* Single Party Ledger PDF Download Button */}
+              <button
+                type="button"
+                onClick={handleDownloadStatementPDF}
+                className="btn btn-outline"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 700,
+                  color: '#1d4ed8',
+                  borderColor: '#93c5fd',
+                  backgroundColor: '#eff6ff',
+                  fontSize: '0.84rem'
+                }}
+                title="Download single party ledger statement as clean PDF"
+              >
+                <Download size={15} /> Statement PDF
+              </button>
+
               <button
                 type="button"
                 onClick={() => setShowPrintStatement(true)}
@@ -369,18 +568,18 @@ export const LedgersPage: React.FC = () => {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                 title="Print or Save PDF Statement"
               >
-                <Printer size={16} /> Print Statement (پرنٹ / پی ڈی ایف)
+                <Printer size={16} /> Print View
               </button>
 
               {canEditLedger && (
                 <button
                   type="button"
                   onClick={() => {
-                    setPayTargetType('CUSTOMER');
+                    setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
                     setShowPaymentModal(true);
                   }}
                   className="btn btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                 >
                   <DollarSign size={18} /> Record Payment / Receipt
                 </button>
@@ -627,56 +826,117 @@ export const LedgersPage: React.FC = () => {
         </div>
       )}
 
-      {/* Ledger Transactions Search & Quick Filter */}
+      {/* Ledger Transactions Search & Comprehensive Filter Bar */}
       {selectedEntityId && (
         <div className="no-print" style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '12px',
+          gap: '10px',
           marginBottom: '14px',
-          flexWrap: 'wrap'
+          flexWrap: 'wrap',
+          backgroundColor: '#f8fafc',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          border: '1px solid #e2e8f0'
         }}>
-          <div style={{ position: 'relative', flex: '1', maxWidth: '460px', minWidth: '260px' }}>
-            <Search size={17} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input
-              type="text"
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
+            {/* Search input */}
+            <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search by Ref #, reason, amount..."
+                value={ledgerSearch}
+                onChange={(e) => setLedgerSearch(e.target.value)}
+                style={{ paddingLeft: '34px', paddingRight: ledgerSearch ? '30px' : '10px', height: '36px', fontSize: '0.84rem' }}
+              />
+              {ledgerSearch && (
+                <button
+                  type="button"
+                  onClick={() => setLedgerSearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Date From */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>From:</span>
+              <input
+                type="date"
+                className="form-control"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  loadLedger(selectedEntityId, e.target.value, endDate);
+                }}
+                style={{ width: '135px', height: '36px', fontSize: '0.8rem' }}
+              />
+            </div>
+
+            {/* Date To */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>To:</span>
+              <input
+                type="date"
+                className="form-control"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  loadLedger(selectedEntityId, startDate, e.target.value);
+                }}
+                style={{ width: '135px', height: '36px', fontSize: '0.8rem' }}
+              />
+            </div>
+
+            {/* Filter by Type */}
+            <select
               className="form-control"
-              placeholder="Search ledger by Ref #, Description, Type, Amount..."
-              value={ledgerSearch}
-              onChange={(e) => setLedgerSearch(e.target.value)}
-              style={{ paddingLeft: '38px', paddingRight: ledgerSearch ? '36px' : '12px' }}
-            />
-            {ledgerSearch && (
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              style={{ width: 'auto', minWidth: '130px', height: '36px', fontSize: '0.8rem' }}
+            >
+              <option value="ALL">All Entries (تمام)</option>
+              <option value="INVOICES">Invoices Only (بلز)</option>
+              <option value="PAYMENTS">Payments Only (ادائیگیاں)</option>
+              <option value="ADJUSTMENTS">Adjustments / Contra</option>
+            </select>
+
+            {(ledgerSearch || startDate || endDate || filterType !== 'ALL') && (
               <button
                 type="button"
-                onClick={() => setLedgerSearch('')}
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: '#94a3b8',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  lineHeight: 1
+                onClick={() => {
+                  setLedgerSearch('');
+                  setStartDate('');
+                  setEndDate('');
+                  setFilterType('ALL');
+                  loadLedger(selectedEntityId, '', '');
                 }}
-                title="Clear search"
+                className="btn btn-outline"
+                style={{ height: '36px', fontSize: '0.78rem', padding: '4px 10px' }}
               >
-                ✕
+                Reset
               </button>
             )}
           </div>
 
-          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-            {ledgerSearch ? (
-              <span>Found <b style={{ color: '#0f172a' }}>{filteredLedgerEntries.length}</b> of <b>{ledgerEntries.length}</b> ledger entries</span>
-            ) : (
-              <span>Total Transactions: <b>{ledgerEntries.length}</b></span>
-            )}
+          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Showing <b>{filteredLedgerEntries.length}</b> of <b>{ledgerEntries.length}</b> entries
           </div>
         </div>
       )}
@@ -686,38 +946,44 @@ export const LedgersPage: React.FC = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Date & Time</th>
               {activeTab === 'DUAL_PARTNERS' && <th>Account Side</th>}
               <th>Transaction Type</th>
               <th>Reference #</th>
-              <th>Description</th>
+              <th>Description / Reason</th>
               <th style={{ textAlign: 'right' }}>Debit (Rs.)</th>
               <th style={{ textAlign: 'right' }}>Credit (Rs.)</th>
               <th style={{ textAlign: 'right' }}>Running Balance</th>
-              {canDeleteLedger && <th style={{ textAlign: 'center', width: '90px' }}>Action</th>}
+              <th style={{ textAlign: 'center', width: '140px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={canDeleteLedger ? 9 : 8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <td colSpan={activeTab === 'DUAL_PARTNERS' ? 10 : 9} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   Loading ledger transactions...
                 </td>
               </tr>
             ) : filteredLedgerEntries.length === 0 ? (
               <tr>
-                <td colSpan={canDeleteLedger ? 9 : 8} style={{ textAlign: 'center', padding: '35px', color: '#94a3b8' }}>
-                  {ledgerSearch ? (
+                <td colSpan={activeTab === 'DUAL_PARTNERS' ? 10 : 9} style={{ textAlign: 'center', padding: '35px', color: '#94a3b8' }}>
+                  {(ledgerSearch || startDate || endDate || filterType !== 'ALL') ? (
                     <div>
                       <p style={{ fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
-                        No ledger transactions match "{ledgerSearch}".
+                        No ledger transactions match selected filters.
                       </p>
                       <button
                         type="button"
-                        onClick={() => setLedgerSearch('')}
+                        onClick={() => {
+                          setLedgerSearch('');
+                          setStartDate('');
+                          setEndDate('');
+                          setFilterType('ALL');
+                          loadLedger(selectedEntityId, '', '');
+                        }}
                         className="btn btn-outline btn-sm"
                       >
-                        Clear Search
+                        Clear Filters
                       </button>
                     </div>
                   ) : (
@@ -730,7 +996,14 @@ export const LedgersPage: React.FC = () => {
                 <tr key={entry.id} style={{
                   backgroundColor: entry.type === 'ADJUSTMENT' && entry.description?.includes('Contra') ? '#fffbeb' : undefined
                 }}>
-                  <td>{new Date(entry.date).toLocaleDateString()}</td>
+                  <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
+                    <div style={{ fontWeight: 700, color: '#1e293b' }}>
+                      {new Date(entry.date).toLocaleDateString()}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </td>
                   {activeTab === 'DUAL_PARTNERS' && (
                     <td>
                       <span className={`badge ${entry.source === 'CUSTOMER_ACCOUNT' ? 'badge-info' : 'badge-warning'}`} style={{ fontSize: '0.68rem', fontWeight: 700 }}>
@@ -756,17 +1029,16 @@ export const LedgersPage: React.FC = () => {
                   <td style={{ textAlign: 'right', fontWeight: 800 }}>
                     Rs. {Number(entry.runningBalance).toLocaleString()}
                   </td>
-                  {canDeleteLedger && (
-                    <td style={{ textAlign: 'center' }}>
+                  <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       <button
                         type="button"
-                        onClick={() => handleDeletePaymentRecord(entry)}
-                        disabled={deletingId === entry.id}
+                        onClick={() => handleViewEntryDetail(entry)}
                         className="btn btn-outline"
                         style={{
-                          color: '#ef4444',
-                          borderColor: '#fca5a5',
-                          backgroundColor: '#fef2f2',
+                          color: '#0284c7',
+                          borderColor: '#bae6fd',
+                          backgroundColor: '#f0f9ff',
                           padding: '4px 8px',
                           fontSize: '0.75rem',
                           borderRadius: '6px',
@@ -774,14 +1046,40 @@ export const LedgersPage: React.FC = () => {
                           alignItems: 'center',
                           gap: '4px',
                           cursor: 'pointer',
+                          fontWeight: 700,
                         }}
-                        title="Admin Only: Delete payment record and revert ledger balance"
+                        title="Tafseel Dekhein (View full transaction items & voucher details)"
                       >
-                        <Trash2 size={13} />
-                        {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                        <Eye size={13} />
+                        Detail
                       </button>
-                    </td>
-                  )}
+
+                      {canDeleteLedger && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePaymentRecord(entry)}
+                          disabled={deletingId === entry.id}
+                          className="btn btn-outline"
+                          style={{
+                            color: '#ef4444',
+                            borderColor: '#fca5a5',
+                            backgroundColor: '#fef2f2',
+                            padding: '4px 8px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer',
+                          }}
+                          title="Admin Only: Delete payment record and revert ledger balance"
+                        >
+                          <Trash2 size={13} />
+                          {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -938,8 +1236,22 @@ export const LedgersPage: React.FC = () => {
             )}
 
             <form onSubmit={handleRecordPayment}>
+              {/* Date & Time Selector */}
               <div className="form-group">
-                <label className="form-label">Payment Amount (Rs.) *</label>
+                <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Calendar size={14} /> Voucher Date & Time (تاریخ اور وقت)
+                </label>
+                <input
+                  type="datetime-local"
+                  className="form-control"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700 }}>Payment Amount (رقم - Rs.) *</label>
                 <input
                   type="number"
                   step="any"
@@ -959,7 +1271,7 @@ export const LedgersPage: React.FC = () => {
                   value={payMethod}
                   onChange={(e) => setPayMethod(e.target.value)}
                 >
-                  <option value="CASH">Cash</option>
+                  <option value="CASH">Cash (نقد)</option>
                   <option value="BANK_TRANSFER">Bank Transfer / Online</option>
                   <option value="CHEQUE">Cheque</option>
                 </select>
@@ -977,13 +1289,16 @@ export const LedgersPage: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Notes</label>
+                <label className="form-label" style={{ fontWeight: 700 }}>
+                  Reason / Narration (تفصیل اور وجہ) * <span style={{ color: '#ef4444' }}>(لازمی ہے)</span>
+                </label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="e.g. Partial recovery for previous invoice"
+                  placeholder="Wajah likhna lazmi hai (e.g. Purana udhar wasool hua / Naqad adaiyigi)"
                   value={payNotes}
                   onChange={(e) => setPayNotes(e.target.value)}
+                  required
                 />
               </div>
 
@@ -995,11 +1310,469 @@ export const LedgersPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" disabled={paySubmitting} className="btn btn-primary">
-                  {paySubmitting ? 'Posting...' : 'Post Voucher'}
+                <button type="submit" disabled={paySubmitting} className="btn btn-primary" style={{ fontWeight: 700 }}>
+                  {paySubmitting ? 'Posting...' : '✓ Post Voucher (واؤچر درج کریں)'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Detail Modal (Tafseel Dekhein) */}
+      {detailModalOpen && selectedEntryDetail && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 120, padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '760px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #cbd5e1',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '16px 20px',
+              backgroundColor: '#0f172a',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '2px solid #d97706'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {selectedEntryDetail.sale ? (
+                  <ShoppingCart size={22} color="#38bdf8" />
+                ) : selectedEntryDetail.purchase ? (
+                  <ShoppingBag size={22} color="#fbbf24" />
+                ) : (
+                  <DollarSign size={22} color="#4ade80" />
+                )}
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>
+                    {selectedEntryDetail.sale
+                      ? `Sale Invoice Details: ${selectedEntryDetail.sale.invoiceNumber}`
+                      : selectedEntryDetail.purchase
+                      ? `Purchase Bill Details: ${selectedEntryDetail.purchase.invoiceNumber}`
+                      : selectedEntryDetail.payment
+                      ? `Payment Voucher Details: ${selectedEntryDetail.payment.receiptNumber}`
+                      : `Ledger Transaction Details`}
+                  </h3>
+                  <div style={{ fontSize: '0.74rem', color: '#cbd5e1' }}>
+                    Rafiq Auto & Oil Traders - Transaction Audit Record
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModalOpen(false);
+                  setSelectedEntryDetail(null);
+                }}
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+              {loadingDetail ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                  <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 10px auto', color: '#0284c7' }} />
+                  <div style={{ fontWeight: 700 }}>Transaction details load ho rahi hain...</div>
+                </div>
+              ) : (
+                <div>
+                  {/* Meta Information Bar */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                    gap: '12px',
+                    backgroundColor: '#f8fafc',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    marginBottom: '18px'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Date & Time (تاریخ و وقت)</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b' }}>
+                        {selectedEntryDetail.sale?.saleDate
+                          ? new Date(selectedEntryDetail.sale.saleDate).toLocaleString()
+                          : selectedEntryDetail.purchase?.purchaseDate
+                          ? new Date(selectedEntryDetail.purchase.purchaseDate).toLocaleString()
+                          : selectedEntryDetail.payment?.paymentDate
+                          ? new Date(selectedEntryDetail.payment.paymentDate).toLocaleString()
+                          : selectedEntryDetail.rawEntry?.date
+                          ? new Date(selectedEntryDetail.rawEntry.date).toLocaleString()
+                          : '-'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Party Name (پارٹی کا نام)</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0369a1' }}>
+                        {selectedEntryDetail.sale?.customer?.shopName ||
+                          selectedEntryDetail.purchase?.supplier?.companyName ||
+                          selectedEntryDetail.payment?.customer?.shopName ||
+                          selectedEntryDetail.payment?.supplier?.companyName ||
+                          selectedCustomer?.shopName ||
+                          selectedSupplier?.companyName ||
+                          dualLedgerData?.partner?.shopName ||
+                          '-'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Reference / Voucher #</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, fontFamily: 'monospace', color: '#d97706' }}>
+                        {selectedEntryDetail.sale?.invoiceNumber ||
+                          selectedEntryDetail.purchase?.invoiceNumber ||
+                          selectedEntryDetail.payment?.receiptNumber ||
+                          selectedEntryDetail.rawEntry?.referenceId ||
+                          '-'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Transaction Type</div>
+                      <span className="badge badge-neutral" style={{ fontSize: '0.75rem', fontWeight: 700 }}>
+                        {selectedEntryDetail.rawEntry?.type ||
+                          selectedEntryDetail.rawEntry?.transactionType ||
+                          (selectedEntryDetail.sale ? 'SALE_INVOICE' : selectedEntryDetail.purchase ? 'PURCHASE_INVOICE' : 'PAYMENT')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 1. SALE INVOICE DETAIL VIEW */}
+                  {selectedEntryDetail.sale && (
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}>
+                        📦 Sold Products & Bill Items (فروخت کردہ مال کی تفصیل)
+                      </h4>
+                      <table className="data-table" style={{ fontSize: '0.82rem', marginBottom: '14px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9' }}>
+                            <th style={{ width: '35px', textAlign: 'center' }}>#</th>
+                            <th>Product Name</th>
+                            <th>Packaging</th>
+                            <th style={{ textAlign: 'center' }}>Qty</th>
+                            <th style={{ textAlign: 'right' }}>Rate (Rs.)</th>
+                            <th style={{ textAlign: 'right' }}>Total (Rs.)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedEntryDetail.sale.items?.map((it: any, idx: number) => {
+                            const pConv = Number(it.product?.conversionFactor) || 1;
+                            const isPrimary = it.unitType === 'PRIMARY';
+                            return (
+                              <tr key={it.id || idx}>
+                                <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                                <td>
+                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{it.product?.name}</div>
+                                  {it.product?.sku && (
+                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>#{it.product.sku}</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {isPrimary ? (
+                                    <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>
+                                      📦 {it.product?.primaryUnit?.symbol || 'Ctn'} ({pConv} {it.product?.unit?.symbol || 'Pcs'})
+                                    </span>
+                                  ) : (
+                                    <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
+                                      🧴 {it.product?.unit?.symbol || 'Pcs'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'center', fontWeight: 800 }}>{Number(it.quantity)}</td>
+                                <td style={{ textAlign: 'right' }}>Rs. {Number(it.unitPrice).toLocaleString()}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 800 }}>Rs. {Number(it.totalPrice).toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {/* Sale Bill Calculation Summary */}
+                      <div style={{
+                        backgroundColor: '#f8fafc',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                        gap: '10px',
+                        textAlign: 'center'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Gross Total</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                            Rs. {Number(selectedEntryDetail.sale.totalAmount).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Bill Discount</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#dc2626' }}>
+                            - Rs. {Number(selectedEntryDetail.sale.discount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Net Bill</div>
+                          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                            Rs. {Number(selectedEntryDetail.sale.netAmount).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Received Now</div>
+                          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#059669' }}>
+                            Rs. {Number(selectedEntryDetail.sale.receivedAmount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Added to Khata</div>
+                          <div style={{ fontWeight: 900, fontSize: '0.95rem', color: '#d97706' }}>
+                            Rs. {Number(selectedEntryDetail.sale.remainingBalance || 0).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedEntryDetail.sale.notes && (
+                        <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#475569', fontStyle: 'italic' }}>
+                          <b>Note:</b> {selectedEntryDetail.sale.notes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2. PURCHASE INVOICE DETAIL VIEW */}
+                  {selectedEntryDetail.purchase && (
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}>
+                        📥 Purchased Stock Items (کمپنی سے وصول شدہ مال کی تفصیل)
+                      </h4>
+                      <table className="data-table" style={{ fontSize: '0.82rem', marginBottom: '14px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f5f9' }}>
+                            <th style={{ width: '35px', textAlign: 'center' }}>#</th>
+                            <th>Product Name</th>
+                            <th>Packaging</th>
+                            <th style={{ textAlign: 'center' }}>Qty</th>
+                            <th style={{ textAlign: 'right' }}>Cost Rate (Rs.)</th>
+                            <th style={{ textAlign: 'right' }}>Total Cost (Rs.)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedEntryDetail.purchase.items?.map((it: any, idx: number) => {
+                            const pConv = Number(it.product?.conversionFactor) || 1;
+                            const isPrimary = it.unitType === 'PRIMARY';
+                            return (
+                              <tr key={it.id || idx}>
+                                <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                                <td>
+                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{it.product?.name}</div>
+                                  {it.product?.sku && (
+                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>#{it.product.sku}</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {isPrimary ? (
+                                    <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>
+                                      📦 {it.product?.primaryUnit?.symbol || 'Ctn'} ({pConv} {it.product?.unit?.symbol || 'Pcs'})
+                                    </span>
+                                  ) : (
+                                    <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
+                                      🧴 {it.product?.unit?.symbol || 'Pcs'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'center', fontWeight: 800 }}>{Number(it.quantity)}</td>
+                                <td style={{ textAlign: 'right' }}>Rs. {Number(it.unitCost).toLocaleString()}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 800 }}>Rs. {Number(it.totalCost).toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {/* Purchase Bill Calculation Summary */}
+                      <div style={{
+                        backgroundColor: '#f8fafc',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                        gap: '10px',
+                        textAlign: 'center'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Items Subtotal</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                            Rs. {Number(selectedEntryDetail.purchase.totalAmount).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Bill Discount</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#dc2626' }}>
+                            - Rs. {Number(selectedEntryDetail.purchase.discount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Net Payable</div>
+                          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                            Rs. {Number(selectedEntryDetail.purchase.netAmount).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Paid to Supplier</div>
+                          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#059669' }}>
+                            Rs. {Number(selectedEntryDetail.purchase.paidAmount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Payable Balance</div>
+                          <div style={{ fontWeight: 900, fontSize: '0.95rem', color: '#d97706' }}>
+                            Rs. {Number(selectedEntryDetail.purchase.remainingAmount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedEntryDetail.purchase.notes && (
+                        <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#475569', fontStyle: 'italic' }}>
+                          <b>Note:</b> {selectedEntryDetail.purchase.notes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3. PAYMENT RECEIPT / DISBURSEMENT VIEW */}
+                  {(selectedEntryDetail.payment || (!selectedEntryDetail.sale && !selectedEntryDetail.purchase)) && (
+                    <div style={{
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '12px',
+                      border: '1.5px dashed #cbd5e1',
+                      padding: '20px',
+                      marginTop: '10px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                        <span style={{
+                          fontSize: '0.85rem',
+                          fontWeight: 800,
+                          color: Number(selectedEntryDetail.rawEntry?.credit || selectedEntryDetail.payment?.amount) > 0 ? '#059669' : '#dc2626'
+                        }}>
+                          {Number(selectedEntryDetail.rawEntry?.credit || 0) > 0
+                            ? '✓ CASH IN / COLLECTION (وصولی - کریڈٹ)'
+                            : '↑ CASH OUT / DISBURSEMENT (ادائیگی - ڈیبٹ)'}
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                          Method: <b>{selectedEntryDetail.payment?.paymentMethod || 'CASH'}</b>
+                        </span>
+                      </div>
+
+                      <div style={{ textAlign: 'center', margin: '14px 0' }}>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Transaction Amount (رقم)</div>
+                        <div style={{
+                          fontSize: '1.8rem',
+                          fontWeight: 900,
+                          color: Number(selectedEntryDetail.rawEntry?.credit || 0) > 0 ? '#059669' : '#dc2626',
+                          letterSpacing: '-0.5px'
+                        }}>
+                          Rs. {Number(
+                            selectedEntryDetail.payment?.amount ??
+                            (Number(selectedEntryDetail.rawEntry?.credit) > 0 ? selectedEntryDetail.rawEntry?.credit : selectedEntryDetail.rawEntry?.debit) ??
+                            0
+                          ).toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        backgroundColor: '#ffffff',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '0.85rem'
+                      }}>
+                        <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                          Reason / Narration (تفصیل و وجہ):
+                        </div>
+                        <div style={{ color: '#0f172a', fontWeight: 600 }}>
+                          {selectedEntryDetail.payment?.notes || selectedEntryDetail.rawEntry?.description || 'N/A'}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '14px', fontSize: '0.78rem', color: '#64748b' }}>
+                        <div>
+                          Running Balance Impact: <b>Rs. {Number(selectedEntryDetail.rawEntry?.runningBalance || 0).toLocaleString()}</b>
+                        </div>
+                        <div>
+                          Recorded By: <b>{selectedEntryDetail.payment?.recordedBy?.fullName || 'Admin'}</b>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 20px',
+              backgroundColor: '#f8fafc',
+              borderTop: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                Rafiq Auto & Oil Traders, 54-Stop Okara
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn btn-outline btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <Printer size={14} />
+                  Print Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailModalOpen(false);
+                    setSelectedEntryDetail(null);
+                  }}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontWeight: 700 }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

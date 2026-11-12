@@ -3,10 +3,11 @@ import api, { getMediaUrl } from '../services/api';
 import { Product, Category, Unit } from '../types';
 import { 
   Package, Plus, Search, AlertCircle, AlertTriangle, Check, Edit2, Sliders, 
-  FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw, Trash2, FileDown
+  FolderPlus, Upload, Globe, BookOpen, Layers, ArrowRight, Eye, RefreshCw, Trash2, FileDown, Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
+import { exportProductsPDF } from '../utils/pdfExportUtils';
 
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
@@ -31,6 +32,8 @@ export const ProductsPage: React.FC = () => {
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
   const [newUnitSymbol, setNewUnitSymbol] = useState('');
+  const [searchCategoryModal, setSearchCategoryModal] = useState('');
+  const [searchUnitModal, setSearchUnitModal] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -939,6 +942,33 @@ export const ProductsPage: React.FC = () => {
             </button>
           </div>
 
+          {/* Download Full Catalog PDF */}
+          <button
+            type="button"
+            onClick={() => {
+              const catName = categories.find(c => c.id === selectedCategory)?.name;
+              exportProductsPDF(displayedProducts, catName ? `Category: ${catName}` : 'All Categories');
+            }}
+            className="btn btn-outline"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              color: '#0284c7',
+              borderColor: '#38bdf8',
+              backgroundColor: '#f0f9ff',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+            title="Download PDF of all displayed products with packaging and costs"
+          >
+            <Download size={15} /> Download Products PDF ({displayedProducts.length})
+          </button>
+
           {/* Quick Low Stock Toggle Button */}
           <button
             type="button"
@@ -1091,10 +1121,18 @@ export const ProductsPage: React.FC = () => {
                           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
                             (Rs. {cost.toLocaleString()} / {p.unit?.symbol || 'Pc'})
                           </div>
+                          <div style={{ fontSize: '0.70rem', color: '#0369a1', fontWeight: 600, marginTop: '2px' }}>
+                            Cost: Rs. {cost.toLocaleString()} | Qty: {stock} {p.unit?.symbol || 'Pcs'}
+                          </div>
                         </div>
                       ) : (
-                        <div style={{ fontWeight: 600, color: '#475569' }}>
-                          Rs. {cost.toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {p.unit?.symbol || 'Pc'}</span>
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#475569' }}>
+                            Rs. {cost.toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {p.unit?.symbol || 'Pc'}</span>
+                          </div>
+                          <div style={{ fontSize: '0.70rem', color: '#0369a1', fontWeight: 600, marginTop: '2px' }}>
+                            Cost: Rs. {cost.toLocaleString()} | Qty: {stock} {p.unit?.symbol || 'Pcs'}
+                          </div>
                         </div>
                       )}
                     </td>
@@ -2187,16 +2225,33 @@ export const ProductsPage: React.FC = () => {
             </form>
 
             <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b', marginBottom: '8px' }}>
-                Existing Categories ({categories.length})
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>
+                  Existing Categories ({categories.length})
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search categories..."
+                  value={searchCategoryModal}
+                  onChange={(e) => setSearchCategoryModal(e.target.value)}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '0.78rem',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '4px',
+                    width: '150px'
+                  }}
+                />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {categories.map((c) => (
-                  <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
-                    <span style={{ fontWeight: 600 }}>{c.name}</span>
-                    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.description || 'Active'}</span>
-                  </div>
-                ))}
+                {categories
+                  .filter(c => !searchCategoryModal || c.name.toLowerCase().includes(searchCategoryModal.toLowerCase()))
+                  .map((c) => (
+                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
+                      <span style={{ fontWeight: 600 }}>{c.name}</span>
+                      <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.description || 'Active'}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
@@ -2250,16 +2305,33 @@ export const ProductsPage: React.FC = () => {
             </form>
 
             <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b', marginBottom: '8px' }}>
-                Existing Units ({units.length})
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>
+                  Existing Units ({units.length})
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search units..."
+                  value={searchUnitModal}
+                  onChange={(e) => setSearchUnitModal(e.target.value)}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '0.78rem',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '4px',
+                    width: '140px'
+                  }}
+                />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                {units.map((u) => (
-                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem' }}>
-                    <span style={{ fontWeight: 600 }}>{u.name}</span>
-                    <span style={{ color: '#0284c7', fontWeight: 700 }}>({u.symbol})</span>
-                  </div>
-                ))}
+                {units
+                  .filter(u => !searchUnitModal || u.name.toLowerCase().includes(searchUnitModal.toLowerCase()) || u.symbol.toLowerCase().includes(searchUnitModal.toLowerCase()))
+                  .map((u) => (
+                    <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem' }}>
+                      <span style={{ fontWeight: 600 }}>{u.name}</span>
+                      <span style={{ color: '#0284c7', fontWeight: 700 }}>({u.symbol})</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>

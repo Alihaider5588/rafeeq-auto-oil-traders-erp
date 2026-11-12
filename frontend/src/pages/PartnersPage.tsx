@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, User } from '../types';
-import { Users, Building2, Plus, Phone, MapPin, Trash2, Search, Edit2, ShieldAlert } from 'lucide-react';
+import { Users, Building2, Plus, Phone, MapPin, Trash2, Search, Edit2, ShieldAlert, Download, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { exportCustomersPDF, exportSuppliersPDF, exportConsolidatedAllPartyBalancesPDF } from '../utils/pdfExportUtils';
 
 export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIERS' }> = ({ type }) => {
   const { user } = useAuth();
@@ -21,6 +22,8 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
   const [showModal, setShowModal] = useState(false);
   const [partnerMode, setPartnerMode] = useState<'STANDARD' | 'DUAL'>('STANDARD');
   const [searchTerm, setSearchTerm] = useState('');
+  const [balanceFilter, setBalanceFilter] = useState<'ALL' | 'BALANCE_ONLY' | 'ZERO_ONLY'>('ALL');
+  const [downloadingConsolidated, setDownloadingConsolidated] = useState(false);
 
   // Edit states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -319,7 +322,28 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
     }
   };
 
+  const handleDownloadConsolidated = async () => {
+    try {
+      setDownloadingConsolidated(true);
+      const [cRes, sRes] = await Promise.all([
+        api.get('/partners/customers'),
+        api.get('/partners/suppliers')
+      ]);
+      const custs = cRes.data.customers || [];
+      const supps = sRes.data.suppliers || [];
+      exportConsolidatedAllPartyBalancesPDF(custs, supps);
+    } catch (err: any) {
+      triggerOperationError('Consolidated PDF generation failed: ' + (err.message || ''));
+    } finally {
+      setDownloadingConsolidated(false);
+    }
+  };
+
   const filteredData = data.filter((item) => {
+    const bal = isCustomer ? Number(item.currentReceivable || 0) : Number(item.currentPayable || 0);
+    if (balanceFilter === 'BALANCE_ONLY' && bal <= 0) return false;
+    if (balanceFilter === 'ZERO_ONLY' && bal > 0) return false;
+
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     const name = (type === 'CUSTOMERS' ? item.shopName : item.companyName) || '';
@@ -420,58 +444,142 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
         )}
       </div>
 
-      {/* Search Bar */}
+      {/* Filter and PDF Action Bar */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         gap: '12px',
         marginBottom: '16px',
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        backgroundColor: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        padding: '12px 16px'
       }}>
-        <div style={{ position: 'relative', flex: '1', maxWidth: '480px', minWidth: '260px' }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-          <input
-            type="text"
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', flex: 1 }}>
+          <div style={{ position: 'relative', flex: '1', minWidth: '240px' }}>
+            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              className="form-control"
+              placeholder={
+                type === 'CUSTOMERS'
+                  ? 'Search customer by shop, owner, phone, area...'
+                  : 'Search supplier by company, contact person, phone, address...'
+              }
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: '38px', paddingRight: searchTerm ? '36px' : '12px', height: '38px' }}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  lineHeight: 1
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Balance Filter Dropdown */}
+          <select
             className="form-control"
-            placeholder={
-              type === 'CUSTOMERS'
-                ? 'Search customer by shop, owner, phone, area...'
-                : 'Search supplier by company, contact person, phone, address...'
-            }
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ paddingLeft: '38px', paddingRight: searchTerm ? '36px' : '12px' }}
-          />
-          {searchTerm && (
+            value={balanceFilter}
+            onChange={(e: any) => setBalanceFilter(e.target.value)}
+            style={{ width: 'auto', minWidth: '170px', height: '38px', fontSize: '0.85rem' }}
+          >
+            <option value="ALL">All (تمام کھاتے)</option>
+            <option value="BALANCE_ONLY">Only With Balance (صرف بقایا والے)</option>
+            <option value="ZERO_ONLY">Cleared / Zero Balance (صاف کھاتے)</option>
+          </select>
+
+          {(searchTerm || balanceFilter !== 'ALL') && (
             <button
               type="button"
-              onClick={() => setSearchTerm('')}
-              style={{
-                position: 'absolute',
-                right: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '1rem',
-                lineHeight: 1
+              onClick={() => {
+                setSearchTerm('');
+                setBalanceFilter('ALL');
               }}
-              title="Clear search"
+              className="btn btn-outline btn-sm"
+              style={{ height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
             >
-              ✕
+              Reset
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            className="btn btn-outline btn-sm"
+            style={{ height: '38px' }}
+            title="Refresh list"
+          >
+            <RefreshCw size={15} />
+          </button>
         </div>
-        <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-          {searchTerm ? (
-            <span>Found <b style={{ color: '#0f172a' }}>{filteredData.length}</b> of <b>{data.length}</b> records</span>
-          ) : (
-            <span>Total: <b>{data.length}</b> {type === 'CUSTOMERS' ? 'Customers' : 'Suppliers'}</span>
-          )}
+
+        {/* PDF Download Buttons */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Tab Specific PDF */}
+          <button
+            type="button"
+            onClick={() => {
+              if (type === 'CUSTOMERS') {
+                exportCustomersPDF(filteredData);
+              } else {
+                exportSuppliersPDF(filteredData);
+              }
+            }}
+            className="btn btn-outline"
+            style={{
+              height: '38px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 700,
+              color: '#0284c7',
+              borderColor: '#38bdf8',
+              backgroundColor: '#f0f9ff'
+            }}
+          >
+            <Download size={16} /> Download {type === 'CUSTOMERS' ? 'Customers' : 'Suppliers'} PDF ({filteredData.length})
+          </button>
+
+          {/* Grand Consolidated All-Party PDF (Point 3) */}
+          <button
+            type="button"
+            onClick={handleDownloadConsolidated}
+            disabled={downloadingConsolidated}
+            className="btn btn-outline"
+            style={{
+              height: '38px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 800,
+              backgroundColor: '#eff6ff',
+              color: '#1d4ed8',
+              borderColor: '#93c5fd'
+            }}
+            title="Download all customer & supplier ledger balances in 1 consolidated PDF"
+          >
+            <Download size={16} /> {downloadingConsolidated ? 'Generating...' : '📑 All Khatajaat Consolidated PDF (سب کھاتوں کی سمری)'}
+          </button>
         </div>
       </div>
 

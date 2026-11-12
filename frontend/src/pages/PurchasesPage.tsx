@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../services/api';
 import { Supplier, Product } from '../types';
-import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2, Eye, Printer, FileText } from 'lucide-react';
+import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2, Eye, Printer, FileText, Search, RefreshCw, Download, Percent } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { exportPurchasesPDF } from '../utils/pdfExportUtils';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 
 export const PurchasesPage: React.FC = () => {
   const { user } = useAuth();
@@ -17,17 +19,35 @@ export const PurchasesPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
 
+  // Filters & Search
+  const [search, setSearch] = useState('');
+  const [filterSupplier, setFilterSupplier] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const isInitialMount = useRef(true);
+
   // New purchase state
   const [supplierId, setSupplierId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [items, setItems] = useState<Array<{
     productId: string;
     quantity: number;
     unitCost: number;
     unitType: 'PRIMARY' | 'SECONDARY';
+    discount: number;
+    discountPercent: number;
+    discountType: 'FLAT' | 'PERCENT';
   }>>([
-    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY' },
+    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT' },
   ]);
+  const [billDiscount, setBillDiscount] = useState<number | string>(0);
+  const [billDiscountPercent, setBillDiscountPercent] = useState<number | string>(0);
+  const [billDiscountType, setBillDiscountType] = useState<'FLAT' | 'PERCENT'>('FLAT');
   const [paidAmount, setPaidAmount] = useState('0');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -66,10 +86,26 @@ export const PurchasesPage: React.FC = () => {
     loadMeta();
   }, []);
 
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      loadPurchases();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search, filterSupplier, startDate, endDate]);
+
   const loadPurchases = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/purchases');
+      const params: any = {};
+      if (search.trim()) params.search = search.trim();
+      if (filterSupplier) params.supplierId = filterSupplier;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const res = await api.get('/purchases', { params });
       setPurchases(res.data.data || []);
     } catch (e) {
       console.error(e);
@@ -191,8 +227,11 @@ export const PurchasesPage: React.FC = () => {
           updated[targetItemIndex].productId = createdProd.id;
           updated[targetItemIndex].unitCost = defaultCost;
           updated[targetItemIndex].unitType = defaultUT;
+          updated[targetItemIndex].discount = 0;
+          updated[targetItemIndex].discountPercent = 0;
+          updated[targetItemIndex].discountType = 'FLAT';
         } else {
-          updated.push({ productId: createdProd.id, quantity: 1, unitCost: defaultCost, unitType: defaultUT });
+          updated.push({ productId: createdProd.id, quantity: 1, unitCost: defaultCost, unitType: defaultUT, discount: 0, discountPercent: 0, discountType: 'FLAT' });
         }
         setItems(updated);
 
@@ -218,7 +257,7 @@ export const PurchasesPage: React.FC = () => {
   };
 
   const addItemRow = () => {
-    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY' }]);
+    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT' }]);
   };
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -261,7 +300,19 @@ export const PurchasesPage: React.FC = () => {
     }
   };
 
-  const totalBill = items.reduce((sum, it) => sum + (it.quantity * it.unitCost || 0), 0);
+  const itemsSubtotal = items.reduce((sum, it) => {
+    const lineGross = (Number(it.quantity) || 0) * (Number(it.unitCost) || 0);
+    const lineDisc = it.discountType === 'PERCENT'
+      ? (lineGross * (Number(it.discountPercent) || 0) / 100)
+      : (Number(it.discount) || 0);
+    return sum + Math.max(0, lineGross - lineDisc);
+  }, 0);
+
+  const calculatedBillDiscount = billDiscountType === 'PERCENT'
+    ? (itemsSubtotal * (Number(billDiscountPercent) || 0) / 100)
+    : (Number(billDiscount) || 0);
+
+  const totalBill = Math.max(0, Math.round((itemsSubtotal - calculatedBillDiscount) * 100) / 100);
 
   const handleCreatePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,12 +330,23 @@ export const PurchasesPage: React.FC = () => {
       const payload = {
         supplierId,
         invoiceNumber,
-        items: items.map((it) => ({
-          productId: it.productId,
-          quantity: Number(it.quantity),
-          unitCost: Number(it.unitCost),
-          unitType: it.unitType || 'PRIMARY',
-        })),
+        purchaseDate: purchaseDate ? new Date(purchaseDate).toISOString() : new Date().toISOString(),
+        items: items.map((it) => {
+          const lineGross = Number(it.quantity) * Number(it.unitCost);
+          const disc = it.discountType === 'PERCENT'
+            ? (lineGross * (Number(it.discountPercent || 0) / 100))
+            : Number(it.discount || 0);
+          return {
+            productId: it.productId,
+            quantity: Number(it.quantity),
+            unitCost: Number(it.unitCost),
+            unitType: it.unitType || 'PRIMARY',
+            discount: disc,
+            discountPercent: it.discountType === 'PERCENT' ? Number(it.discountPercent) : 0,
+          };
+        }),
+        discount: calculatedBillDiscount,
+        discountPercent: billDiscountType === 'PERCENT' ? Number(billDiscountPercent) : 0,
         paidAmount: parseFloat(paidAmount || '0'),
         notes,
       };
@@ -293,8 +355,11 @@ export const PurchasesPage: React.FC = () => {
       if (res.data.success) {
         setShowModal(false);
         setInvoiceNumber('');
-        setItems([{ productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY' }]);
+        setItems([{ productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT' }]);
+        setBillDiscount(0);
+        setBillDiscountPercent(0);
         setPaidAmount('0');
+        setNotes('');
         setOperationSuccess(`Purchase invoice #${invoiceNumber} successfully record ho gayi aur stock barh gaya.`);
         setOperationError('');
         loadPurchases();
@@ -389,6 +454,117 @@ export const PurchasesPage: React.FC = () => {
           <button onClick={() => setOperationSuccess('')} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#15803d' }}>×</button>
         </div>
       )}
+
+      {/* Filter and Action Bar */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '12px',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        marginBottom: '16px'
+      }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', flex: 1 }}>
+          {/* Search Box */}
+          <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search invoice #, supplier name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ paddingLeft: '32px', height: '38px', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          {/* Supplier Dropdown */}
+          <select
+            className="form-control"
+            value={filterSupplier}
+            onChange={(e) => setFilterSupplier(e.target.value)}
+            style={{ width: 'auto', minWidth: '180px', height: '38px', fontSize: '0.85rem' }}
+          >
+            <option value="">All Suppliers (تمام سپلائرز)</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.companyName}</option>
+            ))}
+          </select>
+
+          {/* Date Range: From */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>From:</span>
+            <input
+              type="date"
+              className="form-control"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              style={{ width: 'auto', height: '38px', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          {/* Date Range: To */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>To:</span>
+            <input
+              type="date"
+              className="form-control"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              style={{ width: 'auto', height: '38px', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          {(search || filterSupplier || startDate || endDate) && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setFilterSupplier('');
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="btn btn-outline btn-sm"
+              style={{ height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
+              title="Reset Filters"
+            >
+              Reset
+            </button>
+          )}
+
+          <button
+            onClick={() => loadPurchases()}
+            className="btn btn-outline btn-sm"
+            style={{ height: '38px' }}
+            title="Refresh List"
+          >
+            <RefreshCw size={15} />
+          </button>
+        </div>
+
+        {/* Download PDF Button */}
+        <div>
+          <button
+            onClick={() => exportPurchasesPDF(purchases, 'Purchases & Inward Register')}
+            className="btn btn-outline"
+            style={{
+              height: '38px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 700,
+              color: '#0284c7',
+              borderColor: '#38bdf8',
+              backgroundColor: '#f0f9ff'
+            }}
+          >
+            <Download size={16} /> Download PDF ({purchases.length})
+          </button>
+        </div>
+      </div>
 
       <div className="table-container">
         <table className="data-table">
@@ -549,7 +725,7 @@ export const PurchasesPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreatePurchase}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '14px', marginBottom: '16px' }}>
                 <div className="form-group">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label className="form-label" style={{ marginBottom: 0 }}>Supplier Company *</label>
@@ -592,6 +768,17 @@ export const PurchasesPage: React.FC = () => {
                     placeholder="e.g. SHL-INV-9923"
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Purchase Date & Time (تاریخ / وقت)</label>
+                  <input
+                    type="datetime-local"
+                    className="form-control"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
                     required
                   />
                 </div>
@@ -638,7 +825,16 @@ export const PurchasesPage: React.FC = () => {
                   const secSymbol = prod?.unit?.symbol || 'Pcs';
                   const totalPieces = isPrimary ? (Number(it.quantity) || 0) * conv : (Number(it.quantity) || 0);
                   const pieceRate = isPrimary ? (conv > 0 ? (Number(it.unitCost) || 0) / conv : 0) : (Number(it.unitCost) || 0);
-                  const rowTotal = (Number(it.quantity) || 0) * (Number(it.unitCost) || 0);
+                  const grossTotal = (Number(it.quantity) || 0) * (Number(it.unitCost) || 0);
+                  const lineDisc = it.discountType === 'PERCENT'
+                    ? (grossTotal * (Number(it.discountPercent) || 0) / 100)
+                    : (Number(it.discount) || 0);
+                  const rowNetTotal = Math.max(0, grossTotal - lineDisc);
+
+                  // Cost comparison
+                  const currentBaseCost = Number(prod?.purchasePrice || 0);
+                  const enteredBaseCost = isPrimary ? (conv > 0 ? (Number(it.unitCost) || 0) / conv : 0) : (Number(it.unitCost) || 0);
+                  const costDiff = enteredBaseCost - currentBaseCost;
 
                   return (
                     <div
@@ -653,33 +849,22 @@ export const PurchasesPage: React.FC = () => {
                     >
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'minmax(200px, 2.5fr) minmax(130px, 1.3fr) minmax(90px, 0.9fr) minmax(110px, 1.1fr) auto',
+                        gridTemplateColumns: 'minmax(200px, 2fr) minmax(120px, 1.2fr) minmax(80px, 0.8fr) minmax(100px, 1fr) minmax(130px, 1.3fr) auto',
                         gap: '10px',
                         alignItems: 'center'
                       }}>
-                        {/* 1. Product Select */}
+                        {/* 1. Product Select (Live Searchable Combobox) */}
                         <div>
                           <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
-                            Product (پروڈکٹ)
+                            Product (پروڈکٹ - نام یا کوڈ لکھیں)
                           </label>
-                          <select
-                            className="form-control"
+                          <SearchableProductSelect
+                            products={products}
                             value={it.productId}
-                            onChange={(e) => updateItem(idx, 'productId', e.target.value)}
+                            onChange={(val) => updateItem(idx, 'productId', val)}
                             required
-                            style={{ fontSize: '0.84rem', fontWeight: 700 }}
-                          >
-                            <option value="">Select Product</option>
-                            {products.map((p) => {
-                              const pConv = Number(p.conversionFactor) || 1;
-                              const pHasPrimary = (!!p.primaryUnit || !!p.primaryUnitId) && pConv > 1;
-                              return (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} {p.sku ? `(${p.sku})` : ''} {pHasPrimary ? `— [1 ${p.primaryUnit?.symbol || 'Ctn'} = ${pConv} ${p.unit?.symbol || 'Pcs'}]` : ''}
-                                </option>
-                              );
-                            })}
-                          </select>
+                            placeholder="Type product name, SKU or code..."
+                          />
                         </div>
 
                         {/* 2. Unit / Packaging Selector */}
@@ -700,7 +885,7 @@ export const PurchasesPage: React.FC = () => {
                                 color: it.unitType === 'PRIMARY' ? '#92400e' : '#1e293b'
                               }}
                             >
-                              <option value="PRIMARY">📦 {primarySymbol} (کارٹن = {conv} {secSymbol})</option>
+                              <option value="PRIMARY">📦 {primarySymbol} ({conv} {secSymbol})</option>
                               <option value="SECONDARY">🧴 {secSymbol} (کھلے پیس)</option>
                             </select>
                           ) : (
@@ -754,7 +939,49 @@ export const PurchasesPage: React.FC = () => {
                           />
                         </div>
 
-                        {/* 5. Delete Action */}
+                        {/* 5. Item Discount (% or Rs) */}
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                            <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', margin: 0 }}>
+                              Discount (رعایت)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => updateItem(idx, 'discountType', it.discountType === 'PERCENT' ? 'FLAT' : 'PERCENT')}
+                              style={{
+                                border: 'none',
+                                background: it.discountType === 'PERCENT' ? '#ede9fe' : '#f1f5f9',
+                                color: it.discountType === 'PERCENT' ? '#6d28d9' : '#475569',
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {it.discountType === 'PERCENT' ? '%' : 'Rs.'}
+                            </button>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            className="form-control"
+                            placeholder={it.discountType === 'PERCENT' ? 'Disc %' : 'Disc Rs.'}
+                            value={it.discountType === 'PERCENT' ? (it.discountPercent || '') : (it.discount || '')}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                              if (it.discountType === 'PERCENT') {
+                                updateItem(idx, 'discountPercent', val);
+                              } else {
+                                updateItem(idx, 'discount', val);
+                              }
+                            }}
+                            style={{ fontWeight: 700, textAlign: 'right', color: '#7c3aed' }}
+                          />
+                        </div>
+
+                        {/* 6. Delete Action */}
                         <div style={{ paddingTop: '16px' }}>
                           <button
                             type="button"
@@ -768,7 +995,7 @@ export const PurchasesPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Helper conversion info */}
+                      {/* Helper conversion info & Cost comparison alert */}
                       {prod && (
                         <div style={{
                           display: 'flex',
@@ -780,7 +1007,7 @@ export const PurchasesPage: React.FC = () => {
                           fontSize: '0.76rem',
                           color: '#64748b'
                         }}>
-                          <div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                             {isPrimary ? (
                               <span>
                                 📦 <b>{it.quantity || 0} {primarySymbol}</b> = <b style={{ color: '#0284c7' }}>{totalPieces} Total {secSymbol}</b> stock mein jama honge{' '}
@@ -796,9 +1023,31 @@ export const PurchasesPage: React.FC = () => {
                                 )}
                               </span>
                             )}
+
+                            {/* Cost Alert Indicator */}
+                            {currentBaseCost > 0 && (
+                              costDiff > 0.05 ? (
+                                <span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', backgroundColor: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                                  🔺 Rate Barh Gaya (+Rs. {costDiff.toFixed(2)}/pc) — Pehla Cost: Rs. {currentBaseCost.toLocaleString()}
+                                </span>
+                              ) : costDiff < -0.05 ? (
+                                <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '0.72rem', backgroundColor: '#dcfce7', padding: '2px 6px', borderRadius: '4px' }}>
+                                  🔻 Sasta Mila (-Rs. {Math.abs(costDiff).toFixed(2)}/pc) — Pehla Cost: Rs. {currentBaseCost.toLocaleString()}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#475569', fontSize: '0.72rem' }}>
+                                  Pehla Cost: Rs. {currentBaseCost.toLocaleString()}
+                                </span>
+                              )
+                            )}
                           </div>
                           <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.84rem' }}>
-                            Subtotal: Rs. {rowTotal.toLocaleString()}
+                            {lineDisc > 0 && (
+                              <span style={{ color: '#7c3aed', textDecoration: 'line-through', marginRight: '6px', fontSize: '0.78rem' }}>
+                                Rs. {grossTotal.toLocaleString()}
+                              </span>
+                            )}
+                            Subtotal: Rs. {rowNetTotal.toLocaleString()}
                           </div>
                         </div>
                       )}
@@ -812,26 +1061,111 @@ export const PurchasesPage: React.FC = () => {
               </div>
 
               {/* Bill & Payment Section */}
-              <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '10px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.1rem', marginBottom: '12px' }}>
-                  <span>Total Purchase Bill:</span>
+              <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '10px', marginBottom: '16px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px', color: '#64748b' }}>
+                  <span>Items Gross Subtotal:</span>
+                  <span style={{ fontWeight: 700, color: '#334155' }}>Rs. {itemsSubtotal.toLocaleString()}</span>
+                </div>
+
+                {/* Full Bill Discount Controls */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'center', margin: '10px 0', padding: '10px', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                      Full Bill Discount Type (پورا بل ڈسکاؤنٹ)
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setBillDiscountType('FLAT')}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          backgroundColor: billDiscountType === 'FLAT' ? '#2563eb' : '#ffffff',
+                          color: billDiscountType === 'FLAT' ? '#ffffff' : '#334155',
+                          borderColor: billDiscountType === 'FLAT' ? '#2563eb' : '#cbd5e1'
+                        }}
+                      >
+                        Flat (Rs.)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillDiscountType('PERCENT')}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          backgroundColor: billDiscountType === 'PERCENT' ? '#7c3aed' : '#ffffff',
+                          color: billDiscountType === 'PERCENT' ? '#ffffff' : '#334155',
+                          borderColor: billDiscountType === 'PERCENT' ? '#7c3aed' : '#cbd5e1'
+                        }}
+                      >
+                        Percentage (%)
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                      Bill Discount ({billDiscountType === 'PERCENT' ? '%' : 'Rs.'})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      className="form-control"
+                      placeholder="0"
+                      value={billDiscountType === 'PERCENT' ? (billDiscountPercent || '') : (billDiscount || '')}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                        if (billDiscountType === 'PERCENT') {
+                          setBillDiscountPercent(val);
+                        } else {
+                          setBillDiscount(val);
+                        }
+                      }}
+                      style={{ fontWeight: 700 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.15rem', marginBottom: '12px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1' }}>
+                  <span>Net Payable Purchase Bill:</span>
                   <span style={{ color: '#0f172a' }}>Rs. {totalBill.toLocaleString()}</span>
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Amount Paid to Supplier Now (Rs.)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="form-control"
-                    placeholder="0"
-                    value={paidAmount === '0' ? '' : paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                  />
-                  <small style={{ color: '#64748b' }}>
-                    Unpaid remainder (Rs. {(totalBill - parseFloat(paidAmount || '0')).toLocaleString()}) will automatically be credited to the supplier's payable ledger.
-                  </small>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Amount Paid to Supplier Now (Rs.)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="form-control"
+                      placeholder="0"
+                      value={paidAmount === '0' ? '' : paidAmount}
+                      onChange={(e) => setPaidAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Notes / Remarks (تفصیل / وجہ)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Bilty # 8492 / Refinery direct inward"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
                 </div>
+
+                <small style={{ color: '#64748b', display: 'block' }}>
+                  Unpaid remainder (Rs. {Math.max(0, totalBill - parseFloat(paidAmount || '0')).toLocaleString()}) will automatically be credited to the supplier's payable ledger.
+                </small>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

@@ -27,6 +27,7 @@ prisma/*.bak*
 backend/prisma/*.db
 backend/prisma/*.db-*
 backend/prisma/*.bak*
+backend/prisma/sync_metadata.json
 
 # User uploads & cache
 uploads/

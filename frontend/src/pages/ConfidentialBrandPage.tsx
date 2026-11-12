@@ -4,8 +4,9 @@ import {
   ShieldAlert, Lock, Unlock, Eye, EyeOff, Plus, FileText, 
   DollarSign, Package, TrendingUp, AlertTriangle, RefreshCw,
   LogOut, ShoppingBag, ShoppingCart, Users, CheckCircle, BarChart3, KeyRound,
-  UploadCloud, Sparkles, Image, Check, X, ExternalLink
+  UploadCloud, Sparkles, Image, Check, X, ExternalLink, Search
 } from 'lucide-react';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 
 interface OwnerProduct {
   id: string;
@@ -82,6 +83,7 @@ export const ConfidentialBrandPage: React.FC = () => {
   const [verifying, setVerifying] = useState(false);
   const [authError, setAuthError] = useState('');
   const [activeTab, setActiveTab] = useState<'products' | 'purchases' | 'sales' | 'suppliers' | 'report'>('products');
+  const [vaultSearch, setVaultSearch] = useState('');
   
   // Data state
   const [products, setProducts] = useState<OwnerProduct[]>([]);
@@ -787,6 +789,19 @@ export const ConfidentialBrandPage: React.FC = () => {
         })}
       </div>
 
+      {activeTab !== 'report' && (
+        <div style={{ marginBottom: '16px', position: 'relative', maxWidth: '380px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input
+            type="text"
+            placeholder={`Search ${activeTab}...`}
+            value={vaultSearch}
+            onChange={e => setVaultSearch(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+          />
+        </div>
+      )}
+
       {/* Tab: Products */}
       {activeTab === 'products' && (
         <div>
@@ -816,14 +831,22 @@ export const ConfidentialBrandPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
-                      No confidential products found. Click "Add Private Product" to create one.
-                    </td>
-                  </tr>
-                ) : (
-                  products.map(p => (
+                {(() => {
+                  const filteredProducts = products.filter(p => {
+                    if (!vaultSearch.trim()) return true;
+                    const q = vaultSearch.toLowerCase();
+                    return p.name?.toLowerCase().includes(q) || p.code?.toLowerCase().includes(q) || p.category?.toLowerCase().includes(q);
+                  });
+                  if (filteredProducts.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                          No confidential products found matching search.
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return filteredProducts.map(p => (
                     <tr key={p.id}>
                       <td>
                         <span style={{ fontWeight: 700, color: '#b91c1c' }}>{p.code}</span>
@@ -845,8 +868,8 @@ export const ConfidentialBrandPage: React.FC = () => {
                         {p.formulaNotes || '—'}
                       </td>
                     </tr>
-                  ))
-                )}
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
@@ -1444,24 +1467,20 @@ export const ConfidentialBrandPage: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                   Confidential Product / Blend <span style={{ color: '#dc2626' }}>*</span>
                 </label>
-                <select
-                  required
+                <SearchableProductSelect
+                  products={products}
                   value={purchaseForm.productId}
-                  onChange={e => {
-                    const sel = products.find(p => p.id === e.target.value);
+                  onChange={(val) => {
+                    const sel = products.find(p => p.id === val);
                     setPurchaseForm({
                       ...purchaseForm,
-                      productId: e.target.value,
+                      productId: val,
                       unitCost: sel ? sel.costPrice : purchaseForm.unitCost
                     });
                   }}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem', backgroundColor: '#fff' }}
-                >
-                  <option value="">Select confidential product...</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.code}) — Current Stock: {p.stockQty} {p.unit}</option>
-                  ))}
-                </select>
+                  required
+                  placeholder="Type to search confidential product..."
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
@@ -1573,26 +1592,20 @@ export const ConfidentialBrandPage: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                   Confidential Product <span style={{ color: '#dc2626' }}>*</span>
                 </label>
-                <select
-                  required
+                <SearchableProductSelect
+                  products={products}
                   value={saleForm.productId}
-                  onChange={e => {
-                    const sel = products.find(p => p.id === e.target.value);
+                  onChange={(val) => {
+                    const sel = products.find(p => p.id === val);
                     setSaleForm({
                       ...saleForm,
-                      productId: e.target.value,
+                      productId: val,
                       unitPrice: sel ? sel.sellingPrice : saleForm.unitPrice
                     });
                   }}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.9rem', backgroundColor: '#fff' }}
-                >
-                  <option value="">Select confidential product...</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code}) — Avail: {p.stockQty} {p.unit} (Target: Rs. {p.sellingPrice})
-                    </option>
-                  ))}
-                </select>
+                  required
+                  placeholder="Type to search confidential product..."
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>

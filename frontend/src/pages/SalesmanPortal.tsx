@@ -109,11 +109,17 @@ export const SalesmanPortal: React.FC = () => {
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const rateCacheRef = useRef<Record<string, any>>({});
 
-  // Category & Full Bill Discount States
-  const [discountScope, setDiscountScope] = useState<'FULL_BILL' | 'CATEGORY'>('FULL_BILL');
+  // Category, Full Bill & Product Discount States
+  const [discountScope, setDiscountScope] = useState<'FULL_BILL' | 'CATEGORY' | 'PRODUCT'>('FULL_BILL');
   const [discountCategory, setDiscountCategory] = useState<string>('');
+  const [discountProductId, setDiscountProductId] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<string>('0');
   const [appliedDiscountSummary, setAppliedDiscountSummary] = useState<string>('');
+  const [posSaleDate, setPosSaleDate] = useState<string>(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
 
   // Post-Sync Generated Invoice Receipt Modal
   const [completedSale, setCompletedSale] = useState<any>(null);
@@ -720,14 +726,18 @@ export const SalesmanPortal: React.FC = () => {
       alert('Pehlay wo category select karein jis par discount lagana chahte hain.');
       return;
     }
+    if (discountScope === 'PRODUCT' && !discountProductId) {
+      alert('Pehlay basket me se wo product select karein jis par discount lagana chahte hain.');
+      return;
+    }
 
     let affectedCount = 0;
     const updated = cart.map((item) => {
       const itemCatName = item.product.category?.name || item.product.categoryId || '';
       const matches =
         discountScope === 'FULL_BILL' ||
-        itemCatName === discountCategory ||
-        item.product.categoryId === discountCategory;
+        (discountScope === 'CATEGORY' && (itemCatName === discountCategory || item.product.categoryId === discountCategory)) ||
+        (discountScope === 'PRODUCT' && item.product.id === discountProductId);
 
       if (matches) {
         affectedCount++;
@@ -749,8 +759,11 @@ export const SalesmanPortal: React.FC = () => {
     setCart(updated);
     if (discountScope === 'FULL_BILL') {
       setAppliedDiscountSummary(`Full Bill: ${pct}% discount applied to all ${affectedCount} item(s)!`);
-    } else {
+    } else if (discountScope === 'CATEGORY') {
       setAppliedDiscountSummary(`Category "${discountCategory}": ${pct}% discount applied to ${affectedCount} item(s)!`);
+    } else {
+      const pName = cart.find(c => c.product.id === discountProductId)?.product.name || 'Selected Item';
+      setAppliedDiscountSummary(`Product "${pName}": ${pct}% discount applied!`);
     }
   };
 
@@ -871,6 +884,7 @@ export const SalesmanPortal: React.FC = () => {
       const payload = {
         customerId: targetCustomerId,
         saleType: isCounterSale ? 'COUNTER' : 'VAN',
+        saleDate: posSaleDate ? new Date(posSaleDate).toISOString() : new Date().toISOString(),
         items: cart.map((it) => {
           const q = parseFloat(String(it.quantity)) || 0;
           const p = parseFloat(String(it.unitPrice)) || 0;
@@ -879,6 +893,7 @@ export const SalesmanPortal: React.FC = () => {
             quantity: q,
             unitType: it.unitType,
             unitPrice: p,
+            discountPercent: it.discountPercent || 0,
             isRateOverridden: p !== it.standardRate,
             originalRate: it.standardRate,
           };
@@ -1861,6 +1876,34 @@ export const SalesmanPortal: React.FC = () => {
           3. Order Basket & Negotiated Unit Rates
         </h3>
 
+        {/* INVOICE DATE & TIME PICKER */}
+        <div style={{
+          backgroundColor: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: '10px',
+          padding: '10px 14px',
+          marginBottom: '14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Clock size={16} color="#d97706" />
+            <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#334155' }}>
+              Invoice Date & Time (بل کی تاریخ اور وقت):
+            </span>
+          </div>
+          <input
+            type="datetime-local"
+            className="form-control"
+            value={posSaleDate}
+            onChange={(e) => setPosSaleDate(e.target.value)}
+            style={{ width: 'auto', minWidth: '220px', fontWeight: 800, height: '36px', fontSize: '0.85rem' }}
+          />
+        </div>
+
         {/* ACTIVE DRAFT BANNER IF EDITING A SAVED DRAFT */}
         {activeDraftId && (
           <div style={{
@@ -1949,7 +1992,7 @@ export const SalesmanPortal: React.FC = () => {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'flex-end' }}>
-              {/* Scope: Full Bill vs Category */}
+              {/* Scope: Full Bill vs Category vs Product */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
                   Discount Scope:
@@ -1960,8 +2003,9 @@ export const SalesmanPortal: React.FC = () => {
                   value={discountScope}
                   onChange={(e) => setDiscountScope(e.target.value as any)}
                 >
-                  <option value="FULL_BILL">Full Bill Discount</option>
+                  <option value="FULL_BILL">Full Bill Discount (پورا بل)</option>
                   <option value="CATEGORY">Category-Wise Discount</option>
+                  <option value="PRODUCT">🛒 Product-Wise (Basket Item)</option>
                 </select>
               </div>
 
@@ -1981,6 +2025,28 @@ export const SalesmanPortal: React.FC = () => {
                     {availableCategories.map((c) => (
                       <option key={c.id} value={c.name}>
                         {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Product Dropdown (if Scope === PRODUCT - Basket items only) */}
+              {discountScope === 'PRODUCT' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
+                    Select Basket Product (صرف باسکٹ کے آئٹمز):
+                  </label>
+                  <select
+                    className="form-control"
+                    style={{ fontSize: '0.82rem', padding: '6px 8px', backgroundColor: '#ffffff' }}
+                    value={discountProductId}
+                    onChange={(e) => setDiscountProductId(e.target.value)}
+                  >
+                    <option value="">-- Choose Basket Product --</option>
+                    {cart.map((item, idx) => (
+                      <option key={`${item.product.id}-${idx}`} value={item.product.id}>
+                        {item.product.name} ({item.unitType === 'PRIMARY' ? 'Carton' : 'Pc'})
                       </option>
                     ))}
                   </select>
@@ -2110,6 +2176,14 @@ export const SalesmanPortal: React.FC = () => {
                           {item.discountPercent && (
                             <span style={{ marginLeft: '6px', color: '#64748b', textDecoration: 'line-through' }}>
                               Standard: Rs. {item.standardRate.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#0369a1', fontWeight: 700, marginTop: '2px' }}>
+                          Cost Rate: Rs. {effectivePurchasePrice.toLocaleString()} / {currentUnitSymbol}
+                          {effectivePurchasePrice > 0 && itemUnitPrice > 0 && (
+                            <span style={{ marginLeft: '6px', color: isBelowCost ? '#dc2626' : '#16a34a' }}>
+                              ({isBelowCost ? `⚠️ -Rs. ${lossPerUnit.toFixed(1)} Below Cost` : `+Rs. ${(itemUnitPrice - effectivePurchasePrice).toFixed(1)} Profit Margin`})
                             </span>
                           )}
                         </div>

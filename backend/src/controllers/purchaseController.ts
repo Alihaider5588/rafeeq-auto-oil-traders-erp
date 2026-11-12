@@ -13,6 +13,8 @@ const purchaseItemSchema = z.object({
   quantity: z.number().positive('Quantity must be greater than 0'),
   unitCost: z.number().positive('Unit cost must be positive'),
   unitType: z.enum(['PRIMARY', 'SECONDARY']).default('SECONDARY').optional(),
+  discount: z.number().min(0).default(0).optional(),
+  discountPercent: z.number().min(0).max(100).default(0).optional(),
 });
 
 const purchaseSchema = z.object({
@@ -21,6 +23,7 @@ const purchaseSchema = z.object({
   purchaseDate: z.string().optional(),
   items: z.array(purchaseItemSchema).min(1, 'At least one item is required'),
   discount: z.number().min(0).default(0),
+  discountPercent: z.number().min(0).max(100).default(0).optional(),
   tax: z.number().min(0).default(0),
   paidAmount: z.number().min(0).default(0),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
@@ -29,9 +32,9 @@ const purchaseSchema = z.object({
 
 export const getPurchases = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { supplierId, startDate, endDate, page = '1', limit = '50' } = req.query;
+    const { supplierId, startDate, endDate, search, page = '1', limit = '50' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(200, Math.max(1, parseInt(limit as string, 10) || 50));
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit as string, 10) || 50));
     const skip = (pageNum - 1) * limitNum;
 
     const where: Prisma.PurchaseWhereInput = {};
@@ -42,6 +45,16 @@ export const getPurchases = async (req: AuthenticatedRequest, res: Response): Pr
         ...(startDate ? { gte: new Date(startDate as string) } : {}),
         ...(endDate ? { lte: new Date(endDate as string) } : {}),
       };
+    }
+
+    if (search && typeof search === 'string' && search.trim().length > 0) {
+      const q = search.trim();
+      where.OR = [
+        { invoiceNumber: { contains: q } },
+        { supplier: { companyName: { contains: q } } },
+        { supplier: { contactPerson: { contains: q } } },
+        { supplier: { phone: { contains: q } } },
+      ];
     }
 
     const [total, purchases] = await Promise.all([
@@ -88,6 +101,41 @@ export const getPurchases = async (req: AuthenticatedRequest, res: Response): Pr
   } catch (error) {
     console.error('getPurchases error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve purchases' });
+  }
+};
+
+export const getPurchaseById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        OR: [{ id }, { invoiceNumber: id }],
+      },
+      include: {
+        supplier: true,
+        createdBy: { select: { id: true, fullName: true } },
+        items: {
+          include: {
+            product: {
+              include: {
+                unit: true,
+                primaryUnit: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!purchase) {
+      res.status(404).json({ success: false, message: 'Purchase invoice not found' });
+      return;
+    }
+
+    res.json({ success: true, purchase });
+  } catch (error) {
+    console.error('getPurchaseById error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve purchase invoice' });
   }
 };
 
@@ -145,8 +193,15 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
       const unitType = item.unitType === 'PRIMARY' ? 'PRIMARY' : 'SECONDARY';
       const conversionFactor = Number(prod.conversionFactor || 1);
       const baseQuantity = unitType === 'PRIMARY' ? item.quantity * conversionFactor : item.quantity;
-      const totalCost = item.quantity * item.unitCost;
-      const baseUnitCost = unitType === 'PRIMARY' ? item.unitCost / conversionFactor : item.unitCost;
+      
+      const grossCost = item.quantity * item.unitCost;
+      let itemDiscount = Number(item.discount || 0);
+      if (item.discountPercent && item.discountPercent > 0) {
+        itemDiscount = (grossCost * item.discountPercent) / 100;
+      }
+      const totalCost = Math.max(0, grossCost - itemDiscount);
+      const effectiveUnitCost = item.quantity > 0 ? totalCost / item.quantity : item.unitCost;
+      const baseUnitCost = unitType === 'PRIMARY' ? effectiveUnitCost / conversionFactor : effectiveUnitCost;
 
       totalItemsCost += totalCost;
 
@@ -167,7 +222,11 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
       });
     }
 
-    const netAmount = totalItemsCost - data.discount + data.tax;
+    let billDiscount = Number(data.discount || 0);
+    if (data.discountPercent && data.discountPercent > 0) {
+      billDiscount = (totalItemsCost * data.discountPercent) / 100;
+    }
+    const netAmount = Math.max(0, totalItemsCost - billDiscount + data.tax);
     const remainingAmount = netAmount - data.paidAmount;
 
     const result = await prisma.$transaction(async (tx) => {
@@ -178,7 +237,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
           supplierId: data.supplierId,
           purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : new Date(),
           totalAmount: new Prisma.Decimal(totalItemsCost),
-          discount: new Prisma.Decimal(data.discount),
+          discount: new Prisma.Decimal(billDiscount),
           tax: new Prisma.Decimal(data.tax),
           netAmount: new Prisma.Decimal(netAmount),
           paidAmount: new Prisma.Decimal(data.paidAmount),

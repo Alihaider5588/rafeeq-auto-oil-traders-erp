@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { 
   DollarSign, Plus, Trash2, Calendar, Tag, Filter,
-  TrendingDown, FileText, CheckCircle, AlertCircle, RefreshCw, Receipt
+  TrendingDown, FileText, CheckCircle, AlertCircle, RefreshCw, Receipt,
+  Search, Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { exportExpensesPDF } from '../utils/pdfExportUtils';
 
 interface Expense {
   id: string;
@@ -12,7 +14,9 @@ interface Expense {
   amount: number;
   description?: string;
   paymentMethod: string;
-  date: string;
+  date?: string;
+  expenseDate?: string;
+  createdAt?: string;
   createdBy?: { fullName: string };
 }
 
@@ -68,6 +72,9 @@ export const ExpensesPage: React.FC = () => {
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
@@ -78,7 +85,11 @@ export const ExpensesPage: React.FC = () => {
     amount: '',
     description: '',
     paymentMethod: 'CASH',
-    date: new Date().toISOString().split('T')[0]
+    date: (() => {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    })()
   });
 
   useEffect(() => {
@@ -127,12 +138,14 @@ export const ExpensesPage: React.FC = () => {
       });
 
       setShowAddModal(false);
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
       setForm({
         category: 'TEA_REFRESHMENT',
         amount: '',
         description: '',
         paymentMethod: 'CASH',
-        date: new Date().toISOString().split('T')[0]
+        date: now.toISOString().slice(0, 16)
       });
       setOperationSuccess('Expense voucher kamiyabi se darj ho gaya!');
       setOperationError('');
@@ -141,6 +154,28 @@ export const ExpensesPage: React.FC = () => {
       setOperationError(err.response?.data?.message || err.response?.data?.error || 'Failed to record expense');
     }
   };
+
+  const filteredExpenses = expenses.filter(exp => {
+    const rawDate = exp.expenseDate || exp.date || exp.createdAt || '';
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchDesc = exp.description?.toLowerCase().includes(q);
+      const matchCat = (CATEGORY_LABELS[exp.category] || exp.category).toLowerCase().includes(q);
+      const matchPay = exp.paymentMethod?.toLowerCase().includes(q);
+      const matchUser = exp.createdBy?.fullName?.toLowerCase().includes(q);
+      const matchAmt = exp.amount?.toString().includes(q);
+      if (!matchDesc && !matchCat && !matchPay && !matchUser && !matchAmt) return false;
+    }
+    if (startDate && rawDate) {
+      const d = new Date(rawDate).toISOString().slice(0, 10);
+      if (d < startDate) return false;
+    }
+    if (endDate && rawDate) {
+      const d = new Date(rawDate).toISOString().slice(0, 10);
+      if (d > endDate) return false;
+    }
+    return true;
+  });
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this expense voucher?')) return;
@@ -259,6 +294,73 @@ export const ExpensesPage: React.FC = () => {
         </div>
       )}
 
+      {/* Search, Date Range & PDF Export Controls */}
+      <div className="card" style={{ padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '320px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Search by description, memo, category, payee, amount..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="input-field"
+              style={{ width: '100%', paddingLeft: '36px', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>From:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>To:</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          {(search || startDate || endDate) && (
+            <button
+              onClick={() => { setSearch(''); setStartDate(''); setEndDate(''); }}
+              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => exportExpensesPDF(filteredExpenses, selectedCategory ? (CATEGORY_LABELS[selectedCategory] || selectedCategory) : 'All Business Expenses')}
+            className="btn btn-secondary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#fee2e2',
+              color: '#991b1b',
+              border: '1px solid #fca5a5',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              padding: '8px 14px'
+            }}
+            title="Download full expenses register with totals in PDF"
+          >
+            <Download size={15} /> Download Expenses PDF ({filteredExpenses.length})
+          </button>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="card" style={{ padding: '16px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.85rem', fontWeight: 600 }}>
@@ -290,7 +392,7 @@ export const ExpensesPage: React.FC = () => {
         <table className="table" style={{ width: '100%', margin: 0 }}>
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Date & Time</th>
               <th>Category</th>
               <th>Description / Memo</th>
               <th>Payment Mode</th>
@@ -300,52 +402,59 @@ export const ExpensesPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {expenses.length === 0 ? (
+            {filteredExpenses.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
                   No expenses recorded matching the selected filter.
                 </td>
               </tr>
             ) : (
-              expenses.map(exp => (
-                <tr key={exp.id}>
-                  <td style={{ fontWeight: 600, color: '#475569' }}>
-                    {new Date(exp.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </td>
-                  <td>
-                    <span className="badge badge-info">
-                      {CATEGORY_LABELS[exp.category] || exp.category}
-                    </span>
-                  </td>
-                  <td style={{ color: '#1e293b', fontWeight: 500 }}>
-                    {exp.description || '—'}
-                  </td>
-                  <td>
-                    <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>
-                      {exp.paymentMethod}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                    {exp.createdBy?.fullName || 'System Admin'}
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#ef4444', fontSize: '1rem' }}>
-                    Rs. {Number(exp.amount).toLocaleString()}
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    {canDeleteExpense ? (
-                      <button
-                        onClick={() => handleDelete(exp.id)}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                        title="Delete Expense"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    ) : (
-                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+              filteredExpenses.map(exp => {
+                const rawDate = exp.expenseDate || exp.date || exp.createdAt || new Date();
+                const d = new Date(rawDate);
+                return (
+                  <tr key={exp.id}>
+                    <td style={{ fontWeight: 600, color: '#475569' }}>
+                      <div>{d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                        {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge badge-info">
+                        {CATEGORY_LABELS[exp.category] || exp.category}
+                      </span>
+                    </td>
+                    <td style={{ color: '#1e293b', fontWeight: 500 }}>
+                      {exp.description || '—'}
+                    </td>
+                    <td>
+                      <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>
+                        {exp.paymentMethod}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                      {exp.createdBy?.fullName || 'System Admin'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800, color: '#ef4444', fontSize: '1rem' }}>
+                      Rs. {Number(exp.amount).toLocaleString()}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {canDeleteExpense ? (
+                        <button
+                          onClick={() => handleDelete(exp.id)}
+                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                          title="Delete Expense"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -514,10 +623,10 @@ export const ExpensesPage: React.FC = () => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                    Voucher Date (تاریخ)
+                    Voucher Date & Time (تاریخ و وقت)
                   </label>
                   <input
-                    type="date"
+                    type="datetime-local"
                     required
                     value={form.date}
                     onChange={e => setForm({ ...form, date: e.target.value })}

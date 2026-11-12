@@ -257,12 +257,55 @@ export async function pullAllFromCloud(): Promise<any> {
     }
     pulledStats.settings = settings.length;
 
-    // 10. Customer Ledgers (Opening & Running balances)
-    const ledgers = await neon.customerLedger.findMany({ take: 500, orderBy: { date: 'desc' } });
+    // 10. Purchases & Line Items
+    const purchases = await neon.purchase.findMany({ include: { items: true } });
+    for (const pur of purchases) {
+      const { items, ...purData } = pur;
+      await local.purchase.upsert({ where: { id: purData.id }, create: purData, update: purData });
+      for (const it of items) {
+        await local.purchaseItem.upsert({ where: { id: it.id }, create: it, update: it });
+      }
+    }
+    pulledStats.purchases = purchases.length;
+
+    // 11. Sales & Line Items
+    const sales = await neon.sale.findMany({ include: { items: true } });
+    for (const s of sales) {
+      const { items, ...saleData } = s;
+      await local.sale.upsert({ where: { id: saleData.id }, create: saleData, update: saleData });
+      for (const it of items) {
+        await local.saleItem.upsert({ where: { id: it.id }, create: it, update: it });
+      }
+    }
+    pulledStats.sales = sales.length;
+
+    // 12. Customer Ledgers (All historical entries)
+    const ledgers = await neon.customerLedger.findMany({ orderBy: { date: 'asc' } });
     for (const cl of ledgers) {
       await local.customerLedger.upsert({ where: { id: cl.id }, create: cl, update: cl });
     }
     pulledStats.customerLedgers = ledgers.length;
+
+    // 13. Supplier Ledgers
+    const supLedgers = await neon.supplierLedger.findMany({ orderBy: { date: 'asc' } });
+    for (const sl of supLedgers) {
+      await local.supplierLedger.upsert({ where: { id: sl.id }, create: sl, update: sl });
+    }
+    pulledStats.supplierLedgers = supLedgers.length;
+
+    // 14. Payments
+    const payments = await neon.payment.findMany();
+    for (const pay of payments) {
+      await local.payment.upsert({ where: { id: pay.id }, create: pay, update: pay });
+    }
+    pulledStats.payments = payments.length;
+
+    // 15. Expenses
+    const expenses = await neon.expense.findMany();
+    for (const exp of expenses) {
+      await local.expense.upsert({ where: { id: exp.id }, create: exp, update: exp });
+    }
+    pulledStats.expenses = expenses.length;
 
     await local.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
 

@@ -13,6 +13,8 @@ const saleItemSchema = z.object({
   quantity: z.number().positive('Quantity must be greater than 0'),
   unitPrice: z.number().positive('Unit price must be positive'),
   unitType: z.enum(['PRIMARY', 'SECONDARY']).default('SECONDARY').optional(),
+  discount: z.number().min(0).default(0).optional(),
+  discountPercent: z.number().min(0).max(100).default(0).optional(),
 });
 
 const saleSchema = z.object({
@@ -22,6 +24,7 @@ const saleSchema = z.object({
   saleType: z.string().optional().default('VAN'), // 'COUNTER' or 'VAN'
   items: z.array(saleItemSchema).min(1, 'At least one item is required'),
   discount: z.number().min(0).default(0),
+  discountPercent: z.number().min(0).max(100).default(0).optional(),
   receivedAmount: z.number().min(0).default(0),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   notes: z.string().optional().nullable(),
@@ -128,8 +131,10 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
 export const getSaleById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const sale = await prisma.sale.findUnique({
-      where: { id },
+    const sale = await prisma.sale.findFirst({
+      where: {
+        OR: [{ id }, { invoiceNumber: id }],
+      },
       include: {
         customer: true,
         salesman: { select: { id: true, fullName: true, phone: true } },
@@ -479,7 +484,12 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
       // Unit cost is in base units
       const unitCost = Number(prod.purchasePrice);
-      const totalPrice = item.quantity * item.unitPrice;
+      const grossPrice = item.quantity * item.unitPrice;
+      let itemDiscount = Number(item.discount || 0);
+      if (item.discountPercent && item.discountPercent > 0) {
+        itemDiscount = (grossPrice * item.discountPercent) / 100;
+      }
+      const totalPrice = Math.max(0, grossPrice - itemDiscount);
       const totalCost = baseQuantity * unitCost;
       const profit = totalPrice - totalCost;
 
@@ -501,7 +511,11 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
       });
     }
 
-    const netAmount = totalSaleAmount - data.discount;
+    let billDiscount = Number(data.discount || 0);
+    if (data.discountPercent && data.discountPercent > 0) {
+      billDiscount = (totalSaleAmount * data.discountPercent) / 100;
+    }
+    const netAmount = Math.max(0, totalSaleAmount - billDiscount);
     const remainingBalance = netAmount - data.receivedAmount;
     const totalGrossProfit = netAmount - totalSaleCost;
 
@@ -542,7 +556,7 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
           createdById: userId,
           saleDate,
           totalAmount: new Prisma.Decimal(totalSaleAmount),
-          discount: new Prisma.Decimal(data.discount),
+          discount: new Prisma.Decimal(billDiscount),
           netAmount: new Prisma.Decimal(netAmount),
           receivedAmount: new Prisma.Decimal(data.receivedAmount),
           remainingBalance: new Prisma.Decimal(remainingBalance),
@@ -1032,7 +1046,12 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
       const conversionFactor = Number(prod.conversionFactor || 1);
       const baseQuantity = unitType === 'PRIMARY' ? item.quantity * conversionFactor : item.quantity;
       const unitCost = Number(prod.purchasePrice);
-      const totalPrice = item.quantity * item.unitPrice;
+      const grossPrice = item.quantity * item.unitPrice;
+      let itemDiscount = Number(item.discount || 0);
+      if (item.discountPercent && item.discountPercent > 0) {
+        itemDiscount = (grossPrice * item.discountPercent) / 100;
+      }
+      const totalPrice = Math.max(0, grossPrice - itemDiscount);
       const totalCost = baseQuantity * unitCost;
       const profit = totalPrice - totalCost;
 
@@ -1051,7 +1070,11 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
       });
     }
 
-    const netAmount = totalSaleAmount - data.discount;
+    let billDiscount = Number(data.discount || 0);
+    if (data.discountPercent && data.discountPercent > 0) {
+      billDiscount = (totalSaleAmount * data.discountPercent) / 100;
+    }
+    const netAmount = Math.max(0, totalSaleAmount - billDiscount);
     const remainingBalance = netAmount - data.receivedAmount;
     const totalGrossProfit = netAmount - totalSaleCost;
     const saleDate = data.saleDate ? new Date(data.saleDate) : existingSale.saleDate;
@@ -1135,7 +1158,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
           salesmanId: data.salesmanId || existingSale.salesmanId,
           saleDate,
           totalAmount: new Prisma.Decimal(totalSaleAmount),
-          discount: new Prisma.Decimal(data.discount),
+          discount: new Prisma.Decimal(billDiscount),
           netAmount: new Prisma.Decimal(netAmount),
           receivedAmount: new Prisma.Decimal(data.receivedAmount),
           remainingBalance: new Prisma.Decimal(remainingBalance),

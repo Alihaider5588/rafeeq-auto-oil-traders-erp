@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Printer
 } from 'lucide-react';
+import { exportEmployeesPDF, exportPayrollPDF } from '../utils/pdfExportUtils';
 
 interface Employee {
   id: string;
@@ -84,6 +85,7 @@ export const EmployeesPage: React.FC = () => {
 
   // Employee State
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [empForm, setEmpForm] = useState({
@@ -105,6 +107,7 @@ export const EmployeesPage: React.FC = () => {
 
   // Payroll State
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
+  const [payrollSearch, setPayrollSearch] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [loadingPayroll, setLoadingPayroll] = useState(false);
@@ -320,6 +323,28 @@ export const EmployeesPage: React.FC = () => {
     }
   };
 
+  const filteredEmployees = employees.filter((emp) => {
+    if (!employeeSearch.trim()) return true;
+    const q = employeeSearch.toLowerCase();
+    return (
+      emp.fullName?.toLowerCase().includes(q) ||
+      emp.employeeCode?.toLowerCase().includes(q) ||
+      emp.phone?.toLowerCase().includes(q) ||
+      emp.designation?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredPayrolls = payrolls.filter((p) => {
+    if (!payrollSearch.trim()) return true;
+    const q = payrollSearch.toLowerCase();
+    return (
+      p.payrollNumber?.toLowerCase().includes(q) ||
+      p.employee?.fullName?.toLowerCase().includes(q) ||
+      p.employee?.employeeCode?.toLowerCase().includes(q) ||
+      p.status?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div>
       {/* Header */}
@@ -449,8 +474,39 @@ export const EmployeesPage: React.FC = () => {
 
       {/* TAB 1: EMPLOYEES DIRECTORY */}
       {activeTab === 'employees' && (
-        <div className="table-container">
-          <table className="data-table">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search staff by name, code, phone, designation..."
+                value={employeeSearch}
+                onChange={e => setEmployeeSearch(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+              />
+            </div>
+            <button
+              onClick={() => exportEmployeesPDF(filteredEmployees, 'Staff Directory')}
+              className="btn btn-secondary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                padding: '8px 14px'
+              }}
+            >
+              <Download size={15} /> Download Staff PDF ({filteredEmployees.length})
+            </button>
+          </div>
+
+          <div className="table-container">
+            <table className="data-table">
             <thead>
               <tr>
                 <th>Code</th>
@@ -472,14 +528,14 @@ export const EmployeesPage: React.FC = () => {
                     Loading employee records...
                   </td>
                 </tr>
-              ) : employees.length === 0 ? (
+              ) : filteredEmployees.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                     No employee records registered yet.
                   </td>
                 </tr>
               ) : (
-                employees.map((emp) => (
+                filteredEmployees.map((emp) => (
                   <tr key={emp.id}>
                     <td><strong style={{ color: '#d97706' }}>{emp.employeeCode}</strong></td>
                     <td><strong>{emp.fullName}</strong></td>
@@ -540,6 +596,7 @@ export const EmployeesPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 
@@ -923,23 +980,54 @@ export const EmployeesPage: React.FC = () => {
       {/* TAB 3: SALARY & MONTHLY PAYROLL */}
       {activeTab === 'payroll' && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', backgroundColor: '#ffffff', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Period:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '20px', backgroundColor: '#ffffff', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Period:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                  <option key={m} value={m}>Month {m}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                style={{ width: '90px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+              />
+
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Search payroll staff..."
+                  value={payrollSearch}
+                  onChange={e => setPayrollSearch(e.target.value)}
+                  style={{ width: '100%', padding: '6px 10px 6px 32px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => exportPayrollPDF(filteredPayrolls, selectedMonth, selectedYear)}
+              className="btn btn-secondary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                padding: '8px 14px'
+              }}
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
-                <option key={m} value={m}>Month {m}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              style={{ width: '90px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-            />
+              <Download size={15} /> Download Payroll Sheet PDF ({filteredPayrolls.length})
+            </button>
           </div>
 
           <div className="table-container">
@@ -965,14 +1053,14 @@ export const EmployeesPage: React.FC = () => {
                       Loading payroll calculation...
                     </td>
                   </tr>
-                ) : payrolls.length === 0 ? (
+                ) : filteredPayrolls.length === 0 ? (
                   <tr>
                     <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                      No payroll generated for {selectedMonth}/{selectedYear}. Click "Calculate Monthly Payroll" above.
+                      No payroll records found matching the filter. Click "Calculate Monthly Payroll" above if not calculated yet.
                     </td>
                   </tr>
                 ) : (
-                  payrolls.map((p) => (
+                  filteredPayrolls.map((p) => (
                     <tr key={p.id}>
                       <td><strong style={{ color: '#d97706' }}>{p.payrollNumber}</strong></td>
                       <td>
