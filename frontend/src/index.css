@@ -839,4 +839,80 @@ table.data-table tbody tr:hover {
   }
 }
 
+/* ==========================================================================
+   AESTHETIC TAB & PAGE OPEN TRANSITIONS (دلکش و ہموار ٹرانزیشنز)
+   ========================================================================== */
+
+@keyframes aestheticPageEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+    filter: blur(2px);
+  }
+  65% {
+    opacity: 0.96;
+    transform: translateY(-1px) scale(1.001);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes aestheticCardFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aestheticModalEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.93) translateY(14px);
+  }
+  75% {
+    opacity: 1;
+    transform: scale(1.01) translateY(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.aesthetic-page-transition {
+  animation: aestheticPageEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity, filter;
+  width: 100%;
+}
+
+/* Subtle micro-interactions on button and tab click */
+button.btn,
+.sidebar nav a,
+.tab-btn {
+  transition: all 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+}
+
+button.btn:active,
+.sidebar nav a:active {
+  transform: scale(0.965) !important;
+}
+
+button.btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Modal aesthetic opening */
+div[style*="position: fixed"] > div {
+  animation: aestheticModalEnter 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 

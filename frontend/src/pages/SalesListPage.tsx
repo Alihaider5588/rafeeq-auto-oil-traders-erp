@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { exportSalesPDF } from '../utils/pdfExportUtils';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import { playPrintSound } from '../utils/soundEffects';
 
 export const SalesListPage: React.FC = () => {
   const { user } = useAuth();
@@ -235,6 +236,7 @@ export const SalesListPage: React.FC = () => {
   };
 
   const handlePrint = () => {
+    playPrintSound();
     window.print();
   };
 

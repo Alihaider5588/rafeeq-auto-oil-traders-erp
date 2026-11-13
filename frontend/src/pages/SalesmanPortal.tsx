@@ -30,6 +30,7 @@ import {
   Bookmark,
   FileText
 } from 'lucide-react';
+import { playPrintSound } from '../utils/soundEffects';
 
 export interface PosDraftOrder {
   id: string;
@@ -3430,7 +3431,10 @@ export const SalesmanPortal: React.FC = () => {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    playPrintSound();
+                    window.print();
+                  }}
                   className="btn btn-primary btn-sm"
                   style={{
                     display: 'inline-flex',

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import {
@@ -25,13 +25,28 @@ import {
   Key,
   Wrench,
   Menu,
-  X
+  X,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { SyncButton } from './SyncButton';
+import { initGlobalAudioListeners, isSoundEnabled, toggleSound } from '../utils/soundEffects';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [soundActive, setSoundActive] = useState<boolean>(isSoundEnabled());
+
+  useEffect(() => {
+    initGlobalAudioListeners();
+  }, []);
+
+  const handleToggleSound = () => {
+    const next = toggleSound();
+    setSoundActive(next);
+  };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -493,6 +508,30 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Audio Effects Toggle */}
+            <button
+              type="button"
+              onClick={handleToggleSound}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: soundActive ? '#fef3c7' : '#f1f5f9',
+                color: soundActive ? '#b45309' : '#64748b',
+                border: `1px solid ${soundActive ? '#fde68a' : '#cbd5e1'}`,
+                borderRadius: '20px',
+                padding: '4px 10px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title={soundActive ? 'UI Click & Print Sounds Active (Click to mute)' : 'UI Sounds Muted (Click to enable)'}
+            >
+              {soundActive ? <Volume2 size={14} color="#d97706" /> : <VolumeX size={14} color="#94a3b8" />}
+              <span>{soundActive ? 'Sound On' : 'Muted'}</span>
+            </button>
+
             <SyncButton />
             <div className="topbar-date" style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>
               {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
@@ -500,9 +539,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         </header>
 
-        {/* Dynamic Page Content */}
+        {/* Dynamic Page Content with Aesthetic Entrance Transition */}
         <main className="content-body">
-          {children}
+          <div key={location.pathname} className="aesthetic-page-transition">
+            {children}
+          </div>
         </main>
       </div>
 
