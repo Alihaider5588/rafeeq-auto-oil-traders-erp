@@ -57,6 +57,7 @@ interface CartItem {
   unitPrice: number | string;
   standardRate: number;
   discountPercent?: number;
+  deliveryStatus?: 'DELIVERED' | 'PENDING_DELIVERY';
   rateInfo?: {
     hasHistory: boolean;
     suggestedRate: number;
@@ -125,6 +126,9 @@ export const SalesmanPortal: React.FC = () => {
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
   const [settings, setSettings] = useState<any>(null);
+
+  // Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل)
+  const [reclaimedDrum, setReclaimedDrum] = useState<any>(null);
 
   // Active Van Delivery Route & Loaded Stock State
   const [activeVan, setActiveVan] = useState<any>(null);
@@ -324,11 +328,37 @@ export const SalesmanPortal: React.FC = () => {
           sessionStorage.setItem('rot_cached_settings', JSON.stringify(sRes.data.settings));
         } catch (e) {}
       }
+
+      try {
+        const drumRes = await api.get('/sales/reclaimed-drum');
+        if (drumRes.data?.success) {
+          setReclaimedDrum(drumRes.data.drum);
+        }
+      } catch (e) {}
     } catch (e) {
       console.error('Error loading salesman data', e);
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handleAddReclaimedOil = () => {
+    if (!reclaimedDrum) return;
+    const existingProd = products.find((p) => p.id === reclaimedDrum.id || p.sku === reclaimedDrum.sku);
+    const prodToAdd: any = existingProd || {
+      id: reclaimedDrum.id,
+      name: reclaimedDrum.name,
+      sku: reclaimedDrum.sku,
+      salePrice: reclaimedDrum.salePrice,
+      wholesalePrice: reclaimedDrum.wholesalePrice,
+      purchasePrice: reclaimedDrum.purchasePrice || 0,
+      currentStock: reclaimedDrum.currentStock,
+      unit: reclaimedDrum.unit || { id: 'ltr', name: 'Litre', symbol: 'Ltr' },
+      conversionFactor: 1,
+      category: { name: 'LUBRICANT' },
+      brand: 'RECLAIMED',
+    };
+    addToCart(prodToAdd);
   };
 
   const fetchCustomerRate = async (customerId: string, productId: string, unitType: 'PRIMARY' | 'SECONDARY') => {
@@ -881,10 +911,13 @@ export const SalesmanPortal: React.FC = () => {
         }
       }
 
+      const hasPendingItems = cart.some((it) => it.deliveryStatus === 'PENDING_DELIVERY');
+
       const payload = {
         customerId: targetCustomerId,
         saleType: isCounterSale ? 'COUNTER' : 'VAN',
         saleDate: posSaleDate ? new Date(posSaleDate).toISOString() : new Date().toISOString(),
+        deliveryStatus: hasPendingItems ? 'PENDING_DELIVERY' : 'DELIVERED',
         items: cart.map((it) => {
           const q = parseFloat(String(it.quantity)) || 0;
           const p = parseFloat(String(it.unitPrice)) || 0;
@@ -894,6 +927,7 @@ export const SalesmanPortal: React.FC = () => {
             unitType: it.unitType,
             unitPrice: p,
             discountPercent: it.discountPercent || 0,
+            deliveryStatus: it.deliveryStatus || 'DELIVERED',
             isRateOverridden: p !== it.standardRate,
             originalRate: it.standardRate,
           };
@@ -1716,6 +1750,76 @@ export const SalesmanPortal: React.FC = () => {
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Tap product to add with auto-pricing</span>
         </div>
 
+        {/* 🛢️ RECLAIMED LOOSE OIL DRUM BANNER (ڈرم کا کھلا آئل) - Displayed at very top */}
+        {reclaimedDrum && (
+          <div style={{
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            border: '1.5px solid #f59e0b',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '14px',
+            color: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px',
+            boxShadow: '0 4px 14px rgba(245, 158, 11, 0.2)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                fontSize: '1.6rem',
+                backgroundColor: '#d97706',
+                borderRadius: '10px',
+                width: '42px',
+                height: '42px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(217, 119, 6, 0.4)'
+              }}>
+                🛢️
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#fef3c7' }}>
+                  Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل)
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Available Stock:{' '}
+                  <b style={{ color: Number(reclaimedDrum.currentStock || 0) > 0 ? '#4ade80' : '#f87171' }}>
+                    {Number(reclaimedDrum.currentStock || 0).toFixed(1)} Liters
+                  </b>{' '}
+                  | Standard Rate:{' '}
+                  <b style={{ color: '#facc15' }}>
+                    Rs. {Number(reclaimedDrum.salePrice || 0).toLocaleString()} / Ltr
+                  </b>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddReclaimedOil}
+              className="btn"
+              style={{
+                backgroundColor: '#f59e0b',
+                color: '#0f172a',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(245, 158, 11, 0.4)'
+              }}
+            >
+              <Plus size={16} /> + Add Khula Oil to Bill (بل میں کھلا آئل شامل کریں)
+            </button>
+          </div>
+        )}
+
         <input
           type="text"
           className="form-control"
@@ -2127,6 +2231,62 @@ export const SalesmanPortal: React.FC = () => {
           </div>
         ) : (
           <div>
+            {/* Master Delivery Option Bar */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 12px',
+              backgroundColor: '#f1f5f9',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              border: '1px solid #e2e8f0',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
+                📦 Delivery Status / امانت حوالگی:
+              </span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCart(cart.map((it) => ({ ...it, deliveryStatus: 'DELIVERED' })));
+                  }}
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: '5px',
+                    border: '1px solid #86efac',
+                    backgroundColor: cart.every((it) => (it.deliveryStatus || 'DELIVERED') === 'DELIVERED') ? '#16a34a' : '#ffffff',
+                    color: cart.every((it) => (it.deliveryStatus || 'DELIVERED') === 'DELIVERED') ? '#ffffff' : '#15803d',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✓ All Delivered
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCart(cart.map((it) => ({ ...it, deliveryStatus: 'PENDING_DELIVERY' })));
+                  }}
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: '5px',
+                    border: '1px solid #fde68a',
+                    backgroundColor: cart.every((it) => it.deliveryStatus === 'PENDING_DELIVERY') ? '#d97706' : '#ffffff',
+                    color: cart.every((it) => it.deliveryStatus === 'PENDING_DELIVERY') ? '#ffffff' : '#b45309',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⏳ All Pending (امانت)
+                </button>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
               {cart.map((item, index) => {
                 const conv = Number(item.product.conversionFactor) || 1;
@@ -2401,6 +2561,46 @@ export const SalesmanPortal: React.FC = () => {
                         </span>
                       </div>
                     )}
+
+                    {/* Item Delivery Status Toggle */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: '8px',
+                      paddingTop: '6px',
+                      borderTop: '1px dashed #e2e8f0',
+                      fontSize: '0.78rem'
+                    }}>
+                      <span style={{ color: '#64748b', fontWeight: 600 }}>Item Delivery Status:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...cart];
+                          updated[index] = {
+                            ...updated[index],
+                            deliveryStatus: updated[index].deliveryStatus === 'PENDING_DELIVERY' ? 'DELIVERED' : 'PENDING_DELIVERY',
+                          };
+                          setCart(updated);
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          backgroundColor: item.deliveryStatus === 'PENDING_DELIVERY' ? '#fef3c7' : '#ecfdf5',
+                          color: item.deliveryStatus === 'PENDING_DELIVERY' ? '#b45309' : '#059669',
+                          borderColor: item.deliveryStatus === 'PENDING_DELIVERY' ? '#fde68a' : '#a7f3d0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {item.deliveryStatus === 'PENDING_DELIVERY' ? '⏳ Pending Delivery (امانت)' : '✓ Delivered (ڈیلیور ہو گیا)'}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -3452,6 +3652,50 @@ export const SalesmanPortal: React.FC = () => {
                         <span style={{ color: remainingBalance <= 0 ? '#15803d' : '#000000' }}>
                           {remainingBalance <= 0 ? 'CLEAR (Rs. 0)' : `Rs. ${remainingBalance.toLocaleString()}`}
                         </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 📦 PENDING DELIVERY ITEMS / بعد میں ملنے والا امانت سامان */}
+                {(() => {
+                  let pendingList: any[] = [];
+                  try {
+                    const match = (completedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
+                    if (match) {
+                      const meta = JSON.parse(match[1]);
+                      pendingList = (meta.items || []).filter((it: any) => it.status !== 'DELIVERED');
+                    }
+                  } catch (e) {}
+
+                  if (pendingList.length === 0) return null;
+
+                  return (
+                    <div style={{
+                      border: '1.5px solid #000000',
+                      backgroundColor: '#fffbeb',
+                      padding: '6px 8px',
+                      marginBottom: '10px',
+                      borderRadius: '4px',
+                      fontSize: '10px'
+                    }}>
+                      <div style={{ fontWeight: 900, textAlign: 'center', borderBottom: '1px solid #000000', paddingBottom: '3px', marginBottom: '4px' }}>
+                        ⏳ PENDING DELIVERY ITEMS / بعد میں ملنے والا سامان (امانت)
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px' }}>
+                        <tbody>
+                          {pendingList.map((pi: any, pIdx: number) => (
+                            <tr key={pIdx} style={{ borderBottom: '1px dotted #ccc' }}>
+                              <td style={{ padding: '2px 0', fontWeight: 700 }}>• {pi.productName || 'Item'}</td>
+                              <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 800 }}>
+                                {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'} (Pending)
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ fontSize: '8px', textAlign: 'center', marginTop: '3px', color: '#555', fontStyle: 'italic' }}>
+                        * Yeh saman dukan / godown me baqi hai, baad me receive karein.
                       </div>
                     </div>
                   );

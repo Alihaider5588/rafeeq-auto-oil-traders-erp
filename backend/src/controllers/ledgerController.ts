@@ -10,6 +10,7 @@ import { clearDashboardCache } from './reportController';
 const paymentSchema = z.object({
   customerId: z.string().min(1).optional().nullable(),
   supplierId: z.string().min(1).optional().nullable(),
+  direction: z.enum(['IN', 'OUT']).default('IN').optional(),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   reference: z.string().optional(),
@@ -144,14 +145,17 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
     const paymentDate = data.date ? new Date(data.date) : new Date();
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Customer Payment (Collection)
+      const isCashOut = data.direction === 'OUT';
+
+      // 1. Customer Payment (Collection IN or Refund OUT)
       if (data.customerId) {
         const customer = await tx.customer.findUnique({ where: { id: data.customerId } });
         if (!customer) throw new Error('Customer not found');
 
         const isWalkIn = customer.phone === '00000000000' || customer.shopName.toLowerCase().includes('walk-in');
         const curRec = isWalkIn ? 0 : Number(customer.currentReceivable);
-        const newRec = isWalkIn ? 0 : (curRec - data.amount);
+        // Cash In reduces receivable; Cash Out increases receivable
+        const newRec = isWalkIn ? 0 : (isCashOut ? curRec + data.amount : curRec - data.amount);
 
         await tx.customer.update({
           where: { id: customer.id },
@@ -162,11 +166,11 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           data: {
             customerId: customer.id,
             date: paymentDate,
-            transactionType: TransactionType.CUSTOMER_PAYMENT,
+            transactionType: isCashOut ? TransactionType.ADJUSTMENT : TransactionType.CUSTOMER_PAYMENT,
             referenceId: receiptNumber,
-            description: `Cash In / Payment Receipt #${receiptNumber} - ${data.notes}`,
-            debit: new Prisma.Decimal(0),
-            credit: new Prisma.Decimal(data.amount),
+            description: `${isCashOut ? 'Cash Out / Adaiyigi / Refund' : 'Cash In / Wasooli'} #${receiptNumber} - ${data.notes}`,
+            debit: new Prisma.Decimal(isCashOut ? data.amount : 0),
+            credit: new Prisma.Decimal(isCashOut ? 0 : data.amount),
             runningBalance: new Prisma.Decimal(newRec),
           },
         });
@@ -179,21 +183,23 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             paymentMethod: data.paymentMethod,
             paymentDate,
             reference: data.reference,
-            notes: data.notes,
+            notes: `${isCashOut ? '[CASH_OUT] ' : '[CASH_IN] '}${data.notes}`,
             recordedById: userId,
           },
         });
 
-        return { payment, remainingBalance: newRec, targetName: customer.shopName };
+        return { payment, remainingBalance: newRec, targetName: customer.shopName, direction: isCashOut ? 'OUT' : 'IN' };
       }
 
-      // 2. Supplier Payment (Disbursement)
+      // 2. Supplier Payment (Disbursement OUT or Refund IN)
       if (data.supplierId) {
         const supplier = await tx.supplier.findUnique({ where: { id: data.supplierId } });
         if (!supplier) throw new Error('Supplier not found');
 
         const curPay = Number(supplier.currentPayable);
-        const newPay = curPay - data.amount;
+        // Cash Out reduces payable; Cash In increases payable (refund from supplier)
+        const isSupplierCashIn = data.direction === 'IN';
+        const newPay = isSupplierCashIn ? curPay + data.amount : curPay - data.amount;
 
         await tx.supplier.update({
           where: { id: supplier.id },
@@ -204,11 +210,11 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           data: {
             supplierId: supplier.id,
             date: paymentDate,
-            transactionType: TransactionType.SUPPLIER_PAYMENT,
+            transactionType: isSupplierCashIn ? TransactionType.ADJUSTMENT : TransactionType.SUPPLIER_PAYMENT,
             referenceId: receiptNumber,
-            description: `Cash Out / Payment to Supplier #${receiptNumber} - ${data.notes}`,
-            debit: new Prisma.Decimal(data.amount),
-            credit: new Prisma.Decimal(0),
+            description: `${isSupplierCashIn ? 'Cash In / Refund from Supplier' : 'Cash Out / Payment to Supplier'} #${receiptNumber} - ${data.notes}`,
+            debit: new Prisma.Decimal(isSupplierCashIn ? 0 : data.amount),
+            credit: new Prisma.Decimal(isSupplierCashIn ? data.amount : 0),
             runningBalance: new Prisma.Decimal(newPay),
           },
         });
@@ -221,12 +227,12 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             paymentMethod: data.paymentMethod,
             paymentDate,
             reference: data.reference,
-            notes: data.notes,
+            notes: `${isSupplierCashIn ? '[CASH_IN] ' : '[CASH_OUT] '}${data.notes}`,
             recordedById: userId,
           },
         });
 
-        return { payment, remainingBalance: newPay, targetName: supplier.companyName };
+        return { payment, remainingBalance: newPay, targetName: supplier.companyName, direction: isSupplierCashIn ? 'IN' : 'OUT' };
       }
     });
 

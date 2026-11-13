@@ -32,6 +32,8 @@ import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingDeliveries, setPendingDeliveries] = useState<any[]>([]);
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -40,14 +42,34 @@ export const AdminDashboard: React.FC = () => {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/reports/dashboard-stats');
-      if (res.data?.success) {
-        setStats(res.data.stats);
+      const [res, delRes] = await Promise.allSettled([
+        api.get('/reports/dashboard-stats'),
+        api.get('/sales/pending-deliveries'),
+      ]);
+      if (res.status === 'fulfilled' && res.value.data?.success) {
+        setStats(res.value.data.stats);
+      }
+      if (delRes.status === 'fulfilled' && delRes.value.data?.success) {
+        setPendingDeliveries(delRes.value.data.data || []);
       }
     } catch (err) {
       console.error('Failed to load dashboard statistics', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeliverNow = async (saleId: string) => {
+    if (!window.confirm('Kya yeh baqaya saman customer ko deliver / handover kar diya gaya hai?')) return;
+    try {
+      setDeliveringId(saleId);
+      await api.post(`/sales/${saleId}/update-delivery`, { markAllDelivered: true });
+      setPendingDeliveries(prev => prev.filter(d => d.saleId !== saleId));
+      alert('✓ Delivery status updated to Delivered! Reminder alert successfully cleared.');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update delivery');
+    } finally {
+      setDeliveringId(null);
     }
   };
 
@@ -485,6 +507,138 @@ export const AdminDashboard: React.FC = () => {
           Open Orders Queue →
         </a>
       </div>
+
+      {/* 📦 PENDING DELIVERY & AMANAT REMINDER SECTION (گاہکوں کا پینڈنگ سامان) */}
+      {pendingDeliveries.length > 0 && (
+        <div style={{
+          backgroundColor: '#eff6ff',
+          border: '1.5px solid #93c5fd',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 10px rgba(37, 99, 235, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                backgroundColor: '#dbeafe',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#1d4ed8'
+              }}>
+                <Clock size={20} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, color: '#1e3a8a', fontSize: '1.02rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Customer Pending Deliveries Reminder (گاہکوں کا پینڈنگ سامان / امانت الرٹ)</span>
+                  <span style={{ backgroundColor: '#2563eb', color: '#fff', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px' }}>
+                    {pendingDeliveries.length} Bills Pending
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#1e40af' }}>
+                  In invoices ka saman godown me pada hai aur customer ko deliver hona baqi hai. Saman dene par "Deliver Now" daba kar reminder khatam karein.
+                </div>
+              </div>
+            </div>
+            <Link to="/sales" className="btn btn-sm btn-outline" style={{ borderColor: '#93c5fd', color: '#1d4ed8', fontWeight: 700 }}>
+              Sales Register Me Dekhein →
+            </Link>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '12px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+            {pendingDeliveries.map((pd) => (
+              <div
+                key={pd.saleId}
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>
+                        {pd.customer?.shopName || 'Customer'}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        📞 {pd.customer?.phone || 'No Phone'} {pd.customer?.area ? `• ${pd.customer.area}` : ''}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontFamily: 'monospace',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                      color: '#d97706',
+                      backgroundColor: '#fef3c7',
+                      padding: '2px 6px',
+                      borderRadius: '4px'
+                    }}>
+                      #{pd.invoiceNumber}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    margin: '8px 0',
+                    border: '1px dashed #cbd5e1',
+                    fontSize: '0.78rem'
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px', fontSize: '0.74rem' }}>
+                      ⏳ Pending Items to Handover:
+                    </div>
+                    {pd.pendingItems.map((pi: any, piIdx: number) => (
+                      <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', padding: '2px 0' }}>
+                        <span>• {pi.productName}</span>
+                        <span style={{ fontWeight: 700, color: '#d97706' }}>
+                          {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #f1f5f9' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    {new Date(pd.saleDate).toLocaleDateString()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeliverNow(pd.saleId)}
+                    disabled={deliveringId === pd.saleId}
+                    style={{
+                      backgroundColor: '#16a34a',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    ✓ {deliveringId === pd.saleId ? 'Updating...' : 'Deliver Now (سامان دے دیا)'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* CRITICAL STOCK ALERTS */}
       {(alerts?.lowStockCount > 0 || alerts?.outOfStockCount > 0) && (

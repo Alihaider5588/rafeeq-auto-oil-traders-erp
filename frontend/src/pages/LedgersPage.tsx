@@ -23,6 +23,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Calendar,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportConsolidatedAllPartyBalancesPDF, exportSingleLedgerStatementPDF } from '../utils/pdfExportUtils';
@@ -167,6 +169,7 @@ export const LedgersPage: React.FC = () => {
     try {
       const payload: any = {
         amount: parseFloat(payAmount),
+        direction: payDirection,
         paymentMethod: payMethod,
         reference: payReference,
         notes: payNotes,
@@ -572,17 +575,52 @@ export const LedgersPage: React.FC = () => {
               </button>
 
               {canEditLedger && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
-                    setShowPaymentModal(true);
-                  }}
-                  className="btn btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
-                >
-                  <DollarSign size={18} /> Record Payment / Receipt
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
+                      setPayDirection('IN');
+                      setShowPaymentModal(true);
+                    }}
+                    className="btn"
+                    style={{
+                      backgroundColor: '#16a34a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 700,
+                      border: 'none',
+                      boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)'
+                    }}
+                    title="Cash In / Wasooli (کسٹمر یا سپلائر سے رقم وصول کریں)"
+                  >
+                    <Plus size={16} /> 🟢 Cash In (وصولی)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
+                      setPayDirection('OUT');
+                      setShowPaymentModal(true);
+                    }}
+                    className="btn"
+                    style={{
+                      backgroundColor: '#dc2626',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 700,
+                      border: 'none',
+                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)'
+                    }}
+                    title="Cash Out / Adaiyigi (سپلائر یا کسٹمر کو رقم ادا کریں)"
+                  >
+                    <Minus size={16} /> 🔴 Cash Out (ادائیگی)
+                  </button>
+                </div>
               )}
             </>
           )}
@@ -1214,6 +1252,87 @@ export const LedgersPage: React.FC = () => {
               Record {activeTab === 'CUSTOMERS' ? 'Customer Payment Receipt' : activeTab === 'SUPPLIERS' ? 'Supplier Disbursement' : 'Payment Voucher'}
             </h2>
 
+            {/* Cash In / Cash Out Direction Toggle Pills */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '10px',
+              marginBottom: '16px',
+              padding: '6px',
+              backgroundColor: '#f1f5f9',
+              borderRadius: '12px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setPayDirection('IN')}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  backgroundColor: payDirection === 'IN' ? '#16a34a' : 'transparent',
+                  color: payDirection === 'IN' ? '#ffffff' : '#475569',
+                  boxShadow: payDirection === 'IN' ? '0 2px 8px rgba(22, 163, 74, 0.35)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Plus size={16} /> 🟢 Cash In (وصولی / آمد)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPayDirection('OUT')}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  backgroundColor: payDirection === 'OUT' ? '#dc2626' : 'transparent',
+                  color: payDirection === 'OUT' ? '#ffffff' : '#475569',
+                  boxShadow: payDirection === 'OUT' ? '0 2px 8px rgba(220, 38, 38, 0.35)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Minus size={16} /> 🔴 Cash Out (ادائیگی / خرچ)
+              </button>
+            </div>
+
+            {/* Explanatory banner for chosen direction */}
+            <div style={{
+              backgroundColor: payDirection === 'IN' ? '#f0fdf4' : '#fef2f2',
+              border: `1px solid ${payDirection === 'IN' ? '#86efac' : '#fca5a5'}`,
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: '14px',
+              fontSize: '0.82rem',
+              color: payDirection === 'IN' ? '#15803d' : '#b91c1c'
+            }}>
+              {activeTab === 'CUSTOMERS' || (activeTab === 'DUAL_PARTNERS' && payTargetType === 'CUSTOMER') ? (
+                payDirection === 'IN' ? (
+                  <span>✅ <b>Cash In (وصولی):</b> کسٹمر سے رقم وصول ہوئی۔ کسٹمر کا کھاتہ <b>کریڈٹ</b> ہوگا اور سابقہ ادھار کم ہو جائے گا۔</span>
+                ) : (
+                  <span>⚠️ <b>Cash Out (ادائیگی / ریفنڈ):</b> کسٹمر کو نقد رقم ادا / واپس کی گئی۔ کسٹمر کا کھاتہ <b>ڈیبٹ</b> ہوگا اور ادھار بڑھ جائے گا۔</span>
+                )
+              ) : (
+                payDirection === 'OUT' ? (
+                  <span>✅ <b>Cash Out (ادائیگی):</b> سپلائر کو نقد رقم ادا کی گئی۔ سپلائر کا کھاتہ <b>ڈیبٹ</b> ہوگا اور واجب الادا رقم کم ہو جائے گی۔</span>
+                ) : (
+                  <span>⚠️ <b>Cash In (سپلائر سے واپسی):</b> سپلائر سے رقم وصول ہوئی۔ سپلائر کا کھاتہ <b>کریڈٹ</b> ہوگا اور واجب الادا رقم بڑھ جائے گی۔</span>
+                )
+              )}
+            </div>
+
             {activeTab === 'DUAL_PARTNERS' && (
               <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
                 <button
@@ -1222,7 +1341,7 @@ export const LedgersPage: React.FC = () => {
                   className={`btn btn-sm ${payTargetType === 'CUSTOMER' ? 'btn-primary' : 'btn-outline'}`}
                   style={{ flex: 1, fontWeight: 700 }}
                 >
-                  کسٹمر سے وصولی (Collection)
+                  کسٹمر کھاتہ ({payDirection === 'IN' ? 'وصولی' : 'ادائیگی'})
                 </button>
                 <button
                   type="button"
@@ -1230,7 +1349,7 @@ export const LedgersPage: React.FC = () => {
                   className={`btn btn-sm ${payTargetType === 'SUPPLIER' ? 'btn-primary' : 'btn-outline'}`}
                   style={{ flex: 1, fontWeight: 700 }}
                 >
-                  سپلائر کو ادائیگی (Payment)
+                  سپلائر کھاتہ ({payDirection === 'OUT' ? 'ادائیگی' : 'وصولی'})
                 </button>
               </div>
             )}

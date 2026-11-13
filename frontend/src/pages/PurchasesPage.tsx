@@ -940,34 +940,54 @@ export const PurchasesPage: React.FC = () => {
                         </div>
 
                         {/* 5. Item Discount (% or Rs) */}
-                        <div>
+                        <div style={{ minWidth: '135px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
                             <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', margin: 0 }}>
                               Discount (رعایت)
                             </label>
-                            <button
-                              type="button"
-                              onClick={() => updateItem(idx, 'discountType', it.discountType === 'PERCENT' ? 'FLAT' : 'PERCENT')}
-                              style={{
-                                border: 'none',
-                                background: it.discountType === 'PERCENT' ? '#ede9fe' : '#f1f5f9',
-                                color: it.discountType === 'PERCENT' ? '#6d28d9' : '#475569',
-                                fontSize: '0.68rem',
-                                fontWeight: 800,
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {it.discountType === 'PERCENT' ? '%' : 'Rs.'}
-                            </button>
+                            <div style={{ display: 'flex', gap: '2px' }}>
+                              <button
+                                type="button"
+                                onClick={() => updateItem(idx, 'discountType', 'FLAT')}
+                                style={{
+                                  border: '1px solid',
+                                  borderColor: it.discountType === 'FLAT' ? '#2563eb' : '#cbd5e1',
+                                  background: it.discountType === 'FLAT' ? '#2563eb' : '#ffffff',
+                                  color: it.discountType === 'FLAT' ? '#ffffff' : '#475569',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Rs.
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateItem(idx, 'discountType', 'PERCENT')}
+                                style={{
+                                  border: '1px solid',
+                                  borderColor: it.discountType === 'PERCENT' ? '#7c3aed' : '#cbd5e1',
+                                  background: it.discountType === 'PERCENT' ? '#7c3aed' : '#ffffff',
+                                  color: it.discountType === 'PERCENT' ? '#ffffff' : '#475569',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                %
+                              </button>
+                            </div>
                           </div>
                           <input
                             type="number"
                             min="0"
                             step="any"
                             className="form-control"
-                            placeholder={it.discountType === 'PERCENT' ? 'Disc %' : 'Disc Rs.'}
+                            placeholder={it.discountType === 'PERCENT' ? 'Discount %' : 'Discount Rs.'}
                             value={it.discountType === 'PERCENT' ? (it.discountPercent || '') : (it.discount || '')}
                             onChange={(e) => {
                               const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
@@ -977,7 +997,7 @@ export const PurchasesPage: React.FC = () => {
                                 updateItem(idx, 'discount', val);
                               }
                             }}
-                            style={{ fontWeight: 700, textAlign: 'right', color: '#7c3aed' }}
+                            style={{ fontWeight: 700, textAlign: 'right', color: it.discountType === 'PERCENT' ? '#7c3aed' : '#2563eb' }}
                           />
                         </div>
 

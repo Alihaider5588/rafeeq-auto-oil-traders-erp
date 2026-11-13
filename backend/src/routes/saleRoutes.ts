@@ -10,6 +10,12 @@ import {
   editSaleInvoice,
   createSalesReturn,
   deleteSale,
+  getPendingDeliveries,
+  updateDeliveryStatus,
+  getClaimsList,
+  updateClaimDisposition,
+  getReclaimedOilDrum,
+  updateReclaimedDrumRate,
 } from '../controllers/saleController';
 import {
   getWebOrdersQueue,
@@ -33,6 +39,18 @@ router.delete('/web-orders/:id', authorize([Role.ADMIN], ['action:delete_web_ord
 // Rate History query for party-product combination
 router.get('/customer-rate', getCustomerProductRate);
 router.get('/customer-rates', getCustomerAllRates);
+
+// Pending Delivery Reminders (امانت لسٹ)
+router.get('/pending-deliveries', getPendingDeliveries);
+router.post('/:id/update-delivery', updateDeliveryStatus);
+
+// Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل)
+router.get('/reclaimed-drum', getReclaimedOilDrum);
+router.post('/reclaimed-drum/rate', authorize([Role.ADMIN, Role.OPERATOR]), updateReclaimedDrumRate);
+
+// Warranty Claims & Defective Store (وارنٹی کلیمز و خراب اسٹاک)
+router.get('/claims', getClaimsList);
+router.post('/claims/:id/disposition', authorize([Role.ADMIN, Role.OPERATOR]), updateClaimDisposition);
 
 // Sales CRUD & Workflows
 router.get('/', getSales);

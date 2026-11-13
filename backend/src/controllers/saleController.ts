@@ -15,6 +15,7 @@ const saleItemSchema = z.object({
   unitType: z.enum(['PRIMARY', 'SECONDARY']).default('SECONDARY').optional(),
   discount: z.number().min(0).default(0).optional(),
   discountPercent: z.number().min(0).max(100).default(0).optional(),
+  deliveryStatus: z.enum(['DELIVERED', 'PENDING_DELIVERY']).default('DELIVERED').optional(),
 });
 
 const saleSchema = z.object({
@@ -29,6 +30,7 @@ const saleSchema = z.object({
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   notes: z.string().optional().nullable(),
   clientReferenceId: z.string().optional(), // Idempotency key from salesman mobile
+  deliveryStatus: z.enum(['DELIVERED', 'PENDING_DELIVERY']).default('DELIVERED').optional(),
 });
 
 export const getSales = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -546,6 +548,27 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     const orderStatus = requireApproval ? OrderStatus.PENDING_APPROVAL : OrderStatus.COMPLETED;
     const saleDate = data.saleDate ? new Date(data.saleDate) : new Date();
 
+    // Check if entire bill or any individual item is marked for pending delivery (امانت / بعد میں وصولی)
+    const hasPendingDelivery = data.deliveryStatus === 'PENDING_DELIVERY' || data.items.some((it) => it.deliveryStatus === 'PENDING_DELIVERY');
+    const deliveryMeta = {
+      status: hasPendingDelivery ? 'PENDING_DELIVERY' : 'DELIVERED',
+      items: data.items.map((it) => {
+        const prod = prodMap.get(it.productId);
+        return {
+          productId: it.productId,
+          productName: prod?.name || 'Product',
+          quantity: it.quantity,
+          unitType: it.unitType || 'SECONDARY',
+          status: it.deliveryStatus || (data.deliveryStatus === 'PENDING_DELIVERY' ? 'PENDING_DELIVERY' : 'DELIVERED'),
+        };
+      }),
+      createdAt: new Date().toISOString(),
+      deliveredAt: hasPendingDelivery ? null : new Date().toISOString(),
+    };
+    const finalNotes = hasPendingDelivery
+      ? `[DELIVERY_META:${JSON.stringify(deliveryMeta)}] ${data.notes || ''}`.trim()
+      : (data.notes || null);
+
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create Sale Record
       const sale = await tx.sale.create({
@@ -565,7 +588,7 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
           paymentMethod: data.paymentMethod,
           status: orderStatus,
           saleType: data.saleType || 'VAN',
-          notes: data.notes,
+          notes: finalNotes,
           items: {
             create: itemDetails.map((it) => ({
               productId: it.productId,
@@ -1288,10 +1311,13 @@ const returnItemSchema = z.object({
 
 const salesReturnSchema = z.object({
   saleId: z.string().min(1, 'Sale ID is required'),
-  reason: z.string().min(1, 'Reason for return is required'), // Damaged, Wrong Viscosity/Item, Customer Cancelled, etc.
+  reason: z.string().min(1, 'Reason for return is required'), // Damaged, Wrong Viscosity/Item, Customer Cancelled, Warranty Claim, etc.
   items: z.array(returnItemSchema).min(1, 'At least one item to return is required'),
   refundAmount: z.number().min(0).default(0), // Cash refunded back or 0 to credit customer ledger
   returnDate: z.string().optional(),
+  isClaim: z.boolean().default(false).optional(),
+  claimResolution: z.enum(['REFUND', 'REPLACEMENT']).default('REFUND').optional(),
+  claimCategory: z.enum(['OIL', 'NON_OIL']).default('NON_OIL').optional(),
 });
 
 export const createSalesReturn = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -1302,7 +1328,7 @@ export const createSalesReturn = async (req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const { saleId, reason, items, refundAmount, returnDate } = parsed.data;
+    const { saleId, reason, items, refundAmount, returnDate, isClaim = false, claimResolution = 'REFUND', claimCategory = 'NON_OIL' } = parsed.data;
 
     const sale = await prisma.sale.findUnique({
       where: { id: saleId },
@@ -1368,93 +1394,203 @@ export const createSalesReturn = async (req: AuthenticatedRequest, res: Response
     const effectiveReturnDate = returnDate ? new Date(returnDate) : new Date();
 
     const createdReturn = await prisma.$transaction(async (tx) => {
-      // 1. Create Sales Return record
+      let totalReplacementCostLoss = 0;
+
+      // 1. Build structured reason & claim metadata
+      let finalReason = reason.trim();
+      if (isClaim) {
+        // Calculate cost loss if replacement is given
+        for (const vi of validatedItems) {
+          const prod = await tx.product.findUnique({ where: { id: vi.productId } });
+          if (prod) {
+            totalReplacementCostLoss += vi.baseQuantity * Number(prod.purchasePrice);
+          }
+        }
+
+        const claimMeta = {
+          isClaim: true,
+          resolution: claimResolution,
+          claimStatus: 'IN_QUARANTINE',
+          claimCategory,
+          lossAmount: claimResolution === 'REPLACEMENT' ? totalReplacementCostLoss : 0,
+          customerName: sale.customer.shopName,
+          customerPhone: sale.customer.phone,
+          originalInvoice: sale.invoiceNumber,
+          dispositionHistory: [
+            {
+              status: 'IN_QUARANTINE',
+              date: effectiveReturnDate.toISOString(),
+              notes: claimResolution === 'REPLACEMENT'
+                ? `Defective stock quarantined. Replacement unit given to customer. Cost Loss: Rs. ${totalReplacementCostLoss.toLocaleString()}`
+                : `Defective stock quarantined. Refund / Credit of Rs. ${totalRefundValue.toLocaleString()} given to customer.`,
+            },
+          ],
+        };
+
+        finalReason = `[CLAIM_META:${JSON.stringify(claimMeta)}] ${reason.trim()}`;
+      }
+
+      // 2. Create Sales Return record
       const sReturn = await tx.salesReturn.create({
         data: {
           returnNumber,
           customerId: sale.customerId,
           saleId: sale.id,
           returnDate: effectiveReturnDate,
-          totalRefund: new Prisma.Decimal(totalRefundValue),
-          reason: reason.trim(),
+          totalRefund: new Prisma.Decimal(claimResolution === 'REPLACEMENT' && isClaim ? 0 : totalRefundValue),
+          reason: finalReason,
           items: {
             create: validatedItems.map((vi) => ({
               productId: vi.productId,
               quantity: new Prisma.Decimal(vi.quantity),
               unitPrice: new Prisma.Decimal(vi.unitPrice),
-              totalRefund: new Prisma.Decimal(vi.totalRefund),
+              totalRefund: new Prisma.Decimal(claimResolution === 'REPLACEMENT' && isClaim ? 0 : vi.totalRefund),
             })),
           },
         },
         include: { items: true },
       });
 
-      // 2. Restore Stock into Product Inventory
-      for (const vi of validatedItems) {
-        const prod = await tx.product.findUnique({ where: { id: vi.productId } });
-        if (!prod) continue;
+      // 3. Stock Management Logic:
+      if (isClaim && claimResolution === 'REPLACEMENT') {
+        // CASE A: WARRANTY REPLACEMENT (نیا مال کسٹمر کو دینا)
+        // - Defective returned item is NOT added to sellable stock (quarantined in claims register).
+        // - Fresh replacement piece is DEDUCTED from active product stock!
+        for (const vi of validatedItems) {
+          const prod = await tx.product.findUnique({ where: { id: vi.productId } });
+          if (!prod) continue;
 
-        const curStock = Number(prod.currentStock);
-        const restoredStock = curStock + vi.baseQuantity;
+          const curStock = Number(prod.currentStock);
+          const newStock = curStock - vi.baseQuantity;
 
-        await tx.product.update({
-          where: { id: vi.productId },
-          data: { currentStock: new Prisma.Decimal(restoredStock) },
-        });
+          await tx.product.update({
+            where: { id: vi.productId },
+            data: { currentStock: new Prisma.Decimal(newStock) },
+          });
 
-        await tx.stockMovement.create({
-          data: {
-            productId: vi.productId,
-            movementType: MovementType.SALE_RETURN,
-            quantity: new Prisma.Decimal(vi.baseQuantity),
-            previousStock: new Prisma.Decimal(curStock),
-            newStock: new Prisma.Decimal(restoredStock),
-            referenceId: sReturn.id,
-            description: `Order Return #${returnNumber} for Inv #${sale.invoiceNumber} | Reason: ${reason}`,
-          },
-        });
-      }
+          await tx.stockMovement.create({
+            data: {
+              productId: vi.productId,
+              movementType: MovementType.ADJUSTMENT,
+              quantity: new Prisma.Decimal(vi.baseQuantity),
+              previousStock: new Prisma.Decimal(curStock),
+              newStock: new Prisma.Decimal(newStock),
+              referenceId: sReturn.id,
+              description: `Warranty Replacement given to customer for #${sale.invoiceNumber} (Defective item moved to Quarantine)`,
+            },
+          });
+        }
+        // Customer ledger is NOT touched for even replacement exchange (balance remains unchanged).
+      } else if (isClaim && claimResolution === 'REFUND') {
+        // CASE B: WARRANTY REFUND (خراب مال پر پیسے واپس یا کھاتہ کریڈٹ)
+        // - Defective returned item is NOT added to sellable stock (quarantined).
+        // - Customer receives ledger credit or cash refund.
+        const balanceToCredit = totalRefundValue - refundAmount;
+        const curCustomer = await tx.customer.findUnique({ where: { id: sale.customerId } });
+        if (curCustomer) {
+          const isWalkInCust = curCustomer.phone === '00000000000' || curCustomer.shopName.toLowerCase().includes('walk-in');
+          const curReceivable = isWalkInCust ? 0 : Number(curCustomer.currentReceivable);
+          const newReceivable = isWalkInCust ? 0 : (curReceivable - balanceToCredit);
 
-      // 3. Customer Ledger Adjustments:
-      const balanceToCredit = totalRefundValue - refundAmount;
-      const curCustomer = await tx.customer.findUnique({ where: { id: sale.customerId } });
-      if (curCustomer) {
-        const isWalkInCust = curCustomer.phone === '00000000000' || curCustomer.shopName.toLowerCase().includes('walk-in');
-        const curReceivable = isWalkInCust ? 0 : Number(curCustomer.currentReceivable);
-        const newReceivable = isWalkInCust ? 0 : (curReceivable - balanceToCredit);
+          await tx.customer.update({
+            where: { id: sale.customerId },
+            data: { currentReceivable: new Prisma.Decimal(newReceivable) },
+          });
 
-        await tx.customer.update({
-          where: { id: sale.customerId },
-          data: { currentReceivable: new Prisma.Decimal(newReceivable) },
-        });
-
-        await tx.customerLedger.create({
-          data: {
-            customerId: sale.customerId,
-            date: effectiveReturnDate,
-            transactionType: TransactionType.SALE_RETURN,
-            referenceId: sReturn.id,
-            description: `Sales Return #${returnNumber} (Inv #${sale.invoiceNumber}): ${reason}`,
-            debit: new Prisma.Decimal(0),
-            credit: new Prisma.Decimal(totalRefundValue),
-            runningBalance: new Prisma.Decimal(curReceivable - totalRefundValue),
-          },
-        });
-
-        // If cash was actually paid out from cash drawer to customer
-        if (refundAmount > 0) {
           await tx.customerLedger.create({
             data: {
               customerId: sale.customerId,
               date: effectiveReturnDate,
-              transactionType: TransactionType.ADJUSTMENT,
+              transactionType: TransactionType.SALE_RETURN,
               referenceId: sReturn.id,
-              description: `Cash Refund given for Return #${returnNumber}`,
-              debit: new Prisma.Decimal(refundAmount),
-              credit: new Prisma.Decimal(0),
-              runningBalance: new Prisma.Decimal(newReceivable),
+              description: `Warranty Claim Refund #${returnNumber} (Inv #${sale.invoiceNumber}): ${reason}`,
+              debit: new Prisma.Decimal(0),
+              credit: new Prisma.Decimal(totalRefundValue),
+              runningBalance: new Prisma.Decimal(curReceivable - totalRefundValue),
             },
           });
+
+          if (refundAmount > 0) {
+            await tx.customerLedger.create({
+              data: {
+                customerId: sale.customerId,
+                date: effectiveReturnDate,
+                transactionType: TransactionType.ADJUSTMENT,
+                referenceId: sReturn.id,
+                description: `Cash Refund given for Warranty Claim #${returnNumber}`,
+                debit: new Prisma.Decimal(refundAmount),
+                credit: new Prisma.Decimal(0),
+                runningBalance: new Prisma.Decimal(newReceivable),
+              },
+            });
+          }
+        }
+      } else {
+        // CASE C: STANDARD RETURN (عام واپسی - سیل ایبل اسٹاک میں واپسی)
+        for (const vi of validatedItems) {
+          const prod = await tx.product.findUnique({ where: { id: vi.productId } });
+          if (!prod) continue;
+
+          const curStock = Number(prod.currentStock);
+          const restoredStock = curStock + vi.baseQuantity;
+
+          await tx.product.update({
+            where: { id: vi.productId },
+            data: { currentStock: new Prisma.Decimal(restoredStock) },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              productId: vi.productId,
+              movementType: MovementType.SALE_RETURN,
+              quantity: new Prisma.Decimal(vi.baseQuantity),
+              previousStock: new Prisma.Decimal(curStock),
+              newStock: new Prisma.Decimal(restoredStock),
+              referenceId: sReturn.id,
+              description: `Order Return #${returnNumber} for Inv #${sale.invoiceNumber} | Reason: ${reason}`,
+            },
+          });
+        }
+
+        const balanceToCredit = totalRefundValue - refundAmount;
+        const curCustomer = await tx.customer.findUnique({ where: { id: sale.customerId } });
+        if (curCustomer) {
+          const isWalkInCust = curCustomer.phone === '00000000000' || curCustomer.shopName.toLowerCase().includes('walk-in');
+          const curReceivable = isWalkInCust ? 0 : Number(curCustomer.currentReceivable);
+          const newReceivable = isWalkInCust ? 0 : (curReceivable - balanceToCredit);
+
+          await tx.customer.update({
+            where: { id: sale.customerId },
+            data: { currentReceivable: new Prisma.Decimal(newReceivable) },
+          });
+
+          await tx.customerLedger.create({
+            data: {
+              customerId: sale.customerId,
+              date: effectiveReturnDate,
+              transactionType: TransactionType.SALE_RETURN,
+              referenceId: sReturn.id,
+              description: `Sales Return #${returnNumber} (Inv #${sale.invoiceNumber}): ${reason}`,
+              debit: new Prisma.Decimal(0),
+              credit: new Prisma.Decimal(totalRefundValue),
+              runningBalance: new Prisma.Decimal(curReceivable - totalRefundValue),
+            },
+          });
+
+          if (refundAmount > 0) {
+            await tx.customerLedger.create({
+              data: {
+                customerId: sale.customerId,
+                date: effectiveReturnDate,
+                transactionType: TransactionType.ADJUSTMENT,
+                referenceId: sReturn.id,
+                description: `Cash Refund given for Return #${returnNumber}`,
+                debit: new Prisma.Decimal(refundAmount),
+                credit: new Prisma.Decimal(0),
+                runningBalance: new Prisma.Decimal(newReceivable),
+              },
+            });
+          }
         }
       }
 
@@ -1597,4 +1733,481 @@ export const deleteSale = async (req: AuthenticatedRequest, res: Response): Prom
     res.status(500).json({ success: false, message: error.message || 'Failed to permanently delete invoice' });
   }
 };
+
+// ============================================================================
+// RECLAIMED LOOSE OIL DRUM MANAGEMENT (ڈرم کا کھلا آئل)
+// ============================================================================
+export const ensureReclaimedDrumProduct = async (tx?: any) => {
+  const db = tx || prisma;
+  let drumProd = await db.product.findFirst({
+    where: {
+      OR: [
+        { sku: 'KHULA-RECLAIMED-DRUM' },
+        { name: { contains: 'Reclaimed Mixed Oil Drum' } },
+        { name: { contains: 'ڈرم کا کھلا آئل' } },
+      ],
+    },
+    include: { unit: true, primaryUnit: true, category: true },
+  });
+
+  if (!drumProd) {
+    let cat = await db.category.findFirst({ where: { name: 'LUBRICANT' } });
+    if (!cat) cat = await db.category.findFirst();
+    let unit = await db.unit.findFirst({ where: { OR: [{ symbol: 'Ltr' }, { name: 'Litre' }, { symbol: 'L' }] } });
+    if (!unit) unit = await db.unit.findFirst();
+
+    if (cat && unit) {
+      drumProd = await db.product.create({
+        data: {
+          name: 'Reclaimed Mixed Oil Drum (ڈرم کا کھلا آئل)',
+          sku: 'KHULA-RECLAIMED-DRUM',
+          categoryId: cat.id,
+          brand: 'RECLAIMED',
+          unitId: unit.id,
+          conversionFactor: new Prisma.Decimal(1),
+          purchasePrice: new Prisma.Decimal(0),
+          salePrice: new Prisma.Decimal(400),
+          wholesalePrice: new Prisma.Decimal(380),
+          minimumStockLevel: new Prisma.Decimal(20),
+          currentStock: new Prisma.Decimal(0),
+          description: 'Reclaimed loose engine oil collected from drums & warranty claim returns',
+          showInCatalog: true,
+          showPublicPrice: true,
+          isActive: true,
+        },
+        include: { unit: true, primaryUnit: true, category: true },
+      });
+    }
+  }
+
+  return drumProd;
+};
+
+export const getReclaimedOilDrum = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const drum = await ensureReclaimedDrumProduct();
+    if (!drum) {
+      res.status(404).json({ success: false, message: 'Reclaimed oil drum product could not be initialized' });
+      return;
+    }
+    res.json({
+      success: true,
+      drum: {
+        id: drum.id,
+        name: drum.name,
+        sku: drum.sku,
+        currentStock: Number(drum.currentStock),
+        salePrice: Number(drum.salePrice),
+        wholesalePrice: Number(drum.wholesalePrice),
+        purchasePrice: Number(drum.purchasePrice),
+        unit: drum.unit,
+      },
+    });
+  } catch (error) {
+    console.error('getReclaimedOilDrum error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve reclaimed oil drum status' });
+  }
+};
+
+export const updateReclaimedDrumRate = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { salePrice, wholesalePrice } = req.body;
+    const drum = await ensureReclaimedDrumProduct();
+    if (!drum) {
+      res.status(404).json({ success: false, message: 'Drum not found' });
+      return;
+    }
+
+    const updated = await prisma.product.update({
+      where: { id: drum.id },
+      data: {
+        ...(salePrice !== undefined ? { salePrice: new Prisma.Decimal(Number(salePrice)) } : {}),
+        ...(wholesalePrice !== undefined ? { wholesalePrice: new Prisma.Decimal(Number(wholesalePrice)) } : {}),
+      },
+    });
+
+    clearProductsCache();
+    res.json({ success: true, message: 'Reclaimed drum rate updated', drum: updated });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update reclaimed drum rate' });
+  }
+};
+
+// ============================================================================
+// PENDING / PARTIAL DELIVERY TRACKING (امانت و بعد میں سامان کی حوالگی)
+// ============================================================================
+export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const sales = await prisma.sale.findMany({
+      where: {
+        status: { not: OrderStatus.CANCELLED },
+        notes: { contains: '"status":"PENDING_DELIVERY"' },
+      },
+      include: {
+        customer: { select: { id: true, shopName: true, ownerName: true, phone: true, area: true } },
+        salesman: { select: { id: true, fullName: true, username: true } },
+        items: {
+          include: {
+            product: { select: { id: true, name: true, sku: true, unit: true, primaryUnit: true } },
+          },
+        },
+      },
+      orderBy: { saleDate: 'desc' },
+      take: 100,
+    });
+
+    const pendingDeliveries = sales
+      .map((sale) => {
+        let meta: any = null;
+        try {
+          const match = (sale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
+          if (match) meta = JSON.parse(match[1]);
+        } catch (e) {}
+
+        const pendingItems = (meta?.items || sale.items || []).filter((it: any) => it.status !== 'DELIVERED');
+
+        return {
+          saleId: sale.id,
+          invoiceNumber: sale.invoiceNumber,
+          saleDate: sale.saleDate,
+          customer: sale.customer,
+          salesman: sale.salesman,
+          totalAmount: Number(sale.totalAmount),
+          netAmount: Number(sale.netAmount),
+          receivedAmount: Number(sale.receivedAmount),
+          remainingBalance: Number(sale.remainingBalance),
+          deliveryStatus: meta?.status || 'PENDING_DELIVERY',
+          pendingItems: pendingItems.map((pi: any) => {
+            const matchedItem = sale.items.find((si) => si.productId === pi.productId);
+            return {
+              productId: pi.productId,
+              productName: pi.productName || matchedItem?.product?.name || 'Product',
+              sku: matchedItem?.product?.sku || '',
+              quantity: Number(pi.quantity || matchedItem?.quantity || 0),
+              unitType: pi.unitType || matchedItem?.unitType || 'SECONDARY',
+              unitSymbol: matchedItem?.product?.unit?.symbol || 'Pcs',
+              status: pi.status || 'PENDING_DELIVERY',
+            };
+          }),
+          createdAt: sale.createdAt,
+          userNotes: (sale.notes || '').replace(/\[DELIVERY_META:.*?\]\s*/, '').trim(),
+        };
+      })
+      .filter((s) => s.deliveryStatus === 'PENDING_DELIVERY' && s.pendingItems.length > 0);
+
+    res.json({ success: true, count: pendingDeliveries.length, data: pendingDeliveries });
+  } catch (error) {
+    console.error('getPendingDeliveries error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve pending deliveries' });
+  }
+};
+
+export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { deliveredItemIds, markAllDelivered = true, deliveryNotes } = req.body;
+
+    const sale = await prisma.sale.findFirst({
+      where: { OR: [{ id }, { invoiceNumber: id }] },
+      include: { customer: true, items: { include: { product: true } } },
+    });
+
+    if (!sale) {
+      res.status(404).json({ success: false, message: 'Sale invoice not found' });
+      return;
+    }
+
+    let meta: any = { status: 'PENDING_DELIVERY', items: [] };
+    const notesStr = sale.notes || '';
+    const match = notesStr.match(/\[DELIVERY_META:(.*?)\]/);
+    if (match) {
+      try {
+        meta = JSON.parse(match[1]);
+      } catch (e) {}
+    } else {
+      meta.items = sale.items.map((it) => ({
+        productId: it.productId,
+        productName: it.product.name,
+        quantity: Number(it.quantity),
+        unitType: it.unitType,
+        status: 'PENDING_DELIVERY',
+      }));
+    }
+
+    if (markAllDelivered) {
+      meta.status = 'DELIVERED';
+      meta.items = (meta.items || []).map((it: any) => ({ ...it, status: 'DELIVERED' }));
+      meta.deliveredAt = new Date().toISOString();
+    } else if (Array.isArray(deliveredItemIds)) {
+      meta.items = (meta.items || []).map((it: any) => {
+        if (deliveredItemIds.includes(it.productId)) {
+          return { ...it, status: 'DELIVERED' };
+        }
+        return it;
+      });
+      const allDone = meta.items.every((it: any) => it.status === 'DELIVERED');
+      meta.status = allDone ? 'DELIVERED' : 'PENDING_DELIVERY';
+      if (allDone) meta.deliveredAt = new Date().toISOString();
+    }
+
+    const cleanUserNotes = notesStr.replace(/\[DELIVERY_META:.*?\]\s*/, '').trim();
+    const updatedNotes = `[DELIVERY_META:${JSON.stringify(meta)}] ${cleanUserNotes}${deliveryNotes ? ` (Delivered Note: ${deliveryNotes})` : ''}`.trim();
+
+    await prisma.sale.update({
+      where: { id: sale.id },
+      data: { notes: updatedNotes },
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'DELIVERY_STATUS_UPDATED',
+      entityType: 'SALE',
+      entityId: sale.id,
+      details: {
+        invoiceNumber: sale.invoiceNumber,
+        newStatus: meta.status,
+        deliveredItemsCount: (meta.items || []).filter((it: any) => it.status === 'DELIVERED').length,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: meta.status === 'DELIVERED' ? 'All items marked as delivered successfully!' : 'Delivery status updated',
+      deliveryStatus: meta.status,
+    });
+  } catch (error) {
+    console.error('updateDeliveryStatus error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update delivery status' });
+  }
+};
+
+// ============================================================================
+// WARRANTY CLAIMS & DEFECTIVE STORE (وارنٹی کلیمز و خراب اسٹاک)
+// ============================================================================
+export const getClaimsList = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const returns = await prisma.salesReturn.findMany({
+      where: {
+        reason: { contains: '[CLAIM_META:' },
+      },
+      include: {
+        customer: { select: { id: true, shopName: true, ownerName: true, phone: true } },
+        sale: { select: { id: true, invoiceNumber: true, saleDate: true } },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                brand: true,
+                purchasePrice: true,
+                salePrice: true,
+                conversionFactor: true,
+                unit: true,
+                primaryUnit: true,
+                category: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { returnDate: 'desc' },
+      take: 200,
+    });
+
+    let totalClaimLoss = 0;
+    let quarantinedCount = 0;
+
+    const claims = returns.map((ret) => {
+      let meta: any = {};
+      try {
+        const match = (ret.reason || '').match(/\[CLAIM_META:(.*?)\]/);
+        if (match) meta = JSON.parse(match[1]);
+      } catch (e) {}
+
+      const loss = Number(meta.lossAmount || 0);
+      totalClaimLoss += loss;
+      if (meta.claimStatus === 'IN_QUARANTINE') quarantinedCount++;
+
+      return {
+        id: ret.id,
+        returnNumber: ret.returnNumber,
+        originalInvoice: ret.sale?.invoiceNumber || meta.originalInvoice || 'N/A',
+        returnDate: ret.returnDate,
+        customer: ret.customer,
+        claimStatus: meta.claimStatus || 'IN_QUARANTINE',
+        claimCategory: meta.claimCategory || 'NON_OIL',
+        resolution: meta.resolution || 'REPLACEMENT',
+        lossAmount: loss,
+        totalRefund: Number(ret.totalRefund),
+        items: ret.items.map((it) => ({
+          id: it.id,
+          productId: it.productId,
+          productName: it.product?.name || 'Product',
+          sku: it.product?.sku || '',
+          brand: it.product?.brand || '',
+          category: it.product?.category?.name || 'General',
+          quantity: Number(it.quantity),
+          unitPrice: Number(it.unitPrice),
+          costPrice: Number(it.product?.purchasePrice || 0),
+          conversionFactor: Number(it.product?.conversionFactor || 1),
+          unitSymbol: it.product?.unit?.symbol || 'Pcs',
+        })),
+        dispositionHistory: meta.dispositionHistory || [],
+        notes: (ret.reason || '').replace(/\[CLAIM_META:.*?\]\s*/, '').trim(),
+      };
+    });
+
+    res.json({
+      success: true,
+      claims,
+      summary: {
+        totalClaims: claims.length,
+        quarantinedCount,
+        totalClaimLoss,
+      },
+    });
+  } catch (error) {
+    console.error('getClaimsList error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve claims list' });
+  }
+};
+
+export const updateClaimDisposition = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { action, dispositionNotes, dumpLiters } = req.body;
+
+    const sReturn = await prisma.salesReturn.findUnique({
+      where: { id },
+      include: {
+        items: { include: { product: true } },
+        customer: true,
+      },
+    });
+
+    if (!sReturn) {
+      res.status(404).json({ success: false, message: 'Warranty claim record not found' });
+      return;
+    }
+
+    let meta: any = {};
+    const reasonStr = sReturn.reason || '';
+    const match = reasonStr.match(/\[CLAIM_META:(.*?)\]/);
+    if (match) {
+      try {
+        meta = JSON.parse(match[1]);
+      } catch (e) {}
+    }
+
+    const effectiveDate = new Date();
+    let newStatus = meta.claimStatus || 'IN_QUARANTINE';
+    let actionLog = '';
+
+    await prisma.$transaction(async (tx) => {
+      if (action === 'SENT_TO_COMPANY') {
+        newStatus = 'SENT_TO_COMPANY';
+        actionLog = `Sent to company / vendor for warranty. Notes: ${dispositionNotes || 'Dispatched'}`;
+      } else if (action === 'COMPANY_REPLACED' || action === 'REPAIRED_RESTORED') {
+        // Restores units back to active sellable inventory
+        for (const it of sReturn.items) {
+          const prod = await tx.product.findUnique({ where: { id: it.productId } });
+          if (prod) {
+            const curStock = Number(prod.currentStock);
+            const qty = Number(it.quantity);
+            const restoredStock = curStock + qty;
+
+            await tx.product.update({
+              where: { id: it.productId },
+              data: { currentStock: new Prisma.Decimal(restoredStock) },
+            });
+
+            await tx.stockMovement.create({
+              data: {
+                productId: it.productId,
+                movementType: MovementType.PURCHASE,
+                quantity: new Prisma.Decimal(qty),
+                previousStock: new Prisma.Decimal(curStock),
+                newStock: new Prisma.Decimal(restoredStock),
+                referenceId: sReturn.id,
+                description: `Warranty Claim #${sReturn.returnNumber}: ${action === 'COMPANY_REPLACED' ? 'Replaced by company with new unit' : 'Repaired and restored to stock'}`,
+              },
+            });
+          }
+        }
+        newStatus = action === 'COMPANY_REPLACED' ? 'RESOLVED_REPLACED' : 'RESOLVED_RESTOCKED';
+        meta.lossAmount = 0; // Loss recovered
+        actionLog = action === 'COMPANY_REPLACED' ? 'Company replaced with brand new stock. Active inventory restored.' : 'Repaired and restored to active stock.';
+      } else if (action === 'SCRAP_LOSS') {
+        newStatus = 'SCRAPPED_LOSS';
+        actionLog = `Scrapped / discarded as total defective loss. Notes: ${dispositionNotes || 'Scrap'}`;
+      } else if (action === 'DUMP_IN_DRUM') {
+        // Dumps claimed oil into Reclaimed Loose Oil Drum
+        const drum = await ensureReclaimedDrumProduct(tx);
+        if (!drum) throw new Error('Reclaimed oil drum product could not be initialized');
+
+        const litersToAdd = dumpLiters && Number(dumpLiters) > 0
+          ? Number(dumpLiters)
+          : sReturn.items.reduce((sum, it) => {
+              const conv = Number(it.product.conversionFactor || 1);
+              return sum + (Number(it.quantity) * conv);
+            }, 0);
+
+        const curDrumStock = Number(drum.currentStock);
+        const newDrumStock = curDrumStock + litersToAdd;
+
+        await tx.product.update({
+          where: { id: drum.id },
+          data: { currentStock: new Prisma.Decimal(newDrumStock) },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            productId: drum.id,
+            movementType: MovementType.PURCHASE,
+            quantity: new Prisma.Decimal(litersToAdd),
+            previousStock: new Prisma.Decimal(curDrumStock),
+            newStock: new Prisma.Decimal(newDrumStock),
+            referenceId: sReturn.id,
+            description: `Claim #${sReturn.returnNumber} oil dumped into drum (${litersToAdd} Ltr)`,
+          },
+        });
+
+        newStatus = 'DUMPED_IN_DRUM';
+        actionLog = `Dumped ${litersToAdd} Liters of claimed oil into Reclaimed Oil Drum. Stock increased.`;
+      }
+
+      meta.claimStatus = newStatus;
+      if (!Array.isArray(meta.dispositionHistory)) meta.dispositionHistory = [];
+      meta.dispositionHistory.push({
+        status: newStatus,
+        date: effectiveDate.toISOString(),
+        notes: actionLog,
+      });
+
+      const cleanReason = reasonStr.replace(/\[CLAIM_META:.*?\]\s*/, '').trim();
+      const newReason = `[CLAIM_META:${JSON.stringify(meta)}] ${cleanReason}`;
+
+      await tx.salesReturn.update({
+        where: { id: sReturn.id },
+        data: { reason: newReason },
+      });
+    });
+
+    clearProductsCache();
+    clearDashboardCache();
+
+    res.json({
+      success: true,
+      message: 'Claim disposition successfully updated',
+      status: newStatus,
+    });
+  } catch (error: any) {
+    console.error('updateClaimDisposition error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update claim disposition' });
+  }
+};
+
 

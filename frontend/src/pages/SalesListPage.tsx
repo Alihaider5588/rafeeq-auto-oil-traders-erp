@@ -81,6 +81,24 @@ export const SalesListPage: React.FC = () => {
   const [refundCashAmount, setRefundCashAmount] = useState<number | string>(0);
   const [processingReturn, setProcessingReturn] = useState(false);
 
+  // Warranty Claims & Defective Store States
+  const [isClaimReturn, setIsClaimReturn] = useState(false);
+  const [claimResolution, setClaimResolution] = useState<'REFUND' | 'REPLACEMENT'>('REFUND');
+  const [claimCategory, setClaimCategory] = useState<'OIL' | 'NON_OIL'>('NON_OIL');
+
+  // Delivery Handover Modal State
+  const [deliverModalSale, setDeliverModalSale] = useState<Sale | null>(null);
+  const [deliveringProcessing, setDeliveringProcessing] = useState(false);
+  const [deliveryNotesInput, setDeliveryNotesInput] = useState('');
+
+  // Active View Tab: Sales Register vs Warranty Claims
+  const [activeViewTab, setActiveViewTab] = useState<'SALES' | 'CLAIMS'>('SALES');
+  const [claimsList, setClaimsList] = useState<any[]>([]);
+  const [claimsSummary, setClaimsSummary] = useState<any>(null);
+  const [loadingClaims, setLoadingClaims] = useState(false);
+  const [selectedClaimForDump, setSelectedClaimForDump] = useState<any>(null);
+  const [dumpLitersInput, setDumpLitersInput] = useState<string>('');
+
   // Top Page Operation Notification Banners
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
@@ -360,6 +378,9 @@ export const SalesListPage: React.FC = () => {
     setReturnReason('Wrong Item Delivered');
     setCustomReasonNotes('');
     setRefundCashAmount(0);
+    setIsClaimReturn(false);
+    setClaimResolution('REFUND');
+    setClaimCategory('NON_OIL');
     setReturnItems(
       (sale.items || []).map((it: any) => ({
         productId: it.productId,
@@ -408,18 +429,81 @@ export const SalesListPage: React.FC = () => {
         saleId: returnModalSale.id,
         reason: fullReason,
         items: itemsToReturn,
-        refundAmount: parseFloat(String(refundCashAmount)) || 0,
+        refundAmount: isClaimReturn && claimResolution === 'REPLACEMENT' ? 0 : (parseFloat(String(refundCashAmount)) || 0),
+        isClaim: isClaimReturn,
+        claimResolution: isClaimReturn ? claimResolution : undefined,
+        claimCategory: isClaimReturn ? claimCategory : undefined,
       });
 
       sessionStorage.removeItem('rot_cached_products');
 
-      triggerOperationSuccess(`Order Return kamyabi se record ho gaya! Stock godown me wapis jama ho gaya aur customer ledger update ho gaya.`);
+      if (isClaimReturn) {
+        triggerOperationSuccess(`Warranty Claim kamyabi se record ho gaya! Defective stock alag "Claims & Defective Store" me darj ho gaya.`);
+        loadClaims();
+      } else {
+        triggerOperationSuccess(`Order Return kamyabi se record ho gaya! Stock godown me wapis jama ho gaya aur customer ledger update ho gaya.`);
+      }
       setReturnModalSale(null);
       fetchSales();
     } catch (err: any) {
       triggerOperationError(err.response?.data?.message || 'Return process nahi ho saka.');
     } finally {
       setProcessingReturn(false);
+    }
+  };
+
+  const loadClaims = async () => {
+    try {
+      setLoadingClaims(true);
+      const res = await api.get('/sales/claims');
+      if (res.data?.success) {
+        setClaimsList(res.data.claims || []);
+        setClaimsSummary(res.data.summary || null);
+      }
+    } catch (e) {
+      console.error('Failed to load claims', e);
+    } finally {
+      setLoadingClaims(false);
+    }
+  };
+
+  const handleClaimDisposition = async (claimId: string, action: string, dumpLiters?: number) => {
+    try {
+      const res = await api.post(`/sales/claims/${claimId}/disposition`, {
+        action,
+        dumpLiters,
+        dispositionNotes: action === 'SENT_TO_COMPANY' ? 'Dispatched to company / vendor' : undefined,
+      });
+      if (res.data?.success) {
+        triggerOperationSuccess(res.data.message || 'Claim disposition updated!');
+        loadClaims();
+        setSelectedClaimForDump(null);
+      }
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Failed to update claim disposition');
+    }
+  };
+
+  const handleDeliverPendingSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deliverModalSale) return;
+
+    try {
+      setDeliveringProcessing(true);
+      const res = await api.post(`/sales/${deliverModalSale.id}/update-delivery`, {
+        markAllDelivered: true,
+        deliveryNotes: deliveryNotesInput.trim() || undefined,
+      });
+      if (res.data?.success) {
+        triggerOperationSuccess(`Invoice #${deliverModalSale.invoiceNumber} ka saman kamyabi se delivered mark ho gaya!`);
+        setDeliverModalSale(null);
+        setDeliveryNotesInput('');
+        fetchSales();
+      }
+    } catch (err: any) {
+      triggerOperationError(err.response?.data?.message || 'Delivery update failed');
+    } finally {
+      setDeliveringProcessing(false);
     }
   };
 
@@ -599,10 +683,35 @@ export const SalesListPage: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterSaleTypeChange('VAN')}
-            className={`btn btn-sm ${filterSaleType === 'VAN' ? 'btn-info' : 'btn-outline'}`}
+            className={`btn btn-sm ${filterSaleType === 'VAN' && activeViewTab === 'SALES' ? 'btn-info' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
           >
             🚐 Van Sales ({counts.van})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeViewTab !== 'CLAIMS') {
+                setActiveViewTab('CLAIMS');
+                loadClaims();
+              } else {
+                setActiveViewTab('SALES');
+              }
+            }}
+            className={`btn btn-sm ${activeViewTab === 'CLAIMS' ? 'btn-primary' : 'btn-outline'}`}
+            style={{
+              fontWeight: 700,
+              borderRadius: '20px',
+              padding: '5px 14px',
+              backgroundColor: activeViewTab === 'CLAIMS' ? '#7c3aed' : '#ffffff',
+              color: activeViewTab === 'CLAIMS' ? '#ffffff' : '#7c3aed',
+              borderColor: '#7c3aed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            🛡️ Warranty Claims & Defective Store
           </button>
         </div>
 
@@ -759,7 +868,218 @@ export const SalesListPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="table-container">
+      {activeViewTab === 'CLAIMS' ? (
+        <div>
+          {/* Claims Executive Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>Total Warranty Claims</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#7c3aed', marginTop: '4px' }}>
+                {claimsSummary?.totalClaims ?? claimsList.length}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>Total claimed cases logged</div>
+            </div>
+
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '16px', border: '1.5px solid #fde68a', boxShadow: '0 2px 6px rgba(217, 119, 6, 0.08)' }}>
+              <div style={{ fontSize: '0.8rem', color: '#b45309', fontWeight: 700 }}>Currently In Defective Store</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#d97706', marginTop: '4px' }}>
+                {claimsSummary?.quarantinedCount ?? claimsList.filter((c) => c.claimStatus === 'IN_QUARANTINE').length}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#b45309', marginTop: '2px' }}>Awaiting company action or disposal</div>
+            </div>
+
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '16px', border: '1.5px solid #fecaca', boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)' }}>
+              <div style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: 700 }}>Total Claim Replacement Loss</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#dc2626', marginTop: '4px' }}>
+                Rs. {Number(claimsSummary?.totalClaimLoss ?? 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#991b1b', marginTop: '2px' }}>Cost of replacement stock given to customers</div>
+            </div>
+          </div>
+
+          {/* Claims Table Container */}
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Claim # / Inv #</th>
+                  <th>Customer</th>
+                  <th>Item & Quantity</th>
+                  <th>Type</th>
+                  <th>Resolution & Loss</th>
+                  <th>Status</th>
+                  <th>Actions (اسٹاک کا کیا کیا؟)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingClaims ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      Loading warranty claims...
+                    </td>
+                  </tr>
+                ) : claimsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      No warranty claims found in system.
+                    </td>
+                  </tr>
+                ) : (
+                  claimsList.map((c) => {
+                    const isOil = c.claimCategory === 'OIL' || c.items.some((it: any) => (it.category || '').toLowerCase().includes('oil') || (it.category || '').toLowerCase().includes('lubricant'));
+                    const isQuarantine = c.claimStatus === 'IN_QUARANTINE';
+
+                    return (
+                      <tr key={c.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{new Date(c.returnDate).toLocaleDateString()}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            {new Date(c.returnDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'monospace' }}>{c.returnNumber}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Inv #{c.originalInvoice}</div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{c.customer?.shopName}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>📞 {c.customer?.phone}</div>
+                        </td>
+                        <td>
+                          {c.items.map((it: any, iIdx: number) => (
+                            <div key={iIdx} style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                              • {it.productName}{' '}
+                              <span style={{ color: '#d97706', fontWeight: 800 }}>({it.quantity} {it.unitSymbol})</span>
+                            </div>
+                          ))}
+                        </td>
+                        <td>
+                          <span className={`badge ${isOil ? 'badge-info' : 'badge-secondary'}`} style={{ fontSize: '0.7rem' }}>
+                            {isOil ? '🧴 Oil' : '🔧 Non-Oil'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>
+                            {c.resolution === 'REPLACEMENT' ? '📦 Replacement Stock' : '💵 Refund / Credit'}
+                          </div>
+                          {c.lossAmount > 0 && (
+                            <div style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 800 }}>
+                              Loss: Rs. {Number(c.lossAmount).toLocaleString()}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          {c.claimStatus === 'IN_QUARANTINE' && (
+                            <span style={{ backgroundColor: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                              ⚠️ In Quarantine Store
+                            </span>
+                          )}
+                          {c.claimStatus === 'SENT_TO_COMPANY' && (
+                            <span style={{ backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                              🏢 Sent to Company
+                            </span>
+                          )}
+                          {c.claimStatus === 'RESOLVED_REPLACED' && (
+                            <span style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #86efac', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                              ✅ Company Replaced
+                            </span>
+                          )}
+                          {c.claimStatus === 'RESOLVED_RESTOCKED' && (
+                            <span style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                              🔧 Repaired & Restocked
+                            </span>
+                          )}
+                          {c.claimStatus === 'SCRAPPED_LOSS' && (
+                            <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                              🗑️ Scrapped Loss
+                            </span>
+                          )}
+                          {c.claimStatus === 'DUMPED_IN_DRUM' && (
+                            <span style={{ backgroundColor: '#ede9fe', color: '#6d28d9', border: '1px solid #ddd6fe', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                              🛢️ Dumped in Drum
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {isQuarantine ? (
+                            isOil ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedClaimForDump(c);
+                                  const totalLtr = c.items.reduce((acc: number, it: any) => acc + (it.quantity * (Number(it.conversionFactor) || 1)), 0);
+                                  setDumpLitersInput(String(totalLtr || ''));
+                                }}
+                                className="btn btn-sm"
+                                style={{
+                                  backgroundColor: '#f59e0b',
+                                  color: '#0f172a',
+                                  fontWeight: 800,
+                                  fontSize: '0.74rem',
+                                  padding: '4px 8px',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                🛢️ Dump in Loose Drum
+                              </button>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClaimDisposition(c.id, 'SENT_TO_COMPANY')}
+                                  className="btn btn-sm btn-outline"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', fontWeight: 700 }}
+                                  title="Send to company / supplier for warranty replacement"
+                                >
+                                  🏢 Sent to Co.
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClaimDisposition(c.id, 'COMPANY_REPLACED')}
+                                  className="btn btn-sm"
+                                  style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #86efac', padding: '2px 6px', fontSize: '0.7rem', fontWeight: 800 }}
+                                  title="Company gave replacement item -> Restores stock and clears loss"
+                                >
+                                  ✅ Co. Replaced
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClaimDisposition(c.id, 'REPAIRED_RESTORED')}
+                                  className="btn btn-sm"
+                                  style={{ backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '2px 6px', fontSize: '0.7rem', fontWeight: 700 }}
+                                  title="Item was repaired and returned to sellable stock"
+                                >
+                                  🔧 Repaired
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClaimDisposition(c.id, 'SCRAP_LOSS')}
+                                  className="btn btn-sm"
+                                  style={{ backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', padding: '2px 6px', fontSize: '0.7rem', fontWeight: 700 }}
+                                  title="Scrap item as confirmed loss"
+                                >
+                                  🗑️ Scrap
+                                </button>
+                              </div>
+                            )
+                          ) : (
+                            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>✓ Disposition Handled</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="table-container">
         <table className="data-table">
           <thead>
             <tr>
@@ -827,9 +1147,47 @@ export const SalesListPage: React.FC = () => {
                     <span className={`badge ${s.status === 'COMPLETED' ? 'badge-success' : s.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'}`}>
                       {s.status}
                     </span>
+                    {s.notes?.includes('"status":"PENDING_DELIVERY"') && (
+                      <div style={{ marginTop: '3px' }}>
+                        <span style={{
+                          backgroundColor: '#fef3c7',
+                          color: '#b45309',
+                          border: '1px solid #fde68a',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          whiteSpace: 'nowrap',
+                          display: 'inline-block'
+                        }}>
+                          ⏳ Pending Delivery
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {s.notes?.includes('"status":"PENDING_DELIVERY"') && (
+                        <button
+                          type="button"
+                          onClick={() => setDeliverModalSale(s)}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#fef3c7',
+                            color: '#b45309',
+                            border: '1px solid #fde68a',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Deliver pending items to customer"
+                        >
+                          📦 Deliver
+                        </button>
+                      )}
                       <button
                         onClick={() => setSelectedSale(s)}
                         className="btn btn-outline btn-sm"
@@ -1103,6 +1461,8 @@ export const SalesListPage: React.FC = () => {
             </select>
           </div>
         </div>
+      )}
+        </>
       )}
 
       {/* Invoice Modal & Printable Document */}
@@ -1826,6 +2186,151 @@ export const SalesListPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleProcessSalesReturn}>
+              {/* Return Type Toggle: Standard Return vs Warranty Claim */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '10px',
+                marginBottom: '16px',
+                padding: '6px',
+                backgroundColor: '#f1f5f9',
+                borderRadius: '10px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setIsClaimReturn(false)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    backgroundColor: !isClaimReturn ? '#2563eb' : 'transparent',
+                    color: !isClaimReturn ? '#ffffff' : '#475569',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  🔄 Standard Return (عام کسٹمر واپسی)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsClaimReturn(true)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    backgroundColor: isClaimReturn ? '#7c3aed' : 'transparent',
+                    color: isClaimReturn ? '#ffffff' : '#475569',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  🛡️ Warranty Claim (وارنٹی / کلیم - خراب مال)
+                </button>
+              </div>
+
+              {/* Warranty Claim Specific Settings */}
+              {isClaimReturn && (
+                <div style={{
+                  backgroundColor: '#faf5ff',
+                  border: '1.5px solid #d8b4fe',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '16px'
+                }}>
+                  <div style={{ fontWeight: 800, color: '#6b21a8', fontSize: '0.86rem', marginBottom: '8px' }}>
+                    🛡️ کلیم سیٹلمنٹ کی قسم (Claim Resolution Option):
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setClaimResolution('REFUND')}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        backgroundColor: claimResolution === 'REFUND' ? '#9333ea' : '#ffffff',
+                        color: claimResolution === 'REFUND' ? '#ffffff' : '#6b21a8',
+                        borderColor: claimResolution === 'REFUND' ? '#9333ea' : '#d8b4fe'
+                      }}
+                    >
+                      💵 Refund / Credit Khata (پیسے واپس یا کھاتہ جمع)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClaimResolution('REPLACEMENT')}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        backgroundColor: claimResolution === 'REPLACEMENT' ? '#9333ea' : '#ffffff',
+                        color: claimResolution === 'REPLACEMENT' ? '#ffffff' : '#6b21a8',
+                        borderColor: claimResolution === 'REPLACEMENT' ? '#9333ea' : '#d8b4fe'
+                      }}
+                    >
+                      📦 Replacement Stock (نیا مال بدلے میں دینا)
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#6b21a8' }}>پروڈکٹ کی قسم:</span>
+                    <button
+                      type="button"
+                      onClick={() => setClaimCategory('NON_OIL')}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        backgroundColor: claimCategory === 'NON_OIL' ? '#6b21a8' : '#ffffff',
+                        color: claimCategory === 'NON_OIL' ? '#ffffff' : '#6b21a8',
+                        borderColor: '#6b21a8',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔧 فلٹر / پارٹس / دیگر
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClaimCategory('OIL')}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        backgroundColor: claimCategory === 'OIL' ? '#6b21a8' : '#ffffff',
+                        color: claimCategory === 'OIL' ? '#ffffff' : '#6b21a8',
+                        borderColor: '#6b21a8',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🧴 انجن آئل / لیوبریکنٹ
+                    </button>
+                  </div>
+
+                  {claimResolution === 'REPLACEMENT' ? (
+                    <div style={{ fontSize: '0.78rem', color: '#9333ea', backgroundColor: '#f3e8ff', padding: '8px', borderRadius: '6px' }}>
+                      ⚠️ <b>نیا مال بدلے میں دینے کی صورت:</b> گاہک کو فری فریش یونٹ دیا جائے گا۔ خراب مال قابل فروخت اسٹاک میں واپس نہیں جائے گا بلکہ "Warranty Claims & Defective Store" میں محفوظ ہوگا، اور بدلے میں دیے گئے نئے یونٹ کی لاگت (Purchase Cost) کمپنی کے کلیم لاس میں منہا ہوگی۔
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.78rem', color: '#9333ea', backgroundColor: '#f3e8ff', padding: '8px', borderRadius: '6px' }}>
+                      ℹ️ خراب مال وارنٹی کلیمز لسٹ میں الگ رہے گا، اور گاہک کو نقد ریفنڈ یا کھاتے میں کریڈٹ مل جائے گا۔
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Return Reason selection */}
               <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fef3c7', padding: '16px', borderRadius: '10px', marginBottom: '18px' }}>
                 <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 700, color: '#92400e', marginBottom: '6px' }}>
@@ -1953,12 +2458,215 @@ export const SalesListPage: React.FC = () => {
                   type="submit"
                   className="btn btn-primary"
                   disabled={processingReturn || calculateReturnTotal() === 0}
-                  style={{ backgroundColor: '#b45309', borderColor: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{
+                    backgroundColor: isClaimReturn ? '#7c3aed' : '#b45309',
+                    borderColor: isClaimReturn ? '#7c3aed' : '#b45309',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
                 >
-                  <RotateCcw size={16} /> {processingReturn ? 'Processing...' : 'Confirm Return & Restore Stock'}
+                  <RotateCcw size={16} />{' '}
+                  {processingReturn
+                    ? 'Processing...'
+                    : isClaimReturn
+                    ? (claimResolution === 'REPLACEMENT' ? '🛡️ Confirm Claim & Give Replacement Unit' : '🛡️ Confirm Claim Refund')
+                    : 'Confirm Return & Restore Stock'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 📦 DELIVER PENDING ITEMS MODAL */}
+      {deliverModalSale && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 120, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            width: '600px',
+            maxWidth: '95%',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div>
+                <span className="badge badge-warning" style={{ marginBottom: '4px' }}>Amanat / Pending Delivery</span>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  Handover Items for Invoice #{deliverModalSale.invoiceNumber}
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                  Customer: <b>{deliverModalSale.customer?.shopName}</b> (📞 {deliverModalSale.customer?.phone})
+                </p>
+              </div>
+              <button
+                onClick={() => setDeliverModalSale(null)}
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleDeliverPendingSale}>
+              <div style={{
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginBottom: '16px'
+              }}>
+                <div style={{ fontWeight: 800, color: '#92400e', fontSize: '0.86rem', marginBottom: '6px' }}>
+                  ⏳ Billed Items Pending Delivery:
+                </div>
+                {(() => {
+                  let pItems: any[] = [];
+                  try {
+                    const match = (deliverModalSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
+                    if (match) {
+                      const meta = JSON.parse(match[1]);
+                      pItems = (meta.items || []).filter((it: any) => it.status !== 'DELIVERED');
+                    }
+                  } catch (e) {}
+
+                  if (pItems.length === 0) {
+                    pItems = (deliverModalSale.items || []).map((it: any) => ({
+                      productName: it.product?.name || 'Product',
+                      quantity: it.quantity,
+                      unitType: it.unitType || 'SECONDARY',
+                    }));
+                  }
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {pItems.map((pi: any, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#0f172a', padding: '2px 0' }}>
+                          <span style={{ fontWeight: 600 }}>• {pi.productName}</span>
+                          <span style={{ fontWeight: 800, color: '#b45309' }}>
+                            {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                  Handover Notes / Received By (اختیاری تفصیل):
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Saman dukaan par bhaijiya / Driver ko hawale kiya"
+                  value={deliveryNotesInput}
+                  onChange={(e) => setDeliveryNotesInput(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setDeliverModalSale(null)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={deliveringProcessing}
+                  className="btn btn-success"
+                  style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  ✓ {deliveringProcessing ? 'Updating...' : 'Mark Handed Over (سب سامان دے دیا)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🛢️ DUMP IN LOOSE OIL DRUM MODAL */}
+      {selectedClaimForDump && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 130, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '16px',
+            width: '480px',
+            maxWidth: '95%',
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div>
+                <span className="badge badge-info" style={{ marginBottom: '4px' }}>Reclaimed Mixed Oil Drum</span>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  Dump Claimed Oil into Drum
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedClaimForDump(null)}
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div>
+              <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '14px' }}>
+                Yeh claimed / defective engine oil <b>Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل)</b> me shamil kar diya jaye ga aur POS billing screen par sab se upar frokht ke liye mojood hoga.
+              </p>
+
+              <div className="form-group" style={{ marginBottom: '18px' }}>
+                <label className="form-label" style={{ fontWeight: 800, fontSize: '0.85rem' }}>
+                  Liters to Dump into Drum (کتنے لیٹر ڈرم میں ڈالے؟):
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0.1"
+                  className="form-control"
+                  placeholder="e.g. 4 or 20"
+                  value={dumpLitersInput}
+                  onChange={(e) => setDumpLitersInput(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClaimForDump(null)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ltrs = parseFloat(dumpLitersInput) || undefined;
+                    handleClaimDisposition(selectedClaimForDump.id, 'DUMP_IN_DRUM', ltrs);
+                  }}
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: '#0f172a', fontWeight: 800 }}
+                >
+                  🛢️ Confirm Dump in Drum
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

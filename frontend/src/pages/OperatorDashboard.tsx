@@ -8,13 +8,41 @@ import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 export const OperatorDashboard: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<Sale[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const [pendingDeliveries, setPendingDeliveries] = useState<any[]>([]);
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingAlerts, setLoadingAlerts] = useState(true);
 
   useEffect(() => {
     fetchPendingOrders();
     fetchStockAlerts();
+    fetchPendingDeliveries();
   }, []);
+
+  const fetchPendingDeliveries = async () => {
+    try {
+      const res = await api.get('/sales/pending-deliveries');
+      if (res.data?.success) {
+        setPendingDeliveries(res.data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to load pending deliveries', e);
+    }
+  };
+
+  const handleDeliverNow = async (saleId: string) => {
+    if (!window.confirm('Kya yeh baqaya saman customer ko deliver kar diya gaya hai?')) return;
+    try {
+      setDeliveringId(saleId);
+      await api.post(`/sales/${saleId}/update-delivery`, { markAllDelivered: true });
+      setPendingDeliveries((prev) => prev.filter((d) => d.saleId !== saleId));
+      alert('✓ Delivery status updated to Delivered! Reminder alert cleared.');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update delivery');
+    } finally {
+      setDeliveringId(null);
+    }
+  };
 
   const fetchPendingOrders = async () => {
     try {
@@ -121,6 +149,134 @@ export const OperatorDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 📦 PENDING DELIVERY & AMANAT REMINDER SECTION (گاہکوں کا پینڈنگ سامان) */}
+      {pendingDeliveries.length > 0 && (
+        <div style={{
+          backgroundColor: '#eff6ff',
+          border: '1.5px solid #93c5fd',
+          borderRadius: '12px',
+          padding: '16px 18px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 10px rgba(37, 99, 235, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#dbeafe',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#1d4ed8'
+              }}>
+                <Clock size={18} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, color: '#1e3a8a', fontSize: '0.96rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Customer Pending Deliveries Reminder (گاہکوں کا پینڈنگ سامان / امانت الرٹ)</span>
+                  <span style={{ backgroundColor: '#2563eb', color: '#fff', fontSize: '0.72rem', padding: '1px 8px', borderRadius: '10px' }}>
+                    {pendingDeliveries.length} Pending
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#1e40af' }}>
+                  In invoices ka saman godown me pada hai aur customer ko dena baqi hai. Saman hawale karne par "Deliver Now" dabayein.
+                </div>
+              </div>
+            </div>
+            <Link to="/sales" className="btn btn-sm btn-outline" style={{ borderColor: '#93c5fd', color: '#1d4ed8', fontWeight: 700 }}>
+              Sales Register →
+            </Link>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
+            {pendingDeliveries.map((pd) => (
+              <div
+                key={pd.saleId}
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.88rem' }}>
+                        {pd.customer?.shopName || 'Customer'}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        📞 {pd.customer?.phone || 'No Phone'} {pd.customer?.area ? `• ${pd.customer.area}` : ''}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontFamily: 'monospace',
+                      fontWeight: 800,
+                      fontSize: '0.72rem',
+                      color: '#d97706',
+                      backgroundColor: '#fef3c7',
+                      padding: '2px 5px',
+                      borderRadius: '4px'
+                    }}>
+                      #{pd.invoiceNumber}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    margin: '6px 0',
+                    border: '1px dashed #cbd5e1',
+                    fontSize: '0.75rem'
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#475569', marginBottom: '3px', fontSize: '0.72rem' }}>
+                      ⏳ Pending Items:
+                    </div>
+                    {pd.pendingItems.map((pi: any, piIdx: number) => (
+                      <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
+                        <span>• {pi.productName}</span>
+                        <span style={{ fontWeight: 700, color: '#d97706' }}>
+                          {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #f1f5f9' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                    {new Date(pd.saleDate).toLocaleDateString()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeliverNow(pd.saleId)}
+                    disabled={deliveringId === pd.saleId}
+                    style={{
+                      backgroundColor: '#16a34a',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✓ {deliveringId === pd.saleId ? 'Saving...' : 'Deliver Now (سامان دے دیا)'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* MINIMUM STOCK ALERT TABLE SECTION */}
       {lowStockProducts.length > 0 && (
