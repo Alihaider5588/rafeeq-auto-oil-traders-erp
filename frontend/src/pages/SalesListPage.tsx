@@ -1581,7 +1581,7 @@ export const SalesListPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 100,
+          zIndex: 9999,
           padding: '20px'
         }}>
           <div style={{
@@ -1813,7 +1813,7 @@ export const SalesListPage: React.FC = () => {
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: '20px'
+          zIndex: 9999, padding: '20px'
         }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '16px', width: '750px', maxWidth: '95%', maxHeight: '88vh', overflowY: 'auto', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -2015,7 +2015,7 @@ export const SalesListPage: React.FC = () => {
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 110, padding: '20px'
+          zIndex: 9999, padding: '20px'
         }}>
           <div style={{
             backgroundColor: '#fff',
@@ -2277,7 +2277,7 @@ export const SalesListPage: React.FC = () => {
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 110, padding: '20px'
+          zIndex: 9999, padding: '20px'
         }}>
           <div style={{
             backgroundColor: '#fff',
@@ -2608,7 +2608,7 @@ export const SalesListPage: React.FC = () => {
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.65)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 120, padding: '20px'
+          zIndex: 9999, padding: '20px'
         }}>
           <div style={{
             backgroundColor: '#fff',
@@ -2722,7 +2722,7 @@ export const SalesListPage: React.FC = () => {
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.65)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 130, padding: '20px'
+          zIndex: 9999, padding: '20px'
         }}>
           <div style={{
             backgroundColor: '#fff',

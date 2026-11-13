@@ -540,10 +540,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </header>
 
         {/* Dynamic Page Content with Aesthetic Entrance Transition */}
-        <main className="content-body">
-          <div key={location.pathname} className="aesthetic-page-transition">
-            {children}
-          </div>
+        <main key={location.pathname} className="content-body aesthetic-page-transition">
+          {children}
         </main>
       </div>
 

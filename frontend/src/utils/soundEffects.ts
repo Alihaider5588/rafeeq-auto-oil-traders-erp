@@ -263,43 +263,54 @@ export const playSuccessSound = (): void => {
 export const initGlobalAudioListeners = (): void => {
   if (typeof window === 'undefined') return;
 
-  // Intercept window.print to guarantee authentic print sound everywhere
-  const originalPrint = window.print;
-  window.print = function (...args: any[]) {
-    try {
-      playPrintSound();
-    } catch { }
-    return originalPrint.apply(this, args as any);
-  };
+  // Safely hook window.print to play authentic receipt print sound
+  try {
+    if (typeof window.print === 'function') {
+      const nativePrint = window.print.bind(window);
+      window.print = function () {
+        try {
+          playPrintSound();
+        } catch {}
+        return nativePrint();
+      };
+    }
+  } catch (err) {
+    console.debug('Failed to wrap window.print', err);
+  }
 
   // Delegated click listener on document
   document.addEventListener(
     'click',
     (e) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
+      try {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
 
-      // Check if target or parent is a clickable element
-      const clickable = target.closest('button, a, select, [role="tab"], .btn, input[type="button"], input[type="submit"]');
-      if (!clickable) return;
+        // Check if target or parent is a clickable element
+        const clickable = target.closest('button, a, select, [role="tab"], .btn, input[type="button"], input[type="submit"]');
+        if (!clickable) return;
 
-      // Check if this action is a print trigger
-      const text = (clickable.textContent || '').toLowerCase();
-      const title = (clickable.getAttribute('title') || '').toLowerCase();
-      const isPrint = text.includes('print') || title.includes('print') || text.includes('پرنٹ') || clickable.classList.contains('print-btn');
+        // Check if this action is a print trigger
+        const text = (clickable.textContent || '').toLowerCase();
+        const title = (clickable.getAttribute('title') || '').toLowerCase();
+        const isPrint = text.includes('print') || title.includes('print') || text.includes('پرنٹ') || clickable.classList.contains('print-btn');
 
-      if (isPrint) {
-        playPrintSound();
-      } else {
-        // Check if it's a tab or sidebar link
-        const isTab = clickable.closest('.sidebar nav') || clickable.getAttribute('role') === 'tab' || clickable.classList.contains('tab');
-        if (isTab) {
-          playTabSound();
+        if (isPrint) {
+          playPrintSound();
         } else {
-          playClickSound();
+          // Check if it's a tab or sidebar link
+          const isTab = clickable.closest('.sidebar nav') || clickable.getAttribute('role') === 'tab' || clickable.classList.contains('tab');
+          if (isTab) {
+            playTabSound();
+          } else {
+            playClickSound();
+          }
         }
+      } catch (e) {
+        console.debug('Audio click handler error:', e);
       }
     },
     { passive: true }
   );
 };
+
