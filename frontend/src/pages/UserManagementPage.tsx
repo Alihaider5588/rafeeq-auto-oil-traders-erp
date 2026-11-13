@@ -105,6 +105,28 @@ export const PERMISSION_MODULES: TabPermissionModule[] = [
     labelUrdu: 'پروڈکٹ کیٹلاگ و بروشر (View Only)',
     category: 'Inventory & Catalog',
   },
+  {
+    path: '/reclaimed-drum',
+    labelEn: 'Reclaimed Loose Oil Drum',
+    labelUrdu: 'ڈرم کا کھلا آئل و ریٹ مینجمنٹ',
+    category: 'Inventory & Catalog',
+    editAction: {
+      key: 'action:edit_drum_rate',
+      label: 'Update Drum Rates',
+      desc: 'Allow updating retail and wholesale selling rate per liter.',
+    },
+  },
+  {
+    path: '/claims',
+    labelEn: 'Warranty Claims & Defective Store',
+    labelUrdu: 'وارنٹی کلیمز اور نقص شدہ مال کا اسٹور',
+    category: 'Inventory & Catalog',
+    editAction: {
+      key: 'action:manage_claims',
+      label: 'Manage Claim Dispositions',
+      desc: 'Allow resolving claims, dumping oil into drum, and sending to vendors.',
+    },
+  },
 
   // 3. CRM & Accounts
   {

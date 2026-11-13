@@ -35,7 +35,7 @@ const saleSchema = z.object({
 
 export const getSales = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { customerId, salesmanId, status, startDate, endDate, saleType, search, page = '1', limit = '50' } = req.query;
+    const { customerId, salesmanId, status, startDate, endDate, saleType, search, page = '1', limit = '50', pendingDelivery } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
     const limitNum = Math.min(500, Math.max(1, parseInt(limit as string, 10) || 50));
     const skip = (pageNum - 1) * limitNum;
@@ -49,7 +49,33 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
     }
 
     if (customerId) where.customerId = customerId as string;
-    if (saleType) where.saleType = saleType as string;
+
+    // Filter by saleType and Counter/Van Cash vs Credit breakdown
+    if (saleType === 'COUNTER') {
+      where.saleType = 'COUNTER';
+    } else if (saleType === 'VAN') {
+      where.saleType = { not: 'COUNTER' };
+    } else if (saleType === 'COUNTER_CASH') {
+      where.saleType = 'COUNTER';
+      where.remainingBalance = { lte: 0 };
+    } else if (saleType === 'COUNTER_CREDIT') {
+      where.saleType = 'COUNTER';
+      where.remainingBalance = { gt: 0 };
+    } else if (saleType === 'VAN_CASH') {
+      where.saleType = { not: 'COUNTER' };
+      where.remainingBalance = { lte: 0 };
+    } else if (saleType === 'VAN_CREDIT') {
+      where.saleType = { not: 'COUNTER' };
+      where.remainingBalance = { gt: 0 };
+    } else if (saleType) {
+      where.saleType = saleType as string;
+    }
+
+    // Pending delivery orders filter (امانت / بعد میں سامان وصولی)
+    if (pendingDelivery === 'true' || pendingDelivery === '1') {
+      where.notes = { contains: 'PENDING_DELIVERY' };
+    }
+
     if (status) where.status = status as string;
     if (startDate || endDate) {
       where.saleDate = {
@@ -75,7 +101,22 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
       baseWhere.salesmanId = salesmanId as string;
     }
 
-    const [total, sales, totalAll, totalCounter, totalVan] = await Promise.all([
+    const [
+      total,
+      sales,
+      totalAll,
+      totalCounter,
+      totalVan,
+      totalCounterCash,
+      totalCounterCredit,
+      totalVanCash,
+      totalVanCredit,
+      totalPendingDelivery,
+      aggCounterCash,
+      aggCounterCredit,
+      aggVanCash,
+      aggVanCredit,
+    ] = await Promise.all([
       prisma.sale.count({ where }),
       prisma.sale.findMany({
         where,
@@ -106,6 +147,27 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
       prisma.sale.count({ where: baseWhere }),
       prisma.sale.count({ where: { ...baseWhere, saleType: 'COUNTER' } }),
       prisma.sale.count({ where: { ...baseWhere, saleType: { not: 'COUNTER' } } }),
+      prisma.sale.count({ where: { ...baseWhere, saleType: 'COUNTER', remainingBalance: { lte: 0 } } }),
+      prisma.sale.count({ where: { ...baseWhere, saleType: 'COUNTER', remainingBalance: { gt: 0 } } }),
+      prisma.sale.count({ where: { ...baseWhere, saleType: { not: 'COUNTER' }, remainingBalance: { lte: 0 } } }),
+      prisma.sale.count({ where: { ...baseWhere, saleType: { not: 'COUNTER' }, remainingBalance: { gt: 0 } } }),
+      prisma.sale.count({ where: { ...baseWhere, notes: { contains: 'PENDING_DELIVERY' } } }),
+      prisma.sale.aggregate({
+        _sum: { netAmount: true, receivedAmount: true },
+        where: { ...baseWhere, saleType: 'COUNTER', remainingBalance: { lte: 0 } },
+      }),
+      prisma.sale.aggregate({
+        _sum: { netAmount: true, remainingBalance: true },
+        where: { ...baseWhere, saleType: 'COUNTER', remainingBalance: { gt: 0 } },
+      }),
+      prisma.sale.aggregate({
+        _sum: { netAmount: true, receivedAmount: true },
+        where: { ...baseWhere, saleType: { not: 'COUNTER' }, remainingBalance: { lte: 0 } },
+      }),
+      prisma.sale.aggregate({
+        _sum: { netAmount: true, remainingBalance: true },
+        where: { ...baseWhere, saleType: { not: 'COUNTER' }, remainingBalance: { gt: 0 } },
+      }),
     ]);
 
     res.setHeader('Cache-Control', 'private, max-age=5, stale-while-revalidate=15');
@@ -122,6 +184,15 @@ export const getSales = async (req: AuthenticatedRequest, res: Response): Promis
         all: totalAll,
         counter: totalCounter,
         van: totalVan,
+        counterCash: totalCounterCash,
+        counterCredit: totalCounterCredit,
+        vanCash: totalVanCash,
+        vanCredit: totalVanCredit,
+        pendingDelivery: totalPendingDelivery,
+        counterCashTotal: Number(aggCounterCash._sum.receivedAmount || 0),
+        counterCreditTotal: Number(aggCounterCredit._sum.remainingBalance || 0),
+        vanCashTotal: Number(aggVanCash._sum.receivedAmount || 0),
+        vanCreditTotal: Number(aggVanCredit._sum.remainingBalance || 0),
       },
     });
   } catch (error) {
@@ -1833,6 +1904,63 @@ export const updateReclaimedDrumRate = async (req: AuthenticatedRequest, res: Re
   }
 };
 
+export const dumpOilIntoReclaimedDrum = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { liters, notes } = req.body;
+    const ltrNum = parseFloat(String(liters));
+    if (isNaN(ltrNum) || ltrNum <= 0) {
+      res.status(400).json({ success: false, message: 'Valid oil liters quantity is required' });
+      return;
+    }
+
+    const drum = await ensureReclaimedDrumProduct();
+    if (!drum) {
+      res.status(404).json({ success: false, message: 'Reclaimed oil drum product not found' });
+      return;
+    }
+
+    const curStock = Number(drum.currentStock);
+    const newStock = curStock + ltrNum;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id: drum.id },
+        data: { currentStock: new Prisma.Decimal(newStock) },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId: drum.id,
+          movementType: MovementType.PURCHASE,
+          quantity: new Prisma.Decimal(ltrNum),
+          previousStock: new Prisma.Decimal(curStock),
+          newStock: new Prisma.Decimal(newStock),
+          description: `Manual loose oil dumped into drum: ${ltrNum} Liters. Note: ${notes || 'Shop dump'}`,
+        },
+      });
+    });
+
+    await logAudit({
+      userId: req.user?.id,
+      action: 'RECLAIMED_DRUM_DUMP',
+      entityType: 'PRODUCT',
+      entityId: drum.id,
+      details: { litersAdded: ltrNum, previousStock: curStock, newStock, notes },
+      ipAddress: req.ip,
+    });
+
+    clearProductsCache();
+    res.json({
+      success: true,
+      message: `${ltrNum} Liters oil kamyabi se Reclaimed Drum me shamil ho gaya!`,
+      currentStock: newStock,
+    });
+  } catch (error: any) {
+    console.error('dumpOilIntoReclaimedDrum error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to dump oil into drum' });
+  }
+};
+
 // ============================================================================
 // PENDING / PARTIAL DELIVERY TRACKING (امانت و بعد میں سامان کی حوالگی)
 // ============================================================================
@@ -1862,7 +1990,7 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
         try {
           const match = (sale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
           if (match) meta = JSON.parse(match[1]);
-        } catch (e) {}
+        } catch (e) { }
 
         const pendingItems = (meta?.items || sale.items || []).filter((it: any) => it.status !== 'DELIVERED');
 
@@ -1923,7 +2051,7 @@ export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Respo
     if (match) {
       try {
         meta = JSON.parse(match[1]);
-      } catch (e) {}
+      } catch (e) { }
     } else {
       meta.items = sale.items.map((it) => ({
         productId: it.productId,
@@ -2025,7 +2153,7 @@ export const getClaimsList = async (req: AuthenticatedRequest, res: Response): P
       try {
         const match = (ret.reason || '').match(/\[CLAIM_META:(.*?)\]/);
         if (match) meta = JSON.parse(match[1]);
-      } catch (e) {}
+      } catch (e) { }
 
       const loss = Number(meta.lossAmount || 0);
       totalClaimLoss += loss;
@@ -2099,7 +2227,7 @@ export const updateClaimDisposition = async (req: AuthenticatedRequest, res: Res
     if (match) {
       try {
         meta = JSON.parse(match[1]);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const effectiveDate = new Date();
@@ -2151,9 +2279,9 @@ export const updateClaimDisposition = async (req: AuthenticatedRequest, res: Res
         const litersToAdd = dumpLiters && Number(dumpLiters) > 0
           ? Number(dumpLiters)
           : sReturn.items.reduce((sum, it) => {
-              const conv = Number(it.product.conversionFactor || 1);
-              return sum + (Number(it.quantity) * conv);
-            }, 0);
+            const conv = Number(it.product.conversionFactor || 1);
+            return sum + (Number(it.quantity) * conv);
+          }, 0);
 
         const curDrumStock = Number(drum.currentStock);
         const newDrumStock = curDrumStock + litersToAdd;

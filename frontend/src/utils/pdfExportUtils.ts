@@ -900,3 +900,71 @@ export const exportEmployeesPDF = (employees: any[], subtitle: string = 'Staff D
   doc.save(`Staff_Directory_${new Date().toISOString().slice(0, 10)}.pdf`);
 };
 
+// ============================================================================
+// 11. WARRANTY CLAIMS & DEFECTIVE STORE PDF
+// ============================================================================
+export const exportWarrantyClaimsPDF = (claims: any[], subtitle: string = 'Warranty Claims Register') => {
+  if (!claims || claims.length === 0) {
+    alert('Koi warranty claim data mojood nahi hai.');
+    return;
+  }
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  drawCompanyBanner(doc, 'Warranty Claims & Defective Store Register', subtitle);
+
+  let totalLoss = 0;
+  const tableData = claims.map((c, idx) => {
+    const loss = Number(c.lossAmount || 0);
+    totalLoss += loss;
+    const itemsStr = c.items?.map((it: any) => `${it.productName} (${it.quantity} ${it.unitSymbol || ''})`).join(', ') || '-';
+    return [
+      idx + 1,
+      c.returnNumber || '---',
+      new Date(c.returnDate).toLocaleDateString(),
+      c.customer?.shopName || 'Customer',
+      c.originalInvoice || '-',
+      itemsStr,
+      c.claimCategory || 'NON_OIL',
+      c.resolution || 'REPLACEMENT',
+      c.claimStatus || 'IN_QUARANTINE',
+      loss > 0 ? `Rs. ${loss.toLocaleString()}` : 'Rs. 0',
+    ];
+  });
+
+  tableData.push([
+    '',
+    'TOTAL',
+    `${claims.length} Claims`,
+    '',
+    '',
+    '',
+    '',
+    '',
+    'Total Loss:',
+    `Rs. ${totalLoss.toLocaleString()}`,
+  ]);
+
+  autoTable(doc, {
+    startY: 32,
+    head: [['#', 'Claim #', 'Date', 'Customer / Shop', 'Original Inv', 'Claimed Item & Qty', 'Category', 'Resolution', 'Status', 'Loss (Rs)']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: [124, 58, 237], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    styles: { fontSize: 7.5, cellPadding: 2, font: 'helvetica' },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 26, fontStyle: 'bold' },
+      9: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] },
+    },
+    didParseCell: (data) => {
+      if (data.row.index === tableData.length - 1) {
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fillColor = [243, 232, 255];
+      }
+    },
+  });
+
+  drawFooter(doc);
+  doc.save(`Warranty_Claims_${new Date().toISOString().slice(0, 10)}.pdf`);
+};
+

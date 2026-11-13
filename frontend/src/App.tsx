@@ -37,6 +37,8 @@ const ExpensesPage = lazyNamed(() => import('./pages/ExpensesPage'), 'ExpensesPa
 const EmployeesPage = lazyNamed(() => import('./pages/EmployeesPage'), 'EmployeesPage');
 const WebOrdersQueuePage = lazyNamed(() => import('./pages/WebOrdersQueuePage'), 'WebOrdersQueuePage');
 const UtilitiesPage = lazyNamed(() => import('./pages/UtilitiesPage'), 'UtilitiesPage');
+const ReclaimedDrumPage = lazyNamed(() => import('./pages/ReclaimedDrumPage'), 'ReclaimedDrumPage');
+const WarrantyClaimsPage = lazyNamed(() => import('./pages/WarrantyClaimsPage'), 'WarrantyClaimsPage');
 
 // Public Website Pages
 const HomePage = lazyNamed(() => import('./pages/public/HomePage'), 'HomePage');
@@ -215,6 +217,22 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']} path="/sales">
                 <SalesListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reclaimed-drum"
+            element={
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER', 'SALESMAN']} path="/reclaimed-drum">
+                <ReclaimedDrumPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/claims"
+            element={
+              <ProtectedRoute roles={['ADMIN', 'OPERATOR', 'CASHIER']} path="/claims">
+                <WarrantyClaimsPage />
               </ProtectedRoute>
             }
           />

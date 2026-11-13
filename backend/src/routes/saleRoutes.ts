@@ -16,6 +16,7 @@ import {
   updateClaimDisposition,
   getReclaimedOilDrum,
   updateReclaimedDrumRate,
+  dumpOilIntoReclaimedDrum,
 } from '../controllers/saleController';
 import {
   getWebOrdersQueue,
@@ -47,6 +48,7 @@ router.post('/:id/update-delivery', updateDeliveryStatus);
 // Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل)
 router.get('/reclaimed-drum', getReclaimedOilDrum);
 router.post('/reclaimed-drum/rate', authorize([Role.ADMIN, Role.OPERATOR]), updateReclaimedDrumRate);
+router.post('/reclaimed-drum/dump', authorize([Role.ADMIN, Role.OPERATOR]), dumpOilIntoReclaimedDrum);
 
 // Warranty Claims & Defective Store (وارنٹی کلیمز و خراب اسٹاک)
 router.get('/claims', getClaimsList);

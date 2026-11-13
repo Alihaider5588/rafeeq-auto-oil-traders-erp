@@ -32,10 +32,33 @@ export const SalesListPage: React.FC = () => {
   const [limit, setLimit] = useState<number>(50);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalCount, setTotalCount] = useState<number>(0);
-  const [counts, setCounts] = useState<{ all: number; counter: number; van: number }>({
+  const [filterPendingDelivery, setFilterPendingDelivery] = useState<boolean>(false);
+  const [counts, setCounts] = useState<{
+    all: number;
+    counter: number;
+    van: number;
+    counterCash: number;
+    counterCredit: number;
+    vanCash: number;
+    vanCredit: number;
+    pendingDelivery: number;
+    counterCashTotal: number;
+    counterCreditTotal: number;
+    vanCashTotal: number;
+    vanCreditTotal: number;
+  }>({
     all: 0,
     counter: 0,
     van: 0,
+    counterCash: 0,
+    counterCredit: 0,
+    vanCash: 0,
+    vanCredit: 0,
+    pendingDelivery: 0,
+    counterCashTotal: 0,
+    counterCreditTotal: 0,
+    vanCashTotal: 0,
+    vanCreditTotal: 0,
   });
   const isInitialMount = useRef(true);
 
@@ -130,7 +153,7 @@ export const SalesListPage: React.FC = () => {
     }
     const timer = setTimeout(() => {
       setCurrentPage(1);
-      fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, endDate);
+      fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, endDate, filterPendingDelivery);
     }, 400);
     return () => clearTimeout(timer);
   }, [search, startDate, endDate]);
@@ -153,7 +176,8 @@ export const SalesListPage: React.FC = () => {
     targetSaleType: string = filterSaleType,
     targetStatus: string = filterStatus,
     targetStartDate: string = startDate,
-    targetEndDate: string = endDate
+    targetEndDate: string = endDate,
+    targetPendingDelivery: boolean = filterPendingDelivery
   ) => {
     try {
       setLoading(true);
@@ -166,6 +190,7 @@ export const SalesListPage: React.FC = () => {
       if (targetStatus) params.status = targetStatus;
       if (targetStartDate) params.startDate = targetStartDate;
       if (targetEndDate) params.endDate = targetEndDate;
+      if (targetPendingDelivery) params.pendingDelivery = 'true';
 
       const res = await api.get('/sales', { params });
       const saleList = res.data?.data || [];
@@ -183,12 +208,6 @@ export const SalesListPage: React.FC = () => {
 
       if (res.data?.counts) {
         setCounts(res.data.counts);
-      } else {
-        setCounts({
-          all: res.data?.pagination?.total || saleList.length,
-          counter: saleList.filter((s: any) => s.saleType === 'COUNTER').length,
-          van: saleList.filter((s: any) => s.saleType !== 'COUNTER').length,
-        });
       }
     } catch (e) {
       console.error('Failed to load sales invoices:', e);
@@ -527,27 +546,38 @@ export const SalesListPage: React.FC = () => {
 
   const handleFilterSaleTypeChange = (newType: string) => {
     setFilterSaleType(newType);
+    setFilterPendingDelivery(false);
     setCurrentPage(1);
-    fetchSales(1, limit, search, newType, filterStatus);
+    fetchSales(1, limit, search, newType, filterStatus, startDate, endDate, false);
+  };
+
+  const handleTogglePendingDelivery = () => {
+    const nextPending = !filterPendingDelivery;
+    setFilterPendingDelivery(nextPending);
+    if (nextPending) {
+      setFilterSaleType('');
+    }
+    setCurrentPage(1);
+    fetchSales(1, limit, search, nextPending ? '' : filterSaleType, filterStatus, startDate, endDate, nextPending);
   };
 
   const handleFilterStatusChange = (newStatus: string) => {
     setFilterStatus(newStatus);
     setCurrentPage(1);
-    fetchSales(1, limit, search, filterSaleType, newStatus);
+    fetchSales(1, limit, search, filterSaleType, newStatus, startDate, endDate, filterPendingDelivery);
   };
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
     setCurrentPage(newPage);
-    fetchSales(newPage, limit, search, filterSaleType, filterStatus);
+    fetchSales(newPage, limit, search, filterSaleType, filterStatus, startDate, endDate, filterPendingDelivery);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleLimitChange = (newLimit: number) => {
     setLimit(newLimit);
     setCurrentPage(1);
-    fetchSales(1, newLimit, search, filterSaleType, filterStatus);
+    fetchSales(1, newLimit, search, filterSaleType, filterStatus, startDate, endDate, filterPendingDelivery);
   };
 
   const getPageNumbers = () => {
@@ -565,7 +595,9 @@ export const SalesListPage: React.FC = () => {
     return pages;
   };
 
-  const filteredSales = sales;
+  const filteredSales = filterPendingDelivery
+    ? sales.filter(s => s.notes?.includes('PENDING_DELIVERY'))
+    : sales;
 
   return (
     <div>
@@ -659,7 +691,7 @@ export const SalesListPage: React.FC = () => {
 
       {/* Filter and Search Bar */}
       <div className="card" style={{ marginBottom: '20px', padding: '16px' }}>
-        {/* Quick Filter Buttons for Counter vs Van Sales */}
+        {/* Quick Filter Buttons for Counter vs Van Sales & Cash/Credit Breakdown */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginRight: '4px' }}>
             Filter Sales:
@@ -667,26 +699,63 @@ export const SalesListPage: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterSaleTypeChange('')}
-            className={`btn btn-sm ${filterSaleType === '' ? 'btn-primary' : 'btn-outline'}`}
+            className={`btn btn-sm ${filterSaleType === '' && !filterPendingDelivery ? 'btn-primary' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
           >
             📋 All Sales ({counts.all})
           </button>
           <button
             type="button"
-            onClick={() => handleFilterSaleTypeChange('COUNTER')}
-            className={`btn btn-sm ${filterSaleType === 'COUNTER' ? 'btn-success' : 'btn-outline'}`}
+            onClick={() => handleFilterSaleTypeChange('COUNTER_CASH')}
+            className={`btn btn-sm ${filterSaleType === 'COUNTER_CASH' && !filterPendingDelivery ? 'btn-success' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+            title="Counter Cash Sales (Full Paid)"
           >
-            🏪 Counter Sales ({counts.counter})
+            🏪 Counter Cash ({counts.counterCash} | Rs. {Number(counts.counterCashTotal || 0).toLocaleString()})
           </button>
           <button
             type="button"
-            onClick={() => handleFilterSaleTypeChange('VAN')}
-            className={`btn btn-sm ${filterSaleType === 'VAN' && activeViewTab === 'SALES' ? 'btn-info' : 'btn-outline'}`}
+            onClick={() => handleFilterSaleTypeChange('COUNTER_CREDIT')}
+            className={`btn btn-sm ${filterSaleType === 'COUNTER_CREDIT' && !filterPendingDelivery ? 'btn-warning' : 'btn-outline'}`}
             style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+            title="Counter Credit Sales (Udhar Remaining)"
           >
-            🚐 Van Sales ({counts.van})
+            🏪 Counter Udhar ({counts.counterCredit} | Rs. {Number(counts.counterCreditTotal || 0).toLocaleString()})
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFilterSaleTypeChange('VAN_CASH')}
+            className={`btn btn-sm ${filterSaleType === 'VAN_CASH' && !filterPendingDelivery ? 'btn-info' : 'btn-outline'}`}
+            style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+            title="Van Cash Sales (Full Paid)"
+          >
+            🚐 Van Cash ({counts.vanCash} | Rs. {Number(counts.vanCashTotal || 0).toLocaleString()})
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFilterSaleTypeChange('VAN_CREDIT')}
+            className={`btn btn-sm ${filterSaleType === 'VAN_CREDIT' && !filterPendingDelivery ? 'btn-secondary' : 'btn-outline'}`}
+            style={{ fontWeight: 700, borderRadius: '20px', padding: '5px 14px' }}
+            title="Van Credit Sales (Udhar Remaining)"
+          >
+            🚐 Van Udhar ({counts.vanCredit} | Rs. {Number(counts.vanCreditTotal || 0).toLocaleString()})
+          </button>
+          <button
+            type="button"
+            onClick={handleTogglePendingDelivery}
+            className={`btn btn-sm ${filterPendingDelivery ? 'btn-warning' : 'btn-outline'}`}
+            style={{
+              fontWeight: 800,
+              borderRadius: '20px',
+              padding: '5px 14px',
+              backgroundColor: filterPendingDelivery ? '#f59e0b' : '#fffbeb',
+              color: filterPendingDelivery ? '#ffffff' : '#b45309',
+              borderColor: '#f59e0b',
+              boxShadow: filterPendingDelivery ? '0 2px 6px rgba(245, 158, 11, 0.3)' : 'none'
+            }}
+            title="Show only orders with pending delivery items (صرف پینڈنگ ڈلیوری والے بل دکھائیں)"
+          >
+            ⏳ Pending Delivery Only ({counts.pendingDelivery})
           </button>
           <button
             type="button"
@@ -711,7 +780,7 @@ export const SalesListPage: React.FC = () => {
               gap: '6px'
             }}
           >
-            🛡️ Warranty Claims & Defective Store
+            🛡️ Claims Store
           </button>
         </div>
 
@@ -730,7 +799,7 @@ export const SalesListPage: React.FC = () => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     setCurrentPage(1);
-                    fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, endDate);
+                    fetchSales(1, limit, search, filterSaleType, filterStatus, startDate, endDate, filterPendingDelivery);
                   }
                 }}
                 style={{ paddingLeft: '32px', paddingRight: search ? '30px' : '10px', height: '38px', fontSize: '0.85rem' }}
@@ -741,7 +810,7 @@ export const SalesListPage: React.FC = () => {
                   onClick={() => {
                     setSearch('');
                     setCurrentPage(1);
-                    fetchSales(1, limit, '', filterSaleType, filterStatus, startDate, endDate);
+                    fetchSales(1, limit, '', filterSaleType, filterStatus, startDate, endDate, filterPendingDelivery);
                   }}
                   style={{
                     position: 'absolute',
@@ -765,13 +834,28 @@ export const SalesListPage: React.FC = () => {
 
             <select
               className="form-control"
-              value={filterSaleType}
-              onChange={(e) => handleFilterSaleTypeChange(e.target.value)}
-              style={{ width: 'auto', minWidth: '150px', height: '38px', fontSize: '0.85rem' }}
+              value={filterPendingDelivery ? 'PENDING_ONLY' : filterSaleType}
+              onChange={(e) => {
+                if (e.target.value === 'PENDING_ONLY') {
+                  setFilterPendingDelivery(true);
+                  setFilterSaleType('');
+                  setCurrentPage(1);
+                  fetchSales(1, limit, search, '', filterStatus, startDate, endDate, true);
+                } else {
+                  setFilterPendingDelivery(false);
+                  handleFilterSaleTypeChange(e.target.value);
+                }
+              }}
+              style={{ width: 'auto', minWidth: '165px', height: '38px', fontSize: '0.85rem' }}
             >
-              <option value="">All Types (Sab)</option>
-              <option value="COUNTER">🏪 Counter Sales</option>
-              <option value="VAN">🚐 Van Sales</option>
+              <option value="">All Types (تمام بل)</option>
+              <option value="COUNTER_CASH">🏪 Counter Cash (نقد کاؤنٹر)</option>
+              <option value="COUNTER_CREDIT">🏪 Counter Udhar (ادھار کاؤنٹر)</option>
+              <option value="VAN_CASH">🚐 Van Cash (نقد وین)</option>
+              <option value="VAN_CREDIT">🚐 Van Udhar (ادھار وین)</option>
+              <option value="COUNTER">🏪 All Counter Sales (تمام کاؤنٹر)</option>
+              <option value="VAN">🚐 All Van Sales (تمام وین)</option>
+              <option value="PENDING_ONLY">⏳ Pending Delivery Only (صرف امانت بل)</option>
             </select>
 
             <select
@@ -817,17 +901,18 @@ export const SalesListPage: React.FC = () => {
               />
             </div>
 
-            {(search || filterSaleType || filterStatus || startDate || endDate) && (
+            {(search || filterSaleType || filterStatus || startDate || endDate || filterPendingDelivery) && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch('');
                   setFilterSaleType('');
+                  setFilterPendingDelivery(false);
                   setFilterStatus('');
                   setStartDate('');
                   setEndDate('');
                   setCurrentPage(1);
-                  fetchSales(1, limit, '', '', '', '', '');
+                  fetchSales(1, limit, '', '', '', '', '', false);
                 }}
                 className="btn btn-outline btn-sm"
                 style={{ height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
@@ -837,7 +922,7 @@ export const SalesListPage: React.FC = () => {
             )}
 
             <button
-              onClick={() => fetchSales(currentPage, limit, search, filterSaleType, filterStatus, startDate, endDate)}
+              onClick={() => fetchSales(currentPage, limit, search, filterSaleType, filterStatus, startDate, endDate, filterPendingDelivery)}
               className="btn btn-secondary"
               title="Refresh Invoices"
               disabled={loading}
@@ -1111,7 +1196,24 @@ export const SalesListPage: React.FC = () => {
               filteredSales.map((s) => (
                 <tr key={s.id} style={{ opacity: s.status === 'CANCELLED' ? 0.6 : 1 }}>
                   <td className="font-mono" style={{ fontWeight: 700, color: s.status === 'CANCELLED' ? '#94a3b8' : '#d97706' }}>
-                    {s.invoiceNumber}
+                    <div>{s.invoiceNumber}</div>
+                    {s.notes?.includes('PENDING_DELIVERY') && (
+                      <div style={{ marginTop: '2px' }}>
+                        <span style={{
+                          backgroundColor: '#fffbeb',
+                          color: '#b45309',
+                          border: '1px solid #fde68a',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          fontSize: '0.65rem',
+                          fontWeight: 800,
+                          whiteSpace: 'nowrap',
+                          display: 'inline-block'
+                        }}>
+                          ⚠️ Pending Order
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{new Date(s.saleDate).toLocaleDateString()}</div>
@@ -1563,6 +1665,24 @@ export const SalesListPage: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
                   <span><b>TYPE:</b> <b>{selectedSale.saleType === 'COUNTER' ? 'COUNTER SALE (SHOP)' : 'VAN SALE (FIELD)'}</b></span>
                 </div>
+                {selectedSale.notes?.includes('"status":"PENDING_DELIVERY"') && (
+                  <div style={{
+                    marginTop: '6px',
+                    padding: '5px 8px',
+                    backgroundColor: '#fffbeb',
+                    border: '1.5px dashed #b45309',
+                    borderRadius: '4px',
+                    textAlign: 'center',
+                    fontWeight: 900,
+                    fontSize: '11px',
+                    color: '#b45309'
+                  }}>
+                    ⚠️ ORDER PENDING (امانت / ڈلیوری باقی ہے)
+                    <div style={{ fontSize: '9px', fontWeight: 600, marginTop: '2px', color: '#78350f' }}>
+                      Status: Delivery Pending (بعد میں سامان وصولی)
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Items List */}

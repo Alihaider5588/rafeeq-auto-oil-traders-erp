@@ -217,6 +217,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </NavLink>
           )}
 
+          {/* Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل) */}
+          {canAccessTab('/reclaimed-drum', ['ADMIN', 'OPERATOR', 'CASHIER', 'SALESMAN']) && (
+            <NavLink to="/reclaimed-drum" style={navItemStyle}>
+              <Droplet size={18} /> Khula Oil Drum (ڈرم)
+            </NavLink>
+          )}
+
+          {/* Warranty Claims & Defective Store (وارنٹی کلیمز) */}
+          {canAccessTab('/claims', ['ADMIN', 'OPERATOR', 'CASHIER']) && (
+            <NavLink to="/claims" style={navItemStyle}>
+              <ShieldAlert size={18} /> Warranty Claims (کلیمز)
+            </NavLink>
+          )}
+
           {/* Web Orders Queue */}
           {canAccessTab('/web-orders', ['ADMIN', 'OPERATOR']) && (
             <NavLink to="/web-orders" style={navItemStyle}>
