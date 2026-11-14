@@ -56,6 +56,7 @@ interface CartItem {
   quantity: number | string;
   unitType: 'PRIMARY' | 'SECONDARY';
   unitPrice: number | string;
+  originalPrice?: number | string; // Custom rate set on the bill prior to percentage discount
   standardRate: number;
   discountPercent?: number;
   deliveryStatus?: 'DELIVERED' | 'PENDING_DELIVERY' | 'PARTIAL_DELIVERY';
@@ -417,6 +418,7 @@ export const SalesmanPortal: React.FC = () => {
         quantity: 1,
         unitType: defaultUnit,
         unitPrice: initialPrice,
+        originalPrice: initialPrice,
         standardRate: defaultStandardRate,
         rateInfo: cachedRate || undefined,
         focQuantity: 0,
@@ -435,7 +437,7 @@ export const SalesmanPortal: React.FC = () => {
           setCart(curCart =>
             curCart.map(it =>
               it.product.id === product.id && it.unitType === defaultUnit
-                ? { ...it, unitPrice: Number(rateInfo.suggestedRate), rateInfo }
+                ? { ...it, unitPrice: Number(rateInfo.suggestedRate), originalPrice: Number(rateInfo.suggestedRate), rateInfo }
                 : it
             )
           );
@@ -473,6 +475,8 @@ export const SalesmanPortal: React.FC = () => {
       ...item,
       unitType: newUnit,
       unitPrice: targetPrice,
+      originalPrice: targetPrice,
+      discountPercent: undefined,
       standardRate: newStandardRate,
       rateInfo: cachedRate || undefined,
     };
@@ -484,7 +488,13 @@ export const SalesmanPortal: React.FC = () => {
           setCart(curCart => {
             const next = [...curCart];
             if (next[index] && next[index].product.id === item.product.id && next[index].unitType === newUnit) {
-              next[index] = { ...next[index], unitPrice: Number(rateData.suggestedRate), rateInfo: rateData };
+              next[index] = {
+                ...next[index],
+                unitPrice: Number(rateData.suggestedRate),
+                originalPrice: Number(rateData.suggestedRate),
+                discountPercent: undefined,
+                rateInfo: rateData,
+              };
             }
             return next;
           });
@@ -529,6 +539,8 @@ export const SalesmanPortal: React.FC = () => {
   const updatePrice = (index: number, newPrice: number | string) => {
     const updated = [...cart];
     updated[index].unitPrice = newPrice;
+    updated[index].originalPrice = newPrice;
+    updated[index].discountPercent = undefined;
     setCart(updated);
   };
 
@@ -798,14 +810,12 @@ export const SalesmanPortal: React.FC = () => {
 
       if (matches) {
         affectedCount++;
-        const conv = Number(item.product.conversionFactor) || 1;
-        const baseRate =
-          item.unitType === 'PRIMARY'
-            ? Number(item.product.salePrice) * conv
-            : Number(item.product.salePrice);
-        const discountedPrice = Math.round(baseRate * (1 - pct / 100));
+        // Apply discount on current bill custom price (not database catalog price)
+        const currentCustomRate = parseFloat(String(item.originalPrice !== undefined && item.originalPrice !== '' ? item.originalPrice : item.unitPrice)) || 0;
+        const discountedPrice = Math.max(0, Math.round(currentCustomRate * (1 - pct / 100)));
         return {
           ...item,
+          originalPrice: currentCustomRate,
           unitPrice: discountedPrice,
           discountPercent: pct,
         };
@@ -826,14 +836,12 @@ export const SalesmanPortal: React.FC = () => {
 
   const handleResetDiscount = () => {
     const updated = cart.map((item) => {
-      const conv = Number(item.product.conversionFactor) || 1;
-      const baseRate =
-        item.unitType === 'PRIMARY'
-          ? Number(item.product.salePrice) * conv
-          : Number(item.product.salePrice);
+      const restoredPrice = item.originalPrice !== undefined && item.originalPrice !== ''
+        ? item.originalPrice
+        : item.unitPrice;
       return {
         ...item,
-        unitPrice: baseRate,
+        unitPrice: restoredPrice,
         discountPercent: undefined,
       };
     });
@@ -962,12 +970,12 @@ export const SalesmanPortal: React.FC = () => {
             quantity: q,
             unitType: it.unitType,
             unitPrice: p,
-            discountPercent: it.discountPercent || 0,
+            discountPercent: 0, // p is already discounted based on custom price; 0 prevents double-deduction in backend
             deliveryStatus: itemStatus,
             deliveredQuantity: delivQ,
             pendingQuantity: pendQ,
             isRateOverridden: p !== it.standardRate,
-            originalRate: it.standardRate,
+            originalRate: it.originalPrice ? Number(it.originalPrice) : it.standardRate,
             focQuantity: focQ,
             focFree: it.focFree !== false,
             focNotes: it.focNotes || '',
@@ -975,7 +983,7 @@ export const SalesmanPortal: React.FC = () => {
         }),
         receivedAmount: parseFloat(String(receivedPayment)) || 0,
         paymentMethod,
-        notes,
+        notes: appliedDiscountSummary ? `${notes ? `${notes} | ` : ''}[DISCOUNT: ${appliedDiscountSummary}]` : notes,
       };
 
       const res = await api.post('/sales', payload);
@@ -2432,7 +2440,7 @@ export const SalesmanPortal: React.FC = () => {
                           Code: {item.product.sku} | Cat: {item.product.category?.name || 'Lubricant'}
                           {item.discountPercent && (
                             <span style={{ marginLeft: '6px', color: '#64748b', textDecoration: 'line-through' }}>
-                              Standard: Rs. {item.standardRate.toLocaleString()}
+                              Rate: Rs. {Number(item.originalPrice || item.standardRate).toLocaleString()}
                             </span>
                           )}
                         </div>
