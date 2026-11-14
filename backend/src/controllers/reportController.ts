@@ -43,6 +43,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       pendingOrdersCount,
       recentSales,
       recentAuditLogs,
+      allTimeCounterSales,
+      allTimeVanSales,
     ] = await Promise.all([
       // Today Sales (Combined)
       prisma.sale.aggregate({
@@ -169,6 +171,20 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         orderBy: { createdAt: 'desc' },
         include: { user: { select: { username: true, fullName: true, role: true } } },
       }),
+
+      // All-time Counter Sales (Shop)
+      prisma.sale.aggregate({
+        where: { status: OrderStatus.COMPLETED, saleType: 'COUNTER' },
+        _sum: { netAmount: true, receivedAmount: true, remainingBalance: true },
+        _count: { id: true },
+      }),
+
+      // All-time Van Sales (Field / Supply)
+      prisma.sale.aggregate({
+        where: { status: OrderStatus.COMPLETED, saleType: { not: 'COUNTER' } },
+        _sum: { netAmount: true, receivedAmount: true, remainingBalance: true },
+        _count: { id: true },
+      }),
     ]);
 
     // Calculate Stock Valuation & Inventory alerts
@@ -224,8 +240,13 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           salesCount: todaySales._count.id || 0,
           counterSales: Number(todayCounterSales._sum.netAmount || 0),
           counterSalesCount: todayCounterSales._count.id || 0,
+          counterCashReceived: Number(todayCounterSales._sum.receivedAmount || 0),
+          counterCredit: Number(todayCounterSales._sum.remainingBalance || 0),
           vanSales: Number(todayVanSales._sum.netAmount || 0),
           vanSalesCount: todayVanSales._count.id || 0,
+          vanCashReceived: Number(todayVanSales._sum.receivedAmount || 0),
+          vanCredit: Number(todayVanSales._sum.remainingBalance || 0),
+          recoveryReceived: Number(todayPayments._sum.amount || 0),
           totalPurchases: Number(todayPurchases._sum.netAmount || 0),
           cashReceived: Number(todaySales._sum.receivedAmount || 0) + Number(todayPayments._sum.amount || 0),
           creditSales: Number(todaySales._sum.remainingBalance || 0),
@@ -245,6 +266,14 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           totalProducts: allProducts.length,
           totalCustomers: allCustomers._count.id || 0,
           pendingOrdersCount,
+          allTimeCounterSales: Number(allTimeCounterSales._sum.netAmount || 0),
+          allTimeCounterCash: Number(allTimeCounterSales._sum.receivedAmount || 0),
+          allTimeCounterCredit: Number(allTimeCounterSales._sum.remainingBalance || 0),
+          allTimeCounterCount: allTimeCounterSales._count.id || 0,
+          allTimeVanSales: Number(allTimeVanSales._sum.netAmount || 0),
+          allTimeVanCash: Number(allTimeVanSales._sum.receivedAmount || 0),
+          allTimeVanCredit: Number(allTimeVanSales._sum.remainingBalance || 0),
+          allTimeVanCount: allTimeVanSales._count.id || 0,
         },
         alerts: {
           lowStockCount: lowStockAlerts.length,

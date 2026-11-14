@@ -31,6 +31,9 @@ export const WarrantyClaimsPage: React.FC = () => {
   const [selectedClaimForDump, setSelectedClaimForDump] = useState<any>(null);
   const [dumpLitersInput, setDumpLitersInput] = useState<string>('');
 
+  // Dump Voucher Receipt Modal State
+  const [viewVoucherModal, setViewVoucherModal] = useState<any>(null);
+
   // General Action Modal (e.g. Sent to Company, Scrap Loss)
   const [actionModalClaim, setActionModalClaim] = useState<any>(null);
   const [actionType, setActionType] = useState<string>('');
@@ -73,6 +76,9 @@ export const WarrantyClaimsPage: React.FC = () => {
       });
       if (res.data?.success) {
         triggerSuccess(res.data.message || 'Claim disposition updated successfully!');
+        if (res.data.dumpVoucher) {
+          setViewVoucherModal(res.data.dumpVoucher);
+        }
         loadClaims();
         setSelectedClaimForDump(null);
         setActionModalClaim(null);
@@ -544,6 +550,43 @@ export const WarrantyClaimsPage: React.FC = () => {
                             ✅ Company Replaced (Restore Stock)
                           </button>
                         )}
+
+                        {(c.claimStatus === 'DUMPED_IN_DRUM' || c.dumpVoucher) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const voucher = c.dumpVoucher || {
+                                voucherNumber: `ROT-DRM-${c.returnNumber}`,
+                                voucherDate: c.returnDate,
+                                returnNumber: c.returnNumber,
+                                originalInvoice: c.originalInvoice,
+                                customerShop: c.customer?.shopName || 'Shop Customer',
+                                customerOwner: c.customer?.ownerName,
+                                customerPhone: c.customer?.phone,
+                                customerArea: c.customer?.area,
+                                litersDumped: c.items?.reduce((s: number, it: any) => s + (Number(it.quantity) * Number(it.conversionFactor || 1)), 0) || 0,
+                                salvagedProducts: c.items,
+                                notes: c.notes || 'Salvaged claimed engine oil into Reclaimed Drum',
+                                operatorName: 'Admin / Store Incharge',
+                              };
+                              setViewVoucherModal(voucher);
+                            }}
+                            className="btn btn-sm"
+                            style={{
+                              backgroundColor: '#ede9fe',
+                              color: '#6d28d9',
+                              border: '1px solid #ddd6fe',
+                              fontSize: '0.75rem',
+                              fontWeight: 800,
+                              padding: '4px 8px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            📄 View Voucher (ڈرم رسید)
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -563,7 +606,7 @@ export const WarrantyClaimsPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 9999,
           padding: '20px'
         }}>
           <div style={{
@@ -653,7 +696,7 @@ export const WarrantyClaimsPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 9999,
           padding: '20px'
         }}>
           <div style={{
@@ -714,6 +757,188 @@ export const WarrantyClaimsPage: React.FC = () => {
                 style={{ fontWeight: 800 }}
               >
                 {processingAction ? 'Saving...' : 'Confirm Action'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🛢️ RECLAIMED DRUM INWARD VOUCHER / INVOICE MODAL */}
+      {viewVoucherModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            border: '2px solid #cbd5e1'
+          }}>
+            {/* Printable Voucher Section */}
+            <div id="reclaimed-drum-voucher-print">
+              {/* Header */}
+              <div style={{ textAlign: 'center', borderBottom: '2px dashed #0f172a', paddingBottom: '12px', marginBottom: '14px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
+                  RAFIQ AUTO & OIL TRADERS
+                </h2>
+                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>
+                  رفیق آٹو اینڈ آئل ٹریڈرز — اوکاڑہ
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                  54-Stop Near MCB Bank, Dipalpur Road, Okara | Tel: 0306-9258573
+                </div>
+                <div style={{
+                  display: 'inline-block',
+                  backgroundColor: '#fef3c7',
+                  border: '1px solid #fde68a',
+                  color: '#92400e',
+                  fontWeight: 900,
+                  fontSize: '0.78rem',
+                  padding: '3px 12px',
+                  borderRadius: '12px',
+                  marginTop: '6px'
+                }}>
+                  🛢️ LOOSE OIL DRUM INWARD VOUCHER (ڈرم انورڈ رسید)
+                </div>
+              </div>
+
+              {/* Meta details */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem', marginBottom: '12px', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div>
+                  <span style={{ color: '#64748b' }}>Voucher #: </span>
+                  <b className="font-mono" style={{ color: '#0f172a' }}>{viewVoucherModal.voucherNumber}</b>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Date: </span>
+                  <b>{new Date(viewVoucherModal.voucherDate).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })}</b>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Claim/Return #: </span>
+                  <b className="font-mono">{viewVoucherModal.returnNumber}</b>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Original Bill: </span>
+                  <b className="font-mono">{viewVoucherModal.originalInvoice}</b>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <span style={{ color: '#64748b' }}>Customer Shop: </span>
+                  <b style={{ color: '#0f172a' }}>{viewVoucherModal.customerShop}</b>
+                  {viewVoucherModal.customerPhone ? ` (${viewVoucherModal.customerPhone})` : ''}
+                </div>
+              </div>
+
+              {/* Salvaged Items List */}
+              {viewVoucherModal.salvagedProducts && viewVoucherModal.salvagedProducts.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155', marginBottom: '4px' }}>
+                    📦 Claimed Stock Details:
+                  </div>
+                  <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse', border: '1px solid #e2e8f0' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f1f5f9', textAlign: 'left' }}>
+                        <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>Item Name</th>
+                        <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0', textAlign: 'right' }}>Claim Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewVoucherModal.salvagedProducts.map((p: any, pIdx: number) => (
+                        <tr key={pIdx}>
+                          <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{p.name || p.productName}</td>
+                          <td style={{ padding: '4px 8px', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 700 }}>
+                            {p.quantity} {p.unitSymbol || 'Pcs'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Drum Transfer Metric Highlight */}
+              <div style={{
+                backgroundColor: '#eff6ff',
+                border: '1.5px solid #93c5fd',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '14px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e40af' }}>
+                    🛢️ Oil Inward to Reclaimed Drum:
+                  </span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#1d4ed8' }}>
+                    {viewVoucherModal.litersDumped} Liters
+                  </span>
+                </div>
+                {viewVoucherModal.previousStock !== undefined && viewVoucherModal.newStock !== undefined && (
+                  <div style={{ fontSize: '0.75rem', color: '#1e3a8a', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Previous Drum Stock: <b>{Number(viewVoucherModal.previousStock).toFixed(1)} Ltr</b></span>
+                    <span>New Drum Stock: <b>{Number(viewVoucherModal.newStock).toFixed(1)} Ltr</b></span>
+                  </div>
+                )}
+                {viewVoucherModal.drumRate > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: '#0369a1', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #bfdbfe', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Salvage Rate: Rs. {viewVoucherModal.drumRate} / Ltr</span>
+                    <span>Total Salvage Value: <b>Rs. {Number(viewVoucherModal.salvageValue || (viewVoucherModal.litersDumped * viewVoucherModal.drumRate)).toLocaleString()}</b></span>
+                  </div>
+                )}
+              </div>
+
+              {/* Remarks */}
+              {viewVoucherModal.notes && (
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '14px', fontStyle: 'italic' }}>
+                  Note: {viewVoucherModal.notes}
+                </div>
+              )}
+
+              {/* Signatures */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '24px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1', fontSize: '0.74rem', color: '#64748b' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ minWidth: '120px', borderBottom: '1px solid #94a3b8', height: '24px' }}></div>
+                  <span style={{ marginTop: '4px', display: 'block', fontWeight: 700 }}>Store Incharge / Operator</span>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ minWidth: '120px', borderBottom: '1px solid #94a3b8', height: '24px' }}></div>
+                  <span style={{ marginTop: '4px', display: 'block', fontWeight: 700 }}>Dump Verified Stamp</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Action Buttons */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px', paddingTop: '14px', borderTop: '1px solid #e2e8f0' }} className="no-print">
+              <button
+                type="button"
+                onClick={() => setViewVoucherModal(null)}
+                className="btn btn-secondary"
+              >
+                Close (بند کریں)
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="btn btn-primary"
+                style={{
+                  backgroundColor: '#7c3aed',
+                  borderColor: '#6d28d9',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                🖨️ Print Voucher (پرنٹ رسید)
               </button>
             </div>
           </div>

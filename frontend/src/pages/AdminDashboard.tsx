@@ -74,9 +74,41 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const { today, monthly, overall, alerts, topSellingProducts, recentSales } = stats || {
-    today: { totalSales: 0, salesCount: 0, counterSales: 0, counterSalesCount: 0, vanSales: 0, vanSalesCount: 0, cashReceived: 0, creditSales: 0, grossProfit: 0 },
+    today: {
+      totalSales: 0,
+      salesCount: 0,
+      counterSales: 0,
+      counterSalesCount: 0,
+      counterCashReceived: 0,
+      counterCredit: 0,
+      vanSales: 0,
+      vanSalesCount: 0,
+      vanCashReceived: 0,
+      vanCredit: 0,
+      recoveryReceived: 0,
+      cashReceived: 0,
+      creditSales: 0,
+      grossProfit: 0,
+      netProfit: 0,
+      totalExpenses: 0,
+    },
     monthly: { sales: 0, purchases: 0, grossProfit: 0 },
-    overall: { customerReceivables: 0, supplierPayables: 0, currentStockValue: 0, totalProducts: 0, totalCustomers: 0, pendingOrdersCount: 0 },
+    overall: {
+      customerReceivables: 0,
+      supplierPayables: 0,
+      currentStockValue: 0,
+      totalProducts: 0,
+      totalCustomers: 0,
+      pendingOrdersCount: 0,
+      allTimeCounterSales: 0,
+      allTimeCounterCash: 0,
+      allTimeCounterCredit: 0,
+      allTimeCounterCount: 0,
+      allTimeVanSales: 0,
+      allTimeVanCash: 0,
+      allTimeVanCredit: 0,
+      allTimeVanCount: 0,
+    },
     alerts: { lowStockCount: 0, outOfStockCount: 0 },
     topSellingProducts: [],
     recentSales: []
@@ -164,38 +196,40 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="stat-card emerald" style={{ borderLeft: '4px solid #059669' }}>
-          <div className="stat-label">Today's Counter Sales (دکان سیلز)</div>
+          <div className="stat-label">Counter Cash Received (کاؤنٹر نقد وصولی)</div>
           <div className="stat-value" style={{ color: '#059669' }}>
-            Rs. {Number(today?.counterSales || 0).toLocaleString()}
+            Rs. {Number(today?.counterCashReceived || 0).toLocaleString()}
           </div>
-          <div className="stat-sub">
-            <Store size={14} color="#059669" /> {today?.counterSalesCount || 0} shop counter bills
+          <div className="stat-sub" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span><Store size={14} color="#059669" /> {today?.counterSalesCount || 0} Bills</span>
+            <span style={{ color: '#b91c1c' }}>Udhar: Rs. {Number(today?.counterCredit || 0).toLocaleString()}</span>
           </div>
         </div>
 
         <div className="stat-card purple" style={{ borderLeft: '4px solid #7c3aed' }}>
-          <div className="stat-label">Today's Van Sales (وین سپلائی)</div>
+          <div className="stat-label">Van Cash Received (وین سپلائی نقد وصولی)</div>
           <div className="stat-value" style={{ color: '#7c3aed' }}>
-            Rs. {Number(today?.vanSales || 0).toLocaleString()}
+            Rs. {Number(today?.vanCashReceived || 0).toLocaleString()}
           </div>
-          <div className="stat-sub">
-            <Truck size={14} color="#7c3aed" /> {today?.vanSalesCount || 0} field delivery orders
+          <div className="stat-sub" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span><Truck size={14} color="#7c3aed" /> {today?.vanSalesCount || 0} Orders</span>
+            <span style={{ color: '#b91c1c' }}>Udhar: Rs. {Number(today?.vanCredit || 0).toLocaleString()}</span>
           </div>
         </div>
 
-        <div className="stat-card emerald">
-          <div className="stat-label">Cash Received Today</div>
+        <div className="stat-card emerald" style={{ borderLeft: '4px solid #10b981' }}>
+          <div className="stat-label">Total Cash In Hand Today (کُل نقد وصولی)</div>
           <div className="stat-value">Rs. {Number(today?.cashReceived || 0).toLocaleString()}</div>
-          <div className="stat-sub">
-            <DollarSign size={14} color="#059669" /> POS counter & field collections
+          <div className="stat-sub" style={{ fontSize: '0.72rem', color: '#475569' }}>
+            Counter: Rs. {Number(today?.counterCashReceived || 0).toLocaleString()} | Van: Rs. {Number(today?.vanCashReceived || 0).toLocaleString()} | Khata: Rs. {Number(today?.recoveryReceived || 0).toLocaleString()}
           </div>
         </div>
 
         <div className="stat-card crimson">
-          <div className="stat-label">Today's Credit Sales (Udhar)</div>
+          <div className="stat-label">Today's Credit Sales (کُل ادھار)</div>
           <div className="stat-value">Rs. {Number(today?.creditSales || 0).toLocaleString()}</div>
-          <div className="stat-sub">
-            Added to customer outstanding ledgers
+          <div className="stat-sub" style={{ fontSize: '0.72rem', color: '#b91c1c' }}>
+            Counter Udhar: Rs. {Number(today?.counterCredit || 0).toLocaleString()} | Van Udhar: Rs. {Number(today?.vanCredit || 0).toLocaleString()}
           </div>
         </div>
 
@@ -249,6 +283,111 @@ export const AdminDashboard: React.FC = () => {
           <div className="stat-value">Rs. {Number(monthly?.grossProfit || 0).toLocaleString()}</div>
           <div className="stat-sub">
             Total monthly sales: Rs. {Number(monthly?.sales || 0).toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* 💵 CASH FLOW BREAKDOWN (COUNTER SALES CASH VS VAN SUPPLY CASH) */}
+      <div style={{
+        backgroundColor: '#ffffff',
+        border: '1.5px solid #cbd5e1',
+        borderRadius: '16px',
+        padding: '18px 22px',
+        marginBottom: '24px',
+        boxShadow: '0 4px 14px rgba(0,0,0,0.03)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Wallet size={20} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                Cash Inflow Breakdown — Counter Cash vs Van Cash (کاؤنٹر و وین نقد تقابلی جائزہ)
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                Separate tracking of shop drawer collections, field salesmen cash, and ledger recoveries.
+              </p>
+            </div>
+          </div>
+          <Link to="/cashier" className="btn btn-sm btn-outline" style={{ fontWeight: 700 }}>
+            Open Cashier Desk →
+          </Link>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+          {/* Box 1: Counter Cash Inflow */}
+          <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '12px', padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Store size={15} /> 🏪 Counter Sales Cash (دکان نقد)
+              </span>
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                Today Inflow
+              </span>
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#15803d' }}>
+              Rs. {Number(today?.counterCashReceived || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#166534', marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Total Sales: Rs. {Number(today?.counterSales || 0).toLocaleString()}</span>
+              <span>All-Time: Rs. {Number(overall?.allTimeCounterCash || 0).toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Box 2: Van Sales Inflow */}
+          <div style={{ backgroundColor: '#faf5ff', border: '1.5px solid #e9d5ff', borderRadius: '12px', padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#6b21a8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Truck size={15} /> 🚐 Van Supply Cash (وین نقد وصولی)
+              </span>
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#f3e8ff', color: '#7e22ce', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                Today Inflow
+              </span>
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#7e22ce' }}>
+              Rs. {Number(today?.vanCashReceived || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#6b21a8', marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Total Sales: Rs. {Number(today?.vanSales || 0).toLocaleString()}</span>
+              <span>All-Time: Rs. {Number(overall?.allTimeVanCash || 0).toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Box 3: Khata Recovery */}
+          <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '12px', padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Landmark size={15} /> 📖 Khata Recoveries (کھاتہ وصولی)
+              </span>
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                Today Inflow
+              </span>
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1d4ed8' }}>
+              Rs. {Number(today?.recoveryReceived || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#1e40af', marginTop: '6px' }}>
+              Collected from market ledger payments
+            </div>
+          </div>
+
+          {/* Box 4: Total Cash Collected Today */}
+          <div style={{ backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <DollarSign size={15} /> 💰 Total Cash In Hand (کُل نقد)
+              </span>
+              <span style={{ fontSize: '0.72rem', backgroundColor: '#e2e8f0', color: '#334155', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                Today Total
+              </span>
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a' }}>
+              Rs. {Number(today?.cashReceived || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '6px' }}>
+              Counter + Van + Khata recovery combined
+            </div>
           </div>
         </div>
       </div>

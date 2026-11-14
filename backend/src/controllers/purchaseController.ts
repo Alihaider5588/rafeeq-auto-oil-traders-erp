@@ -259,13 +259,42 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
         include: { items: true },
       });
 
-      // 2. Automatically Increase Stock using BASE QUANTITY
+      // 2. Automatically Increase Stock using BASE QUANTITY & Track Batch Pricing Variance
       for (const item of processedItems) {
+        const existingProd = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { purchasePrice: true, specifications: true },
+        });
+
+        const prevCost = Number(existingProd?.purchasePrice || 0);
+        const newCost = item.baseUnitCost;
+        let updatedSpecs = existingProd?.specifications || '';
+        // Clean existing BATCH_PRICING tag
+        updatedSpecs = updatedSpecs.replace(/\[BATCH_PRICING:.*?\]\s*/g, '').trim();
+
+        if (prevCost > 0 && Math.abs(newCost - prevCost) >= 0.5) {
+          const costDiff = Number((newCost - prevCost).toFixed(2));
+          const status = costDiff < 0 ? 'CHEAPER' : 'EXPENSIVE';
+          const batchMeta = {
+            prevCost,
+            newCost,
+            diff: Math.abs(costDiff),
+            status, // 'CHEAPER' or 'EXPENSIVE'
+            batchQty: item.baseQuantity,
+            remainingBatchQty: item.baseQuantity,
+            invoiceNumber: data.invoiceNumber.trim(),
+            supplierName: supplier.companyName,
+            purchaseDate: new Date().toISOString(),
+          };
+          updatedSpecs = `[BATCH_PRICING:${JSON.stringify(batchMeta)}] ${updatedSpecs}`.trim();
+        }
+
         await tx.product.update({
           where: { id: item.productId },
           data: {
             currentStock: new Prisma.Decimal(item.newStock),
             purchasePrice: new Prisma.Decimal(item.baseUnitCost), // Track per base unit cost
+            specifications: updatedSpecs || null,
           },
         });
 

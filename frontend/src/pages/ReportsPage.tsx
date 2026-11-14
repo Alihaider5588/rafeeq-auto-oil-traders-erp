@@ -182,14 +182,14 @@ export const ReportsPage: React.FC = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h1 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-              Financial Reports & AI Business Growth
+              Financial & Business Performance Reports (کاروباری و مالیاتی گوشوارہ)
             </h1>
             <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
-              <Sparkles size={12} /> 100% Real Ledger COGS
+              <TrendingUp size={12} /> Real Ledger COGS Margins
             </span>
           </div>
           <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0 0' }}>
-            Accurate profit/loss statements, real-time COGS margins, AI sales predictive run-rate & stockout alerts.
+            Accurate profit/loss statements, real-time COGS margins, product consumption velocities & stockout alerts.
           </p>
         </div>
 
@@ -254,7 +254,7 @@ export const ReportsPage: React.FC = () => {
             whiteSpace: 'nowrap'
           }}
         >
-          <Sparkles size={18} /> AI Sales Forecast & Business Health (اے آئی گروتھ ماڈل)
+          <TrendingUp size={18} /> Sales Forecast & Business Health (کاروباری کارکردگی و اسٹاک کھپت)
         </button>
 
         <button
@@ -283,21 +283,21 @@ export const ReportsPage: React.FC = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: AI PREDICTIONS & BUSINESS GROWTH TIPS */}
+      {/* TAB 1: PREDICTIONS & BUSINESS GROWTH TIPS */}
       {/* ========================================================================= */}
       {activeTab === 'AI_GROWTH' && (
         <div className="no-print">
           {loadingAi ? (
             <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
               <RefreshCw size={36} className="spin" style={{ color: '#d97706', marginBottom: '14px' }} />
-              <h3 style={{ margin: 0, fontWeight: 800, color: '#0f172a' }}>Analyzing Real Ledger Data with AI Model...</h3>
+              <h3 style={{ margin: 0, fontWeight: 800, color: '#0f172a' }}>Analyzing Real Ledger Data & Consumption Velocities...</h3>
               <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '6px' }}>
                 Computing product consumption velocities, debtor aging, margin health, and forward run-rate.
               </p>
             </div>
           ) : !aiData ? (
             <div className="card" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-              No prediction metrics available yet. Make sales to populate live AI model.
+              No performance metrics available yet. Make sales to populate live data.
             </div>
           ) : (
             <div>
@@ -340,7 +340,7 @@ export const ReportsPage: React.FC = () => {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
-                          AI Business Health Score (کاروباری کارکردگی کا اسکور)
+                          Business Health Score (کاروباری کارکردگی کا اسکور)
                         </h3>
                         <span className="badge badge-success" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
                           {aiData.businessHealth.grade}
@@ -462,7 +462,7 @@ export const ReportsPage: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
                   <Lightbulb size={20} color="#d97706" />
                   <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
-                    Real-Data AI Business Growth Recommendations (کاروباری بہتری کے عملی مشورے)
+                    Executive Business Growth Recommendations (کاروباری بہتری کے عملی مشورے)
                   </h3>
                 </div>
 
@@ -1426,7 +1426,7 @@ export const ReportsPage: React.FC = () => {
                     backgroundColor: '#fafafa'
                   }}>
                     <div style={{ fontWeight: 800, fontSize: '10px', textTransform: 'uppercase', marginBottom: '3px' }}>
-                      AI Business Projection & Market Liquidity Status:
+                      Executive Business Projection & Market Liquidity Status:
                     </div>
                     <div style={{ fontSize: '10px', color: '#333' }}>
                       Projected 30-Day Revenue: <b>Rs. {aiData.forecast.predictedNextMonthRevenue.toLocaleString()}</b> &bull; Projected Gross Return: <b>Rs. {aiData.forecast.predictedNextMonthProfit.toLocaleString()}</b> &bull; Total Market Receivables Locked in Udhar: <b>Rs. {Math.round(aiData.metrics.totalMarketReceivables).toLocaleString()}</b>

@@ -440,7 +440,7 @@ export const ProductsPage: React.FC = () => {
       minimumStockLevel: String(prod.minimumStockLevel),
       openingStock: String(prod.currentStock),
       description: prod.description || '',
-      specifications: prod.specifications || '',
+      specifications: (prod.specifications || '').replace(/\[BATCH_PRICING:.*?\]\s*/g, '').trim(),
       imageUrl: prod.imageUrl || '',
       showOnWebsite: prod.showOnWebsite ?? true,
       showInCatalog: prod.showInCatalog ?? true,
@@ -570,7 +570,7 @@ export const ProductsPage: React.FC = () => {
         marginTop: '4px',
         border: '1px solid #fca5a5'
       }}>
-        <span>⚠️ yaha par mistake ho rai ha:</span> {fieldErrors[fieldName]}
+        <span>⚠️ براہِ کرم درست کریں:</span> {fieldErrors[fieldName]}
       </div>
     );
   };
@@ -623,6 +623,15 @@ export const ProductsPage: React.FC = () => {
         return;
       }
 
+      let finalSpecs = formData.specifications?.trim() || '';
+      const currentEditingProd = editingId ? products.find(p => p.id === editingId) : null;
+      if (currentEditingProd?.specifications?.includes('[BATCH_PRICING:')) {
+        const match = currentEditingProd.specifications.match(/\[BATCH_PRICING:(.*?)\]/);
+        if (match) {
+          finalSpecs = `[BATCH_PRICING:${match[1]}] ${finalSpecs}`.trim();
+        }
+      }
+
       const payload: any = {
         name: formData.name.trim(),
         sku: formData.sku.trim(),
@@ -636,7 +645,7 @@ export const ProductsPage: React.FC = () => {
         wholesalePrice: wPrice !== undefined && !isNaN(wPrice) ? wPrice : undefined,
         minimumStockLevel: !isNaN(minStock) ? minStock : 5,
         description: formData.description?.trim() || '',
-        specifications: formData.specifications?.trim() || '',
+        specifications: finalSpecs || '',
         imageUrl: formData.imageUrl?.trim() || '',
         showOnWebsite: formData.showOnWebsite,
         showInCatalog: formData.showInCatalog,
@@ -1066,6 +1075,18 @@ export const ProductsPage: React.FC = () => {
                 const isOutOfStock = stock <= 0;
                 const isLowStock = stock <= minStock;
 
+                let batchPricing: any = null;
+                let cleanSpecs = p.specifications || '';
+                if (cleanSpecs.includes('[BATCH_PRICING:')) {
+                  try {
+                    const match = cleanSpecs.match(/\[BATCH_PRICING:(.*?)\]/);
+                    if (match) {
+                      batchPricing = JSON.parse(match[1]);
+                      cleanSpecs = cleanSpecs.replace(/\[BATCH_PRICING:.*?\]\s*/g, '').trim();
+                    }
+                  } catch (e) {}
+                }
+
                 return (
                   <tr key={p.id} style={{ backgroundColor: isOutOfStock ? '#fff1f2' : isLowStock ? '#fff5f5' : undefined }}>
                     <td>
@@ -1090,8 +1111,43 @@ export const ProductsPage: React.FC = () => {
                     </td>
                     <td>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</div>
-                      {p.specifications && (
-                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{p.specifications}</div>
+                      {batchPricing && Number(batchPricing.remainingBatchQty) > 0 && (
+                        <div style={{ marginTop: '4px' }}>
+                          {batchPricing.status === 'CHEAPER' ? (
+                            <span style={{
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              border: '1px solid #86efac',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              📉 سستا مال: لاگت Rs. {batchPricing.diff} کم لگی (لاٹ باقی: {batchPricing.remainingBatchQty} {p.unit?.symbol || 'Pcs'})
+                            </span>
+                          ) : (
+                            <span style={{
+                              backgroundColor: '#fef3c7',
+                              color: '#b45309',
+                              border: '1px solid #fde68a',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              📈 مہنگا مال: لاگت Rs. {batchPricing.diff} زیادہ لگی (لاٹ باقی: {batchPricing.remainingBatchQty} {p.unit?.symbol || 'Pcs'})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {cleanSpecs && (
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>{cleanSpecs}</div>
                       )}
                     </td>
                     <td>

@@ -678,13 +678,43 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
       // If completed immediately (not pending approval):
       if (orderStatus === OrderStatus.COMPLETED) {
-        // 2. Reduce Stock automatically using BASE QUANTITY
+        // 2. Reduce Stock automatically using BASE QUANTITY & update Batch Pricing
         for (const it of itemDetails) {
           const newStock = it.currentStock - it.baseQuantity;
 
+          // Check and decrement active batch pricing if present
+          const currentProd = await tx.product.findUnique({
+            where: { id: it.productId },
+            select: { specifications: true },
+          });
+
+          let updatedSpecs = currentProd?.specifications || null;
+          if (updatedSpecs && updatedSpecs.includes('[BATCH_PRICING:')) {
+            try {
+              const match = updatedSpecs.match(/\[BATCH_PRICING:(.*?)\]/);
+              if (match) {
+                const batchMeta = JSON.parse(match[1]);
+                const remaining = Number(batchMeta.remainingBatchQty || 0) - it.baseQuantity;
+                const cleanSpecs = updatedSpecs.replace(/\[BATCH_PRICING:.*?\]\s*/g, '').trim();
+                if (remaining > 0) {
+                  batchMeta.remainingBatchQty = remaining;
+                  updatedSpecs = `[BATCH_PRICING:${JSON.stringify(batchMeta)}] ${cleanSpecs}`.trim();
+                } else {
+                  // Entire batch consumed! Clear batch price tag automatically
+                  updatedSpecs = cleanSpecs || null;
+                }
+              }
+            } catch (e) {
+              console.error('Error updating batch pricing remaining qty:', e);
+            }
+          }
+
           await tx.product.update({
             where: { id: it.productId },
-            data: { currentStock: new Prisma.Decimal(newStock) },
+            data: {
+              currentStock: new Prisma.Decimal(newStock),
+              specifications: updatedSpecs,
+            },
           });
 
           // 3. Upsert Customer/Party-Wise Product Rate History
@@ -2184,6 +2214,7 @@ export const getClaimsList = async (req: AuthenticatedRequest, res: Response): P
           unitSymbol: it.product?.unit?.symbol || 'Pcs',
         })),
         dispositionHistory: meta.dispositionHistory || [],
+        dumpVoucher: meta.dumpVoucher || null,
         notes: (ret.reason || '').replace(/\[CLAIM_META:.*?\]\s*/, '').trim(),
       };
     });
@@ -2285,6 +2316,8 @@ export const updateClaimDisposition = async (req: AuthenticatedRequest, res: Res
 
         const curDrumStock = Number(drum.currentStock);
         const newDrumStock = curDrumStock + litersToAdd;
+        const drumSalePrice = Number(drum.salePrice || 0);
+        const voucherNumber = `ROT-DRM-CLM-${Date.now().toString().slice(-6)}`;
 
         await tx.product.update({
           where: { id: drum.id },
@@ -2299,12 +2332,38 @@ export const updateClaimDisposition = async (req: AuthenticatedRequest, res: Res
             previousStock: new Prisma.Decimal(curDrumStock),
             newStock: new Prisma.Decimal(newDrumStock),
             referenceId: sReturn.id,
-            description: `Claim #${sReturn.returnNumber} oil dumped into drum (${litersToAdd} Ltr)`,
+            description: `Claim #${sReturn.returnNumber} oil dumped into drum (${litersToAdd} Ltr) - Voucher #${voucherNumber}`,
           },
         });
 
+        const dumpVoucher = {
+          voucherNumber,
+          voucherDate: effectiveDate.toISOString(),
+          claimId: sReturn.id,
+          returnNumber: sReturn.returnNumber,
+          originalInvoice: meta.originalInvoice || 'N/A',
+          customerShop: sReturn.customer?.shopName || 'Customer Shop',
+          customerOwner: sReturn.customer?.ownerName || '',
+          customerPhone: sReturn.customer?.phone || '',
+          customerArea: (sReturn.customer as any)?.area || '',
+          litersDumped: litersToAdd,
+          previousStock: curDrumStock,
+          newStock: newDrumStock,
+          drumRate: drumSalePrice,
+          salvageValue: litersToAdd * drumSalePrice,
+          salvagedProducts: sReturn.items.map((it: any) => ({
+            name: it.product.name,
+            sku: it.product.sku,
+            quantity: Number(it.quantity),
+            unitSymbol: it.product.unit?.symbol || 'Pcs',
+          })),
+          notes: dispositionNotes || 'Claimed defective oil dumped into Reclaimed Loose Oil Drum',
+          operatorName: req.user?.fullName || req.user?.username || 'Admin / Operator',
+        };
+
+        meta.dumpVoucher = dumpVoucher;
         newStatus = 'DUMPED_IN_DRUM';
-        actionLog = `Dumped ${litersToAdd} Liters of claimed oil into Reclaimed Oil Drum. Stock increased.`;
+        actionLog = `Dumped ${litersToAdd} Liters of claimed oil into Reclaimed Oil Drum (Voucher #${voucherNumber}). Stock increased to ${newDrumStock} Ltr.`;
       }
 
       meta.claimStatus = newStatus;
@@ -2329,8 +2388,11 @@ export const updateClaimDisposition = async (req: AuthenticatedRequest, res: Res
 
     res.json({
       success: true,
-      message: 'Claim disposition successfully updated',
+      message: meta.dumpVoucher
+        ? `Liters oil kamyabi se drum me dump ho gaya! Inward Voucher #${meta.dumpVoucher.voucherNumber} generate ho chuki hai.`
+        : 'Claim disposition successfully updated',
       status: newStatus,
+      dumpVoucher: meta.dumpVoucher || null,
     });
   } catch (error: any) {
     console.error('updateClaimDisposition error:', error);

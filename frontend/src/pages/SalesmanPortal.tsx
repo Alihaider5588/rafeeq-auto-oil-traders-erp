@@ -188,7 +188,7 @@ export const SalesmanPortal: React.FC = () => {
         marginTop: '4px',
         border: '1px solid #fca5a5'
       }}>
-        <span>⚠️ yaha par mistake ho rai ha:</span> {fieldErrors[fieldName]}
+        <span>⚠️ براہِ کرم درست کریں:</span> {fieldErrors[fieldName]}
       </div>
     );
   };
@@ -1901,9 +1901,35 @@ export const SalesmanPortal: React.FC = () => {
                   )}
 
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: '0.93rem', color: isSelected ? '#92400e' : '#0f172a' }}>
-                      {p.name}
-                    </div>
+                    {(() => {
+                      let itemBatch: any = null;
+                      if (p.specifications && p.specifications.includes('[BATCH_PRICING:')) {
+                        try {
+                          const m = p.specifications.match(/\[BATCH_PRICING:(.*?)\]/);
+                          if (m) itemBatch = JSON.parse(m[1]);
+                        } catch (e) {}
+                      }
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.93rem', color: isSelected ? '#92400e' : '#0f172a' }}>
+                            {p.name}
+                          </span>
+                          {itemBatch && Number(itemBatch.remainingBatchQty) > 0 && (
+                            <span style={{
+                              backgroundColor: itemBatch.status === 'CHEAPER' ? '#dcfce7' : '#fef3c7',
+                              color: itemBatch.status === 'CHEAPER' ? '#15803d' : '#b45309',
+                              border: itemBatch.status === 'CHEAPER' ? '1px solid #86efac' : '1px solid #fde68a',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800
+                            }}>
+                              {itemBatch.status === 'CHEAPER' ? `📉 سستا (-Rs. ${itemBatch.diff})` : `📈 مہنگا (+Rs. ${itemBatch.diff})`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={{ fontSize: '0.75rem', color: isSelected ? '#b45309' : '#64748b' }}>
                       Code: {p.sku} | In Stock:{' '}
                       {p.conversionFactor && p.conversionFactor > 1 && p.primaryUnit ? (
@@ -2304,6 +2330,14 @@ export const SalesmanPortal: React.FC = () => {
                 const isBelowCost = effectivePurchasePrice > 0 && itemUnitPrice > 0 && itemUnitPrice < effectivePurchasePrice;
                 const lossPerUnit = Math.max(0, effectivePurchasePrice - itemUnitPrice);
                 const totalLoss = lossPerUnit * itemQuantity;
+
+                let batchPricing: any = null;
+                if (item.product.specifications && item.product.specifications.includes('[BATCH_PRICING:')) {
+                  try {
+                    const match = item.product.specifications.match(/\[BATCH_PRICING:(.*?)\]/);
+                    if (match) batchPricing = JSON.parse(match[1]);
+                  } catch (e) {}
+                }
                 return (
                   <div
                     key={`${item.product.id}-${index}`}
@@ -2390,6 +2424,74 @@ export const SalesmanPortal: React.FC = () => {
                         marginBottom: '10px'
                       }}>
                         Default catalog rate applied (No prior purchase history for this customer).
+                      </div>
+                    )}
+
+                    {/* Multi-Price Inward Rate Alert */}
+                    {batchPricing && Number(batchPricing.remainingBatchQty) > 0 && (
+                      <div style={{
+                        padding: '10px 12px',
+                        backgroundColor: batchPricing.status === 'CHEAPER' ? '#f0fdf4' : '#fffbeb',
+                        border: batchPricing.status === 'CHEAPER' ? '1.5px solid #86efac' : '1.5px solid #fde68a',
+                        borderRadius: '8px',
+                        marginBottom: '10px',
+                        fontSize: '0.8rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                          <span style={{ fontWeight: 800, color: batchPricing.status === 'CHEAPER' ? '#15803d' : '#b45309' }}>
+                            {batchPricing.status === 'CHEAPER' ? '📉 کمپنی سے سستا مال ملا:' : '📈 کمپنی سے مہنگا مال ملا:'}
+                            {' '}لاگت میں Rs. {batchPricing.diff} {batchPricing.status === 'CHEAPER' ? 'کمی' : 'اضافہ'}
+                          </span>
+                          <span style={{ backgroundColor: batchPricing.status === 'CHEAPER' ? '#dcfce7' : '#fef3c7', color: batchPricing.status === 'CHEAPER' ? '#166534' : '#92400e', padding: '1px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                            لاٹ باقی: {batchPricing.remainingBatchQty} Pcs
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '8px' }}>
+                          {batchPricing.status === 'CHEAPER'
+                            ? `یہ لاٹ کمپنی سے Rs. ${batchPricing.diff} سستی آئی ہے۔ کیا آپ گاہک کو لیس (Discount) کرنا چاہتے ہیں؟`
+                            : `یہ لاٹ کمپنی سے Rs. ${batchPricing.diff} مہنگی آئی ہے۔ برائے مہربانی ریٹ چیک کر لیں۔`}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {batchPricing.status === 'CHEAPER' ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const diffVal = Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1);
+                                const baseP = Number(item.unitPrice || item.standardRate || 0);
+                                const newP = Math.max(0, baseP - diffVal);
+                                updatePrice(index, newP);
+                              }}
+                              className="btn btn-sm btn-success"
+                              style={{ fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px' }}
+                            >
+                              💰 لیس کریں (-Rs. {Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1)})
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const diffVal = Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1);
+                                const baseP = Number(item.unitPrice || item.standardRate || 0);
+                                const newP = baseP + diffVal;
+                                updatePrice(index, newP);
+                              }}
+                              className="btn btn-sm btn-warning"
+                              style={{ fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px' }}
+                            >
+                              📈 ریٹ میں +Rs. {Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1)} اضافہ کریں
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updatePrice(index, item.standardRate);
+                            }}
+                            className="btn btn-sm btn-outline"
+                            style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                          >
+                            عام ریٹ رکھیں
+                          </button>
+                        </div>
                       </div>
                     )}
 
