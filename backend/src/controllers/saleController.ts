@@ -16,6 +16,9 @@ const saleItemSchema = z.object({
   discount: z.number().min(0).default(0).optional(),
   discountPercent: z.number().min(0).max(100).default(0).optional(),
   deliveryStatus: z.enum(['DELIVERED', 'PENDING_DELIVERY']).default('DELIVERED').optional(),
+  focQuantity: z.number().min(0).default(0).optional(),
+  focFree: z.boolean().default(true).optional(),
+  focNotes: z.string().optional().nullable(),
 });
 
 const saleSchema = z.object({
@@ -514,14 +517,19 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
     const prodMap = new Map(fetchedProducts.map((p) => [p.id, p]));
 
-    // Verify stock availability & calculate costs with Primary/Secondary unit conversion
+    // Verify stock availability & calculate costs with Primary/Secondary unit conversion & Scheme/FOC
     let totalSaleAmount = 0;
     let totalSaleCost = 0;
     const itemDetails: Array<{
       productId: string;
       quantity: number;
+      focQuantity: number;
+      isFocFree: boolean;
+      focNotes: string;
       unitType: string;
       baseQuantity: number;
+      baseFocQuantity: number;
+      totalBaseQuantity: number;
       unitPrice: number;
       unitCost: number;
       totalPrice: number;
@@ -543,21 +551,25 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
       // Calculate base quantity in secondary (base) units
       const baseQuantity = unitType === 'PRIMARY' ? item.quantity * conversionFactor : item.quantity;
+      const focQuantity = Number(item.focQuantity || 0);
+      const isFocFree = item.focFree !== false; // default true (Free / Rs. 0)
+      const baseFocQuantity = unitType === 'PRIMARY' ? focQuantity * conversionFactor : focQuantity;
+      const totalBaseQuantity = baseQuantity + baseFocQuantity;
 
       const available = Number(prod.currentStock);
-      if (!allowNegativeStock && available < baseQuantity) {
+      if (!allowNegativeStock && available < totalBaseQuantity) {
         const unitLabel = prod.unit?.name || 'Units';
         const primaryLabel = prod.primaryUnit?.name || 'Carton';
         res.status(400).json({
           success: false,
-          message: `Insufficient stock for product '${prod.name}'. In Stock: ${available} ${unitLabel}, Requested: ${baseQuantity} ${unitLabel} (${item.quantity} ${unitType === 'PRIMARY' ? primaryLabel : unitLabel})`,
+          message: `Insufficient stock for product '${prod.name}'. In Stock: ${available} ${unitLabel}, Requested: ${totalBaseQuantity} ${unitLabel} (${item.quantity} paid${focQuantity > 0 ? ` + ${focQuantity} FOC` : ''})`,
         });
         return;
       }
 
       // Unit cost is in base units
       const unitCost = Number(prod.purchasePrice);
-      const grossPrice = item.quantity * item.unitPrice;
+      const grossPrice = item.quantity * item.unitPrice + (!isFocFree ? focQuantity * item.unitPrice : 0);
       let itemDiscount = Number(item.discount || 0);
       if (item.discountPercent && item.discountPercent > 0) {
         itemDiscount = (grossPrice * item.discountPercent) / 100;
@@ -572,8 +584,13 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
       itemDetails.push({
         productId: prod.id,
         quantity: item.quantity,
+        focQuantity,
+        isFocFree,
+        focNotes: item.focNotes || '',
         unitType,
         baseQuantity,
+        baseFocQuantity,
+        totalBaseQuantity,
         unitPrice: item.unitPrice,
         unitCost,
         totalPrice,
@@ -636,9 +653,32 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
       createdAt: new Date().toISOString(),
       deliveredAt: hasPendingDelivery ? null : new Date().toISOString(),
     };
-    const finalNotes = hasPendingDelivery
-      ? `[DELIVERY_META:${JSON.stringify(deliveryMeta)}] ${data.notes || ''}`.trim()
-      : (data.notes || null);
+
+    // Scheme / FOC units given on invoice
+    const focItems = data.items
+      .filter((it) => Number(it.focQuantity || 0) > 0)
+      .map((it) => {
+        const prod = prodMap.get(it.productId);
+        return {
+          productId: it.productId,
+          productName: prod?.name || 'Product',
+          quantity: it.quantity,
+          focQuantity: Number(it.focQuantity),
+          focFree: it.focFree !== false,
+          unitType: it.unitType || 'SECONDARY',
+          notes: it.focNotes || 'Company Scheme / Free of Cost',
+        };
+      });
+
+    let finalNotes: string | null = null;
+    let notesStr = data.notes || '';
+    if (focItems.length > 0) {
+      notesStr = `[FOC_ITEMS:${JSON.stringify(focItems)}] ${notesStr}`.trim();
+    }
+    if (hasPendingDelivery) {
+      notesStr = `[DELIVERY_META:${JSON.stringify(deliveryMeta)}] ${notesStr}`.trim();
+    }
+    finalNotes = notesStr.trim() ? notesStr.trim() : null;
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create Sale Record
@@ -678,9 +718,9 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
       // If completed immediately (not pending approval):
       if (orderStatus === OrderStatus.COMPLETED) {
-        // 2. Reduce Stock automatically using BASE QUANTITY & update Batch Pricing
+        // 2. Reduce Stock automatically using BASE QUANTITY & update Batch Pricing & FOC Stock
         for (const it of itemDetails) {
-          const newStock = it.currentStock - it.baseQuantity;
+          const newStock = it.currentStock - it.totalBaseQuantity;
 
           // Check and decrement active batch pricing if present
           const currentProd = await tx.product.findUnique({
@@ -706,6 +746,26 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
               }
             } catch (e) {
               console.error('Error updating batch pricing remaining qty:', e);
+            }
+          }
+
+          // Also decrement FOC Scheme stock if FOC units were issued
+          if (it.baseFocQuantity > 0 && updatedSpecs && updatedSpecs.includes('[FOC_META:')) {
+            try {
+              const matchFoc = updatedSpecs.match(/\[FOC_META:(.*?)\]/);
+              if (matchFoc) {
+                const focMeta = JSON.parse(matchFoc[1]);
+                const remainingFoc = Math.max(0, Number(focMeta.available || 0) - it.baseFocQuantity);
+                const cleanSpecs = updatedSpecs.replace(/\[FOC_META:.*?\]\s*/g, '').trim();
+                if (remainingFoc > 0) {
+                  focMeta.available = remainingFoc;
+                  updatedSpecs = `[FOC_META:${JSON.stringify(focMeta)}] ${cleanSpecs}`.trim();
+                } else {
+                  updatedSpecs = cleanSpecs || null;
+                }
+              }
+            } catch (e) {
+              console.error('Error updating FOC stock remaining qty:', e);
             }
           }
 
@@ -745,15 +805,18 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
         }
 
         // Batch create all stock movements
-        const stockMovementsData = itemDetails.map((it) => ({
-          productId: it.productId,
-          movementType: MovementType.SALE,
-          quantity: new Prisma.Decimal(it.baseQuantity),
-          previousStock: new Prisma.Decimal(it.currentStock),
-          newStock: new Prisma.Decimal(it.currentStock - it.baseQuantity),
-          referenceId: sale.id,
-          description: `Sale Inv #${invoiceNumber} (${it.quantity} ${it.unitType})`,
-        }));
+        const stockMovementsData = itemDetails.map((it) => {
+          const focNote = it.focQuantity > 0 ? ` + ${it.focQuantity} ${it.unitType} (FOC Scheme)` : '';
+          return {
+            productId: it.productId,
+            movementType: MovementType.SALE,
+            quantity: new Prisma.Decimal(it.totalBaseQuantity),
+            previousStock: new Prisma.Decimal(it.currentStock),
+            newStock: new Prisma.Decimal(it.currentStock - it.totalBaseQuantity),
+            referenceId: sale.id,
+            description: `Sale Inv #${invoiceNumber} (${it.quantity} ${it.unitType} paid${focNote})`,
+          };
+        });
 
         if (typeof (tx.stockMovement as any).createMany === 'function') {
           await tx.stockMovement.createMany({ data: stockMovementsData });

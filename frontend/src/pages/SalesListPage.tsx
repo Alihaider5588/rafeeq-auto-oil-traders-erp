@@ -1606,26 +1606,55 @@ export const SalesListPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedSale.items?.map((it, idx) => {
-                      const isPrimary = it.unitType === 'PRIMARY';
-                      const unitName = isPrimary
-                        ? (it.product?.primaryUnit?.name || it.product?.primaryUnit?.symbol || 'Carton')
-                        : (it.product?.unit?.name || it.product?.unit?.symbol || 'Piece');
-                      return (
-                        <tr key={idx} style={{ verticalAlign: 'top' }}>
-                          <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
-                            <b>{it.product?.name}</b>
-                          </td>
-                          <td style={{ textAlign: 'center', paddingTop: '4px', whiteSpace: 'nowrap' }}>
-                            <b>{Number(it.quantity)}</b> <span style={{ fontSize: '9px', color: '#333' }}>{unitName}</span>
-                          </td>
-                          <td style={{ textAlign: 'right', paddingTop: '4px' }}>{Number(it.unitPrice).toLocaleString()}</td>
-                          <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
-                            {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {(() => {
+                      let parsedFocList: any[] = [];
+                      if (selectedSale.notes && selectedSale.notes.includes('[FOC_ITEMS:')) {
+                        try {
+                          const match = selectedSale.notes.match(/\[FOC_ITEMS:(.*?)\]/);
+                          if (match) parsedFocList = JSON.parse(match[1]);
+                        } catch (e) {}
+                      }
+                      return selectedSale.items?.map((it, idx) => {
+                        const isPrimary = it.unitType === 'PRIMARY';
+                        const unitName = isPrimary
+                          ? (it.product?.primaryUnit?.name || it.product?.primaryUnit?.symbol || 'Carton')
+                          : (it.product?.unit?.name || it.product?.unit?.symbol || 'Piece');
+                        const matchingFoc = parsedFocList.find((f: any) => f.productId === it.productId);
+                        return (
+                          <React.Fragment key={idx}>
+                            <tr style={{ verticalAlign: 'top' }}>
+                              <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
+                                <b>{it.product?.name}</b>
+                              </td>
+                              <td style={{ textAlign: 'center', paddingTop: '4px', whiteSpace: 'nowrap' }}>
+                                <b>{Number(it.quantity)}</b> <span style={{ fontSize: '9px', color: '#333' }}>{unitName}</span>
+                              </td>
+                              <td style={{ textAlign: 'right', paddingTop: '4px' }}>{Number(it.unitPrice).toLocaleString()}</td>
+                              <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
+                                {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
+                              </td>
+                            </tr>
+                            {matchingFoc && Number(matchingFoc.focQuantity) > 0 && (
+                              <tr style={{ verticalAlign: 'top', backgroundColor: '#f5f3ff' }}>
+                                <td style={{ padding: '2px 0 2px 8px', fontSize: '10px', color: '#6d28d9' }}>
+                                  🎁 <i>+ {matchingFoc.focQuantity} {matchingFoc.unitSymbol} FREE (Scheme مفت مال)</i>
+                                  {matchingFoc.notes ? <div style={{ fontSize: '8.5px', color: '#555' }}>({matchingFoc.notes})</div> : null}
+                                </td>
+                                <td style={{ textAlign: 'center', padding: '2px 0', fontSize: '10px', color: '#6d28d9', fontWeight: 800 }}>
+                                  +{matchingFoc.focQuantity}
+                                </td>
+                                <td style={{ textAlign: 'right', padding: '2px 0', fontSize: '9.5px', color: '#6d28d9' }}>
+                                  Rs. 0
+                                </td>
+                                <td style={{ textAlign: 'right', padding: '2px 0', fontSize: '10px', color: '#6d28d9', fontWeight: 800 }}>
+                                  FREE
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -1690,6 +1719,36 @@ export const SalesListPage: React.FC = () => {
                         {remainingBalance <= 0 ? 'CLEAR (Rs. 0)' : `Rs. ${remainingBalance.toLocaleString()}`}
                       </span>
                     </div>
+                  </div>
+                );
+              })()}
+
+              {/* 🎁 FOC SCHEME BONUS ITEMS BANNER */}
+              {(() => {
+                let focList: any[] = [];
+                try {
+                  const match = (selectedSale.notes || '').match(/\[FOC_ITEMS:(.*?)\]/);
+                  if (match) focList = JSON.parse(match[1]);
+                } catch (e) {}
+                if (focList.length === 0) return null;
+                return (
+                  <div style={{
+                    border: '1.5px dashed #7c3aed',
+                    backgroundColor: '#f5f3ff',
+                    padding: '6px 8px',
+                    marginBottom: '10px',
+                    borderRadius: '4px',
+                    fontSize: '10px'
+                  }}>
+                    <div style={{ fontWeight: 900, color: '#6d28d9', marginBottom: '3px', textAlign: 'center', borderBottom: '1px dotted #c4b5fd', paddingBottom: '3px' }}>
+                      🎁 مفت اسکیم مال (Company Scheme / FOC Bonus)
+                    </div>
+                    {focList.map((f: any, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#4c1d95', padding: '2px 0' }}>
+                        <span>• {f.productName}: <b>+{f.focQuantity} {f.unitSymbol}</b> {f.notes ? `(${f.notes})` : ''}</span>
+                        <span style={{ fontWeight: 800, color: '#15803d' }}>Rs. 0 (FREE)</span>
+                      </div>
+                    ))}
                   </div>
                 );
               })()}

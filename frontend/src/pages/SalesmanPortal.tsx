@@ -59,6 +59,9 @@ interface CartItem {
   standardRate: number;
   discountPercent?: number;
   deliveryStatus?: 'DELIVERED' | 'PENDING_DELIVERY';
+  focQuantity?: number | string;
+  focFree?: boolean;
+  focNotes?: string;
   rateInfo?: {
     hasHistory: boolean;
     suggestedRate: number;
@@ -414,6 +417,9 @@ export const SalesmanPortal: React.FC = () => {
         unitPrice: initialPrice,
         standardRate: defaultStandardRate,
         rateInfo: cachedRate || undefined,
+        focQuantity: 0,
+        focFree: true,
+        focNotes: '',
       },
     ]);
 
@@ -922,6 +928,7 @@ export const SalesmanPortal: React.FC = () => {
         items: cart.map((it) => {
           const q = parseFloat(String(it.quantity)) || 0;
           const p = parseFloat(String(it.unitPrice)) || 0;
+          const focQ = parseFloat(String(it.focQuantity || 0)) || 0;
           return {
             productId: it.product.id,
             quantity: q,
@@ -931,6 +938,9 @@ export const SalesmanPortal: React.FC = () => {
             deliveryStatus: it.deliveryStatus || 'DELIVERED',
             isRateOverridden: p !== it.standardRate,
             originalRate: it.standardRate,
+            focQuantity: focQ,
+            focFree: it.focFree !== false,
+            focNotes: it.focNotes || '',
           };
         }),
         receivedAmount: parseFloat(String(receivedPayment)) || 0,
@@ -958,11 +968,16 @@ export const SalesmanPortal: React.FC = () => {
           `Invoice ${createdSaleData?.invoiceNumber || ''} created successfully! Record Sales & POS me save ho chuka hai.`
         );
         setErrorMsg('');
-        // Optimistic local stock & debt update (completely eliminates heavy Neon re-fetch after sale)
-        const soldItems = cart.map((it) => ({
-          productId: it.product.id,
-          qtyBase: it.unitType === 'PRIMARY' ? (parseFloat(String(it.quantity)) || 0) * (Number(it.product.conversionFactor) || 1) : (parseFloat(String(it.quantity)) || 0),
-        }));
+        // Optimistic local stock & debt update (deducts paid + free bonus stock)
+        const soldItems = cart.map((it) => {
+          const conv = Number(it.product.conversionFactor) || 1;
+          const paidBase = it.unitType === 'PRIMARY' ? (parseFloat(String(it.quantity)) || 0) * conv : (parseFloat(String(it.quantity)) || 0);
+          const focBase = it.unitType === 'PRIMARY' ? (parseFloat(String(it.focQuantity || 0)) || 0) * conv : (parseFloat(String(it.focQuantity || 0)) || 0);
+          return {
+            productId: it.product.id,
+            qtyBase: paidBase + focBase,
+          };
+        });
 
         setProducts((prevProducts) => {
           const updated = prevProducts.map((p) => {
@@ -2332,10 +2347,17 @@ export const SalesmanPortal: React.FC = () => {
                 const totalLoss = lossPerUnit * itemQuantity;
 
                 let batchPricing: any = null;
+                let focMeta: any = null;
                 if (item.product.specifications && item.product.specifications.includes('[BATCH_PRICING:')) {
                   try {
                     const match = item.product.specifications.match(/\[BATCH_PRICING:(.*?)\]/);
                     if (match) batchPricing = JSON.parse(match[1]);
+                  } catch (e) {}
+                }
+                if (item.product.specifications && item.product.specifications.includes('[FOC_META:')) {
+                  try {
+                    const match = item.product.specifications.match(/\[FOC_META:(.*?)\]/);
+                    if (match) focMeta = JSON.parse(match[1]);
                   } catch (e) {}
                 }
                 return (
@@ -2664,6 +2686,151 @@ export const SalesmanPortal: React.FC = () => {
                         </span>
                       </div>
                     )}
+
+                    {/* Scheme / FOC (Free of Cost) Option */}
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '8px 10px',
+                      backgroundColor: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#f5f3ff' : '#f8fafc',
+                      borderRadius: '8px',
+                      border: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '1.5px solid #c4b5fd' : '1px dashed #cbd5e1',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            🎁 Scheme / FOC (مفت مال):
+                          </span>
+                          {focMeta && Number(focMeta.available) > 0 && (
+                            <span style={{
+                              backgroundColor: '#ede9fe',
+                              color: '#6d28d9',
+                              border: '1px solid #c4b5fd',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.70rem',
+                              fontWeight: 700
+                            }}>
+                              دستیاب اسکیم اسٹاک: {focMeta.available} {secondarySymbol}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Billed vs Free Toggle */}
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...cart];
+                              updated[index] = { ...updated[index], focFree: true };
+                              setCart(updated);
+                            }}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              backgroundColor: item.focFree !== false ? '#7c3aed' : '#ffffff',
+                              color: item.focFree !== false ? '#ffffff' : '#475569',
+                              borderColor: item.focFree !== false ? '#7c3aed' : '#cbd5e1'
+                            }}
+                          >
+                            مفت (Rs. 0 بل)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...cart];
+                              updated[index] = { ...updated[index], focFree: false };
+                              setCart(updated);
+                            }}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              backgroundColor: item.focFree === false ? '#2563eb' : '#ffffff',
+                              color: item.focFree === false ? '#ffffff' : '#475569',
+                              borderColor: item.focFree === false ? '#2563eb' : '#cbd5e1'
+                            }}
+                          >
+                            بل میں چارج کریں
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            className="form-control"
+                            placeholder="0 (FOC Qty)"
+                            value={item.focQuantity === 0 || !item.focQuantity ? '' : item.focQuantity}
+                            onChange={(e) => {
+                              const updated = [...cart];
+                              updated[index] = { ...updated[index], focQuantity: e.target.value === '' ? 0 : parseFloat(e.target.value) };
+                              setCart(updated);
+                            }}
+                            style={{
+                              width: '90px',
+                              height: '28px',
+                              fontSize: '0.82rem',
+                              fontWeight: 800,
+                              textAlign: 'center',
+                              backgroundColor: '#ffffff',
+                              borderColor: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#7c3aed' : '#cbd5e1',
+                              color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#1e293b'
+                            }}
+                          />
+                          <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                            {currentUnitSymbol}
+                          </span>
+                        </div>
+
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="اسکیم نوٹ (e.g. 1 Carton Par 1 Free)"
+                          value={item.focNotes || ''}
+                          onChange={(e) => {
+                            const updated = [...cart];
+                            updated[index] = { ...updated[index], focNotes: e.target.value };
+                            setCart(updated);
+                          }}
+                          style={{
+                            flex: 1,
+                            minWidth: '160px',
+                            height: '28px',
+                            fontSize: '0.74rem',
+                            backgroundColor: '#ffffff'
+                          }}
+                        />
+
+                        {(parseFloat(String(item.focQuantity || 0)) || 0) > 0 && (
+                          <span style={{
+                            backgroundColor: '#ede9fe',
+                            color: '#6d28d9',
+                            border: '1px solid #c4b5fd',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.72rem',
+                            fontWeight: 800
+                          }}>
+                            {item.focFree !== false
+                              ? `✓ +${item.focQuantity} ${currentUnitSymbol} مفت دیا جا رہا ہے (بل میں Rs. 0 لگے گا)`
+                              : `+${item.focQuantity} ${currentUnitSymbol} چارج ہوگا`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Item Delivery Status Toggle */}
                     <div style={{
@@ -3646,28 +3813,58 @@ export const SalesmanPortal: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {completedSale.items?.map((it: any, idx: number) => {
-                        const isPrimary = it.unitType === 'PRIMARY';
-                        const unitName = isPrimary
-                          ? (it.product?.primaryUnit?.name || it.product?.primaryUnit?.symbol || 'Carton')
-                          : (it.product?.unit?.name || it.product?.unit?.symbol || 'Piece');
-                        return (
-                          <tr key={idx} style={{ verticalAlign: 'top' }}>
-                            <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
-                              <b>{it.product?.name || `Item #${idx + 1}`}</b>
-                            </td>
-                            <td style={{ textAlign: 'center', paddingTop: '4px', whiteSpace: 'nowrap' }}>
-                              <b>{Number(it.quantity)}</b> <span style={{ fontSize: '9px', color: '#333' }}>{unitName}</span>
-                            </td>
-                            <td style={{ textAlign: 'right', paddingTop: '4px' }}>
-                              {Number(it.unitPrice).toLocaleString()}
-                            </td>
-                            <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
-                              {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {(() => {
+                        let parsedFocList: any[] = [];
+                        if (completedSale.notes && completedSale.notes.includes('[FOC_ITEMS:')) {
+                          try {
+                            const match = completedSale.notes.match(/\[FOC_ITEMS:(.*?)\]/);
+                            if (match) parsedFocList = JSON.parse(match[1]);
+                          } catch (e) {}
+                        }
+                        return completedSale.items?.map((it: any, idx: number) => {
+                          const isPrimary = it.unitType === 'PRIMARY';
+                          const unitName = isPrimary
+                            ? (it.product?.primaryUnit?.name || it.product?.primaryUnit?.symbol || 'Carton')
+                            : (it.product?.unit?.name || it.product?.unit?.symbol || 'Piece');
+                          const matchingFoc = parsedFocList.find((f: any) => f.productId === it.productId);
+
+                          return (
+                            <React.Fragment key={idx}>
+                              <tr style={{ verticalAlign: 'top' }}>
+                                <td style={{ paddingTop: '4px', maxWidth: '140px', wordBreak: 'break-word' }}>
+                                  <b>{it.product?.name || `Item #${idx + 1}`}</b>
+                                </td>
+                                <td style={{ textAlign: 'center', paddingTop: '4px', whiteSpace: 'nowrap' }}>
+                                  <b>{Number(it.quantity)}</b> <span style={{ fontSize: '9px', color: '#333' }}>{unitName}</span>
+                                </td>
+                                <td style={{ textAlign: 'right', paddingTop: '4px' }}>
+                                  {Number(it.unitPrice).toLocaleString()}
+                                </td>
+                                <td style={{ textAlign: 'right', paddingTop: '4px', fontWeight: 700 }}>
+                                  {(Number(it.quantity) * Number(it.unitPrice)).toLocaleString()}
+                                </td>
+                              </tr>
+                              {matchingFoc && Number(matchingFoc.focQuantity) > 0 && (
+                                <tr style={{ verticalAlign: 'top', backgroundColor: '#f5f3ff' }}>
+                                  <td style={{ padding: '2px 0 2px 8px', fontSize: '10px', color: '#6d28d9' }}>
+                                    🎁 <i>+ {matchingFoc.focQuantity} {matchingFoc.unitSymbol} FREE (Scheme مفت مال)</i>
+                                    {matchingFoc.notes ? <div style={{ fontSize: '8.5px', color: '#555' }}>({matchingFoc.notes})</div> : null}
+                                  </td>
+                                  <td style={{ textAlign: 'center', padding: '2px 0', fontSize: '10px', color: '#6d28d9', fontWeight: 800 }}>
+                                    +{matchingFoc.focQuantity}
+                                  </td>
+                                  <td style={{ textAlign: 'right', padding: '2px 0', fontSize: '9.5px', color: '#6d28d9' }}>
+                                    Rs. 0
+                                  </td>
+                                  <td style={{ textAlign: 'right', padding: '2px 0', fontSize: '10px', color: '#6d28d9', fontWeight: 800 }}>
+                                    FREE
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -3803,6 +4000,36 @@ export const SalesmanPortal: React.FC = () => {
                       <div style={{ fontSize: '8px', textAlign: 'center', marginTop: '3px', color: '#555', fontStyle: 'italic' }}>
                         * Yeh saman dukan / godown me baqi hai, baad me receive karein.
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 🎁 FOC SCHEME BONUS ITEMS BANNER */}
+                {(() => {
+                  let focList: any[] = [];
+                  try {
+                    const match = (completedSale.notes || '').match(/\[FOC_ITEMS:(.*?)\]/);
+                    if (match) focList = JSON.parse(match[1]);
+                  } catch (e) {}
+                  if (focList.length === 0) return null;
+                  return (
+                    <div style={{
+                      border: '1.5px dashed #7c3aed',
+                      backgroundColor: '#f5f3ff',
+                      padding: '6px 8px',
+                      marginBottom: '10px',
+                      borderRadius: '4px',
+                      fontSize: '10px'
+                    }}>
+                      <div style={{ fontWeight: 900, color: '#6d28d9', marginBottom: '3px', textAlign: 'center', borderBottom: '1px dotted #c4b5fd', paddingBottom: '3px' }}>
+                        🎁 مفت اسکیم مال (Company Scheme / FOC Bonus)
+                      </div>
+                      {focList.map((f: any, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#4c1d95', padding: '2px 0' }}>
+                          <span>• {f.productName}: <b>+{f.focQuantity} {f.unitSymbol}</b> {f.notes ? `(${f.notes})` : ''}</span>
+                          <span style={{ fontWeight: 800, color: '#15803d' }}>Rs. 0 (FREE)</span>
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}

@@ -42,8 +42,10 @@ export const PurchasesPage: React.FC = () => {
     discount: number;
     discountPercent: number;
     discountType: 'FLAT' | 'PERCENT';
+    focQuantity?: number;
+    schemeNotes?: string;
   }>>([
-    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT' },
+    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT', focQuantity: 0, schemeNotes: '' },
   ]);
   const [billDiscount, setBillDiscount] = useState<number | string>(0);
   const [billDiscountPercent, setBillDiscountPercent] = useState<number | string>(0);
@@ -257,7 +259,7 @@ export const PurchasesPage: React.FC = () => {
   };
 
   const addItemRow = () => {
-    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT' }]);
+    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT', focQuantity: 0, schemeNotes: '' }]);
   };
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -343,6 +345,8 @@ export const PurchasesPage: React.FC = () => {
             unitType: it.unitType || 'PRIMARY',
             discount: disc,
             discountPercent: it.discountType === 'PERCENT' ? Number(it.discountPercent) : 0,
+            focQuantity: Number(it.focQuantity || 0),
+            schemeNotes: it.schemeNotes || '',
           };
         }),
         discount: calculatedBillDiscount,
@@ -1015,6 +1019,77 @@ export const PurchasesPage: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Scheme / FOC (Free of Cost) Option */}
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px 10px',
+                        backgroundColor: (it.focQuantity || 0) > 0 ? '#f5f3ff' : '#f8fafc',
+                        borderRadius: '6px',
+                        border: (it.focQuantity || 0) > 0 ? '1.5px solid #c4b5fd' : '1px dashed #cbd5e1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (it.focQuantity || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            🎁 Scheme / FOC (مفت مال):
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              className="form-control"
+                              placeholder="0 (Free)"
+                              value={it.focQuantity === 0 || !it.focQuantity ? '' : it.focQuantity}
+                              onChange={(e) => updateItem(idx, 'focQuantity', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                              style={{
+                                width: '85px',
+                                height: '28px',
+                                fontSize: '0.82rem',
+                                fontWeight: 800,
+                                textAlign: 'center',
+                                backgroundColor: '#ffffff',
+                                borderColor: (it.focQuantity || 0) > 0 ? '#7c3aed' : '#cbd5e1',
+                                color: (it.focQuantity || 0) > 0 ? '#6d28d9' : '#1e293b'
+                              }}
+                            />
+                            <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                              {isPrimary ? primarySymbol : secSymbol}
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="اسکیم تفصیل / Scheme note (e.g. 1 Free on 12 Pcs carton)"
+                            value={it.schemeNotes || ''}
+                            onChange={(e) => updateItem(idx, 'schemeNotes', e.target.value)}
+                            style={{
+                              width: '260px',
+                              height: '28px',
+                              fontSize: '0.76rem',
+                              backgroundColor: '#ffffff'
+                            }}
+                          />
+                        </div>
+
+                        {(it.focQuantity || 0) > 0 && (
+                          <span style={{
+                            backgroundColor: '#ede9fe',
+                            color: '#6d28d9',
+                            border: '1px solid #c4b5fd',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800
+                          }}>
+                            ✓ +{it.focQuantity} {isPrimary ? primarySymbol : secSymbol} مفت مال اسٹاک میں داخل ہوگا (بل میں Rs. 0 لگے گا)
+                          </span>
+                        )}
+                      </div>
+
                       {/* Helper conversion info & Cost comparison alert */}
                       {prod && (
                         <div style={{
@@ -1086,6 +1161,34 @@ export const PurchasesPage: React.FC = () => {
                   <span>Items Gross Subtotal:</span>
                   <span style={{ fontWeight: 700, color: '#334155' }}>Rs. {itemsSubtotal.toLocaleString()}</span>
                 </div>
+
+                {(() => {
+                  const totalFocPieces = items.reduce((sum, it) => {
+                    const prod = products.find((p) => p.id === it.productId);
+                    const conv = Number(prod?.conversionFactor) || 1;
+                    const isPrimary = it.unitType === 'PRIMARY' && (!!prod?.primaryUnit || !!prod?.primaryUnitId) && conv > 1;
+                    const focBase = isPrimary ? (Number(it.focQuantity) || 0) * conv : (Number(it.focQuantity) || 0);
+                    return sum + focBase;
+                  }, 0);
+                  if (totalFocPieces <= 0) return null;
+                  return (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '0.85rem',
+                      marginBottom: '8px',
+                      padding: '4px 8px',
+                      backgroundColor: '#ede9fe',
+                      borderRadius: '6px',
+                      color: '#6d28d9',
+                      fontWeight: 800,
+                      border: '1px solid #c4b5fd'
+                    }}>
+                      <span>🎁 Total Scheme Bonus / FOC Stock (مفت مال):</span>
+                      <span>+{totalFocPieces} Pcs (Rs. 0 Bill / Free)</span>
+                    </div>
+                  );
+                })()}
 
                 {/* Full Bill Discount Controls */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'center', margin: '10px 0', padding: '10px', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -1761,6 +1864,32 @@ export const PurchasesPage: React.FC = () => {
               {/* Financial Breakdown & Notes */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
                 <div>
+                  {selectedPurchase.notes && selectedPurchase.notes.includes('[PURCHASE_FOC:') && (
+                    <div style={{
+                      backgroundColor: '#ede9fe',
+                      border: '1.5px solid #c4b5fd',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      marginBottom: '10px',
+                      fontSize: '11.5px',
+                      color: '#6d28d9'
+                    }}>
+                      <div style={{ fontWeight: 800, marginBottom: '4px' }}>🎁 Scheme / FOC Free Items Received (مفت مال):</div>
+                      {(() => {
+                        try {
+                          const m = selectedPurchase.notes.match(/\[PURCHASE_FOC:(.*?)\]/);
+                          if (!m) return null;
+                          const focList = JSON.parse(m[1]);
+                          return focList.map((f: any, i: number) => (
+                            <div key={i} style={{ fontSize: '11px', fontWeight: 600, marginTop: '2px' }}>
+                              • {f.productName}: <b>+{f.focQuantity} {f.unitType}</b> (Total +{f.baseFocQuantity} base units) مفت مال موصول ہوا۔ {f.schemeNotes ? `(${f.schemeNotes})` : ''}
+                            </div>
+                          ));
+                        } catch { return null; }
+                      })()}
+                    </div>
+                  )}
+
                   {selectedPurchase.notes ? (
                     <div style={{
                       backgroundColor: '#fffbeb',

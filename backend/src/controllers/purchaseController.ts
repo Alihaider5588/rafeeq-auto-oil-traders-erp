@@ -15,6 +15,8 @@ const purchaseItemSchema = z.object({
   unitType: z.enum(['PRIMARY', 'SECONDARY']).default('SECONDARY').optional(),
   discount: z.number().min(0).default(0).optional(),
   discountPercent: z.number().min(0).max(100).default(0).optional(),
+  focQuantity: z.number().min(0).default(0).optional(),
+  schemeNotes: z.string().optional().nullable(),
 });
 
 const purchaseSchema = z.object({
@@ -170,14 +172,18 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
     const processedItems: Array<{
       productId: string;
       quantity: number;
+      focQuantity: number;
+      baseFocQuantity: number;
       unitType: string;
       baseQuantity: number;
+      paidBaseQuantity: number;
       unitCost: number;
       totalCost: number;
       baseUnitCost: number;
       prevStock: number;
       newStock: number;
       productName: string;
+      schemeNotes: string;
     }> = [];
 
     for (const item of data.items) {
@@ -192,7 +198,9 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
 
       const unitType = item.unitType === 'PRIMARY' ? 'PRIMARY' : 'SECONDARY';
       const conversionFactor = Number(prod.conversionFactor || 1);
-      const baseQuantity = unitType === 'PRIMARY' ? item.quantity * conversionFactor : item.quantity;
+      const paidBaseQuantity = unitType === 'PRIMARY' ? item.quantity * conversionFactor : item.quantity;
+      const baseFocQuantity = unitType === 'PRIMARY' ? (Number(item.focQuantity) || 0) * conversionFactor : (Number(item.focQuantity) || 0);
+      const totalBaseQuantity = paidBaseQuantity + baseFocQuantity;
       
       const grossCost = item.quantity * item.unitCost;
       let itemDiscount = Number(item.discount || 0);
@@ -206,19 +214,23 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
       totalItemsCost += totalCost;
 
       const prevStock = Number(prod.currentStock);
-      const newStock = prevStock + baseQuantity;
+      const newStock = prevStock + totalBaseQuantity;
 
       processedItems.push({
         productId: prod.id,
         quantity: item.quantity,
+        focQuantity: Number(item.focQuantity || 0),
+        baseFocQuantity,
         unitType,
-        baseQuantity,
+        baseQuantity: totalBaseQuantity,
+        paidBaseQuantity,
         unitCost: item.unitCost,
         totalCost,
         baseUnitCost,
         prevStock,
         newStock,
         productName: prod.name,
+        schemeNotes: item.schemeNotes || '',
       });
     }
 
@@ -228,6 +240,20 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
     }
     const netAmount = Math.max(0, totalItemsCost - billDiscount + data.tax);
     const remainingAmount = netAmount - data.paidAmount;
+
+    // FOC notes summary
+    const focSummary = processedItems.filter(it => it.focQuantity > 0).map(it => ({
+      productId: it.productId,
+      productName: it.productName,
+      focQuantity: it.focQuantity,
+      baseFocQuantity: it.baseFocQuantity,
+      unitType: it.unitType,
+      schemeNotes: it.schemeNotes,
+    }));
+    let finalPurchaseNotes = data.notes || '';
+    if (focSummary.length > 0) {
+      finalPurchaseNotes = `[PURCHASE_FOC:${JSON.stringify(focSummary)}] ${finalPurchaseNotes}`.trim();
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create Purchase record
@@ -243,7 +269,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
           paidAmount: new Prisma.Decimal(data.paidAmount),
           remainingAmount: new Prisma.Decimal(remainingAmount),
           paymentMethod: data.paymentMethod,
-          notes: data.notes,
+          notes: finalPurchaseNotes || null,
           createdById: userId,
           items: {
             create: processedItems.map((item) => ({
@@ -259,7 +285,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
         include: { items: true },
       });
 
-      // 2. Automatically Increase Stock using BASE QUANTITY & Track Batch Pricing Variance
+      // 2. Automatically Increase Stock using BASE QUANTITY & Track Batch Pricing Variance & FOC Stock
       for (const item of processedItems) {
         const existingProd = await tx.product.findUnique({
           where: { id: item.productId },
@@ -280,13 +306,40 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
             newCost,
             diff: Math.abs(costDiff),
             status, // 'CHEAPER' or 'EXPENSIVE'
-            batchQty: item.baseQuantity,
-            remainingBatchQty: item.baseQuantity,
+            batchQty: item.paidBaseQuantity,
+            remainingBatchQty: item.paidBaseQuantity,
             invoiceNumber: data.invoiceNumber.trim(),
             supplierName: supplier.companyName,
             purchaseDate: new Date().toISOString(),
           };
           updatedSpecs = `[BATCH_PRICING:${JSON.stringify(batchMeta)}] ${updatedSpecs}`.trim();
+        }
+
+        // Track FOC Scheme units in FOC_META tag
+        let focAvailable = 0;
+        if (updatedSpecs.includes('[FOC_META:')) {
+          const matchFoc = updatedSpecs.match(/\[FOC_META:(.*?)\]/);
+          if (matchFoc) {
+            try {
+              const parsedFoc = JSON.parse(matchFoc[1]);
+              focAvailable = Number(parsedFoc.available || 0);
+            } catch (e) {}
+          }
+          updatedSpecs = updatedSpecs.replace(/\[FOC_META:.*?\]\s*/g, '').trim();
+        }
+
+        if (item.baseFocQuantity > 0 || focAvailable > 0) {
+          const newFocTotal = focAvailable + item.baseFocQuantity;
+          if (newFocTotal > 0) {
+            const focMeta = {
+              available: newFocTotal,
+              lastReceivedFoc: item.baseFocQuantity,
+              lastSupplier: supplier.companyName,
+              lastDate: new Date().toISOString(),
+              schemeNotes: item.schemeNotes || 'Supplier Scheme Bonus',
+            };
+            updatedSpecs = `[FOC_META:${JSON.stringify(focMeta)}] ${updatedSpecs}`.trim();
+          }
         }
 
         await tx.product.update({
@@ -298,6 +351,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
           },
         });
 
+        const focDesc = item.baseFocQuantity > 0 ? ` + ${item.focQuantity} ${item.unitType} (FOC Scheme Free)` : '';
         await tx.stockMovement.create({
           data: {
             productId: item.productId,
@@ -306,7 +360,7 @@ export const createPurchase = async (req: AuthenticatedRequest, res: Response): 
             previousStock: new Prisma.Decimal(item.prevStock),
             newStock: new Prisma.Decimal(item.newStock),
             referenceId: purchase.id,
-            description: `Purchase Inward Inv #${data.invoiceNumber} (${item.quantity} ${item.unitType})`,
+            description: `Purchase Inward Inv #${data.invoiceNumber} (${item.quantity} ${item.unitType} paid${focDesc})`,
           },
         });
       }

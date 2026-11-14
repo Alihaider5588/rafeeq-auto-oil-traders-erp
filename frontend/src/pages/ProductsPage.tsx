@@ -440,7 +440,7 @@ export const ProductsPage: React.FC = () => {
       minimumStockLevel: String(prod.minimumStockLevel),
       openingStock: String(prod.currentStock),
       description: prod.description || '',
-      specifications: (prod.specifications || '').replace(/\[BATCH_PRICING:.*?\]\s*/g, '').trim(),
+      specifications: (prod.specifications || '').replace(/\[BATCH_PRICING:.*?\]\s*/g, '').replace(/\[FOC_META:.*?\]\s*/g, '').trim(),
       imageUrl: prod.imageUrl || '',
       showOnWebsite: prod.showOnWebsite ?? true,
       showInCatalog: prod.showInCatalog ?? true,
@@ -629,6 +629,12 @@ export const ProductsPage: React.FC = () => {
         const match = currentEditingProd.specifications.match(/\[BATCH_PRICING:(.*?)\]/);
         if (match) {
           finalSpecs = `[BATCH_PRICING:${match[1]}] ${finalSpecs}`.trim();
+        }
+      }
+      if (currentEditingProd?.specifications?.includes('[FOC_META:')) {
+        const focMatch = currentEditingProd.specifications.match(/\[FOC_META:(.*?)\]/);
+        if (focMatch) {
+          finalSpecs = `[FOC_META:${focMatch[1]}] ${finalSpecs}`.trim();
         }
       }
 
@@ -1076,6 +1082,7 @@ export const ProductsPage: React.FC = () => {
                 const isLowStock = stock <= minStock;
 
                 let batchPricing: any = null;
+                let focMeta: any = null;
                 let cleanSpecs = p.specifications || '';
                 if (cleanSpecs.includes('[BATCH_PRICING:')) {
                   try {
@@ -1083,6 +1090,15 @@ export const ProductsPage: React.FC = () => {
                     if (match) {
                       batchPricing = JSON.parse(match[1]);
                       cleanSpecs = cleanSpecs.replace(/\[BATCH_PRICING:.*?\]\s*/g, '').trim();
+                    }
+                  } catch (e) {}
+                }
+                if (cleanSpecs.includes('[FOC_META:')) {
+                  try {
+                    const match = cleanSpecs.match(/\[FOC_META:(.*?)\]/);
+                    if (match) {
+                      focMeta = JSON.parse(match[1]);
+                      cleanSpecs = cleanSpecs.replace(/\[FOC_META:.*?\]\s*/g, '').trim();
                     }
                   } catch (e) {}
                 }
@@ -1144,6 +1160,24 @@ export const ProductsPage: React.FC = () => {
                               📈 مہنگا مال: لاگت Rs. {batchPricing.diff} زیادہ لگی (لاٹ باقی: {batchPricing.remainingBatchQty} {p.unit?.symbol || 'Pcs'})
                             </span>
                           )}
+                        </div>
+                      )}
+                      {focMeta && Number(focMeta.available) > 0 && (
+                        <div style={{ marginTop: '4px' }}>
+                          <span style={{
+                            backgroundColor: '#ede9fe',
+                            color: '#6d28d9',
+                            border: '1px solid #c4b5fd',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            🎁 اسکیم / FOC اسٹاک: {focMeta.available} {p.unit?.symbol || 'Pcs'} مفت مال دستیاب {focMeta.schemeNotes ? `(${focMeta.schemeNotes})` : ''}
+                          </span>
                         </div>
                       )}
                       {cleanSpecs && (
@@ -1247,6 +1281,21 @@ export const ProductsPage: React.FC = () => {
                           }}>
                             Total: <b style={{ color: '#0f172a' }}>{stock.toLocaleString()} {p.unit?.symbol || 'Pcs'}</b>
                           </div>
+                          {focMeta && Number(focMeta.available) > 0 && (
+                            <div style={{
+                              fontSize: '0.70rem',
+                              color: '#6d28d9',
+                              fontWeight: 800,
+                              marginTop: '2px',
+                              backgroundColor: '#ede9fe',
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              border: '1px solid #c4b5fd',
+                              display: 'inline-block'
+                            }}>
+                              🎁 مفت مال: +{focMeta.available} {p.unit?.symbol || 'Pcs'}
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div style={{
@@ -1255,6 +1304,21 @@ export const ProductsPage: React.FC = () => {
                           fontWeight: 900
                         }}>
                           {stock.toLocaleString()} {p.unit?.symbol || 'Pcs'}
+                          {focMeta && Number(focMeta.available) > 0 && (
+                            <div style={{
+                              fontSize: '0.70rem',
+                              color: '#6d28d9',
+                              fontWeight: 800,
+                              marginTop: '2px',
+                              backgroundColor: '#ede9fe',
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              border: '1px solid #c4b5fd',
+                              display: 'inline-block'
+                            }}>
+                              🎁 مفت مال: +{focMeta.available} {p.unit?.symbol || 'Pcs'}
+                            </div>
+                          )}
                         </div>
                       )}
 
