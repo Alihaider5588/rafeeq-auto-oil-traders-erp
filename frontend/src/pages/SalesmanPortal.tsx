@@ -58,7 +58,9 @@ interface CartItem {
   unitPrice: number | string;
   standardRate: number;
   discountPercent?: number;
-  deliveryStatus?: 'DELIVERED' | 'PENDING_DELIVERY';
+  deliveryStatus?: 'DELIVERED' | 'PENDING_DELIVERY' | 'PARTIAL_DELIVERY';
+  deliveredQuantity?: number | string;
+  pendingQuantity?: number | string;
   focQuantity?: number | string;
   focFree?: boolean;
   focNotes?: string;
@@ -420,6 +422,9 @@ export const SalesmanPortal: React.FC = () => {
         focQuantity: 0,
         focFree: true,
         focNotes: '',
+        deliveryStatus: 'DELIVERED',
+        deliveredQuantity: 1,
+        pendingQuantity: 0,
       },
     ]);
 
@@ -494,6 +499,13 @@ export const SalesmanPortal: React.FC = () => {
     const newQty = Math.round((currentQty + delta) * 1000) / 1000;
     if (newQty > 0) {
       updated[index].quantity = newQty;
+      if (updated[index].deliveryStatus === 'PENDING_DELIVERY') {
+        updated[index].pendingQuantity = newQty;
+        updated[index].deliveredQuantity = 0;
+      } else if (updated[index].deliveryStatus !== 'PARTIAL_DELIVERY') {
+        updated[index].deliveredQuantity = newQty;
+        updated[index].pendingQuantity = 0;
+      }
       setCart(updated);
     } else {
       removeFromCart(index);
@@ -502,7 +514,15 @@ export const SalesmanPortal: React.FC = () => {
 
   const setDirectQuantity = (index: number, qty: number | string) => {
     const updated = [...cart];
+    const numQ = parseFloat(String(qty)) || 0;
     updated[index].quantity = qty;
+    if (updated[index].deliveryStatus === 'PENDING_DELIVERY') {
+      updated[index].pendingQuantity = numQ;
+      updated[index].deliveredQuantity = 0;
+    } else if (updated[index].deliveryStatus !== 'PARTIAL_DELIVERY') {
+      updated[index].deliveredQuantity = numQ;
+      updated[index].pendingQuantity = 0;
+    }
     setCart(updated);
   };
 
@@ -918,7 +938,11 @@ export const SalesmanPortal: React.FC = () => {
         }
       }
 
-      const hasPendingItems = cart.some((it) => it.deliveryStatus === 'PENDING_DELIVERY');
+      const hasPendingItems = cart.some((it) => {
+        const totalQ = parseFloat(String(it.quantity)) || 0;
+        const pendQ = it.pendingQuantity !== undefined ? parseFloat(String(it.pendingQuantity)) : (it.deliveryStatus === 'PENDING_DELIVERY' ? totalQ : 0);
+        return pendQ > 0;
+      });
 
       const payload = {
         customerId: targetCustomerId,
@@ -929,13 +953,19 @@ export const SalesmanPortal: React.FC = () => {
           const q = parseFloat(String(it.quantity)) || 0;
           const p = parseFloat(String(it.unitPrice)) || 0;
           const focQ = parseFloat(String(it.focQuantity || 0)) || 0;
+          const pendQ = it.pendingQuantity !== undefined ? parseFloat(String(it.pendingQuantity)) : (it.deliveryStatus === 'PENDING_DELIVERY' ? q : 0);
+          const delivQ = it.deliveredQuantity !== undefined ? parseFloat(String(it.deliveredQuantity)) : Math.max(0, q - pendQ);
+          const itemStatus = pendQ <= 0 ? 'DELIVERED' : (delivQ <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY');
+
           return {
             productId: it.product.id,
             quantity: q,
             unitType: it.unitType,
             unitPrice: p,
             discountPercent: it.discountPercent || 0,
-            deliveryStatus: it.deliveryStatus || 'DELIVERED',
+            deliveryStatus: itemStatus,
+            deliveredQuantity: delivQ,
+            pendingQuantity: pendQ,
             isRateOverridden: p !== it.standardRate,
             originalRate: it.standardRate,
             focQuantity: focQ,
@@ -2293,7 +2323,12 @@ export const SalesmanPortal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setCart(cart.map((it) => ({ ...it, deliveryStatus: 'DELIVERED' })));
+                    setCart(cart.map((it) => ({
+                      ...it,
+                      deliveryStatus: 'DELIVERED',
+                      deliveredQuantity: it.quantity,
+                      pendingQuantity: 0,
+                    })));
                   }}
                   style={{
                     fontSize: '0.74rem',
@@ -2301,17 +2336,22 @@ export const SalesmanPortal: React.FC = () => {
                     padding: '3px 8px',
                     borderRadius: '5px',
                     border: '1px solid #86efac',
-                    backgroundColor: cart.every((it) => (it.deliveryStatus || 'DELIVERED') === 'DELIVERED') ? '#16a34a' : '#ffffff',
-                    color: cart.every((it) => (it.deliveryStatus || 'DELIVERED') === 'DELIVERED') ? '#ffffff' : '#15803d',
+                    backgroundColor: cart.every((it) => (parseFloat(String(it.pendingQuantity || 0)) || 0) <= 0) ? '#16a34a' : '#ffffff',
+                    color: cart.every((it) => (parseFloat(String(it.pendingQuantity || 0)) || 0) <= 0) ? '#ffffff' : '#15803d',
                     cursor: 'pointer'
                   }}
                 >
-                  ✓ All Delivered
+                  ✓ All Delivered (تمام ڈیلیور)
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setCart(cart.map((it) => ({ ...it, deliveryStatus: 'PENDING_DELIVERY' })));
+                    setCart(cart.map((it) => ({
+                      ...it,
+                      deliveryStatus: 'PENDING_DELIVERY',
+                      deliveredQuantity: 0,
+                      pendingQuantity: it.quantity,
+                    })));
                   }}
                   style={{
                     fontSize: '0.74rem',
@@ -2319,12 +2359,12 @@ export const SalesmanPortal: React.FC = () => {
                     padding: '3px 8px',
                     borderRadius: '5px',
                     border: '1px solid #fde68a',
-                    backgroundColor: cart.every((it) => it.deliveryStatus === 'PENDING_DELIVERY') ? '#d97706' : '#ffffff',
-                    color: cart.every((it) => it.deliveryStatus === 'PENDING_DELIVERY') ? '#ffffff' : '#b45309',
+                    backgroundColor: cart.every((it) => (parseFloat(String(it.pendingQuantity || 0)) || 0) >= (parseFloat(String(it.quantity)) || 0) && (parseFloat(String(it.quantity)) || 0) > 0) ? '#d97706' : '#ffffff',
+                    color: cart.every((it) => (parseFloat(String(it.pendingQuantity || 0)) || 0) >= (parseFloat(String(it.quantity)) || 0) && (parseFloat(String(it.quantity)) || 0) > 0) ? '#ffffff' : '#b45309',
                     cursor: 'pointer'
                   }}
                 >
-                  ⏳ All Pending (امانت)
+                  ⏳ All Pending (تمام امانت)
                 </button>
               </div>
             </div>
@@ -2832,45 +2872,211 @@ export const SalesmanPortal: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Item Delivery Status Toggle */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginTop: '8px',
-                      paddingTop: '6px',
-                      borderTop: '1px dashed #e2e8f0',
-                      fontSize: '0.78rem'
-                    }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Item Delivery Status:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = [...cart];
-                          updated[index] = {
-                            ...updated[index],
-                            deliveryStatus: updated[index].deliveryStatus === 'PENDING_DELIVERY' ? 'DELIVERED' : 'PENDING_DELIVERY',
-                          };
-                          setCart(updated);
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          border: '1px solid',
-                          fontSize: '0.74rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          backgroundColor: item.deliveryStatus === 'PENDING_DELIVERY' ? '#fef3c7' : '#ecfdf5',
-                          color: item.deliveryStatus === 'PENDING_DELIVERY' ? '#b45309' : '#059669',
-                          borderColor: item.deliveryStatus === 'PENDING_DELIVERY' ? '#fde68a' : '#a7f3d0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        {item.deliveryStatus === 'PENDING_DELIVERY' ? '⏳ Pending Delivery (امانت)' : '✓ Delivered (ڈیلیور ہو گیا)'}
-                      </button>
-                    </div>
+                    {/* Item Delivery Status & Partial Pending Split */}
+                    {(() => {
+                      const itemQty = parseFloat(String(item.quantity)) || 0;
+                      const itemPendQty = item.pendingQuantity !== undefined ? (parseFloat(String(item.pendingQuantity)) || 0) : (item.deliveryStatus === 'PENDING_DELIVERY' ? itemQty : 0);
+                      const itemDelivQty = item.deliveredQuantity !== undefined ? (parseFloat(String(item.deliveredQuantity)) || 0) : Math.max(0, itemQty - itemPendQty);
+
+                      return (
+                        <div style={{
+                          marginTop: '8px',
+                          paddingTop: '8px',
+                          borderTop: '1px dashed #cbd5e1',
+                          fontSize: '0.78rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                            <span style={{ color: '#334155', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              📦 Delivery / حوالگی سامان:
+                            </span>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...cart];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    deliveryStatus: 'DELIVERED',
+                                    deliveredQuantity: itemQty,
+                                    pendingQuantity: 0,
+                                  };
+                                  setCart(updated);
+                                }}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  backgroundColor: itemPendQty <= 0 ? '#16a34a' : '#ffffff',
+                                  color: itemPendQty <= 0 ? '#ffffff' : '#15803d',
+                                  borderColor: itemPendQty <= 0 ? '#16a34a' : '#86efac'
+                                }}
+                              >
+                                ✓ مکمل ڈیلیور
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...cart];
+                                  const half = Math.round((itemQty / 2) * 100) / 100;
+                                  updated[index] = {
+                                    ...updated[index],
+                                    deliveryStatus: 'PARTIAL_DELIVERY',
+                                    deliveredQuantity: half,
+                                    pendingQuantity: Math.max(0, Math.round((itemQty - half) * 100) / 100),
+                                  };
+                                  setCart(updated);
+                                }}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  backgroundColor: itemPendQty > 0 && itemDelivQty > 0 ? '#2563eb' : '#ffffff',
+                                  color: itemPendQty > 0 && itemDelivQty > 0 ? '#ffffff' : '#1d4ed8',
+                                  borderColor: itemPendQty > 0 && itemDelivQty > 0 ? '#2563eb' : '#93c5fd'
+                                }}
+                                title="آدھا ڈیلیور اور آدھا امانت پینڈنگ"
+                              >
+                                ⚖️ آدھا / جزوی (Partial)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...cart];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    deliveryStatus: 'PENDING_DELIVERY',
+                                    deliveredQuantity: 0,
+                                    pendingQuantity: itemQty,
+                                  };
+                                  setCart(updated);
+                                }}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  backgroundColor: itemPendQty >= itemQty && itemQty > 0 ? '#d97706' : '#ffffff',
+                                  color: itemPendQty >= itemQty && itemQty > 0 ? '#ffffff' : '#b45309',
+                                  borderColor: itemPendQty >= itemQty && itemQty > 0 ? '#d97706' : '#fde68a'
+                                }}
+                              >
+                                ⏳ تمام امانت (Full Pending)
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Inputs for Delivered and Pending quantities */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: itemPendQty > 0 ? '#fffbeb' : '#f8fafc',
+                            border: itemPendQty > 0 ? '1px solid #fde68a' : '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            padding: '6px 8px',
+                            flexWrap: 'wrap',
+                            gap: '8px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>
+                                ✓ Delivered Qty (ڈیلیور شدہ):
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                max={itemQty}
+                                step="any"
+                                value={itemDelivQty === 0 ? '0' : itemDelivQty}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const safeDeliv = Math.max(0, Math.min(itemQty, val));
+                                  const safePend = Math.max(0, Math.round((itemQty - safeDeliv) * 1000) / 1000);
+                                  const updated = [...cart];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    deliveredQuantity: safeDeliv,
+                                    pendingQuantity: safePend,
+                                    deliveryStatus: safePend <= 0 ? 'DELIVERED' : (safeDeliv <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY'),
+                                  };
+                                  setCart(updated);
+                                }}
+                                style={{
+                                  width: '70px',
+                                  height: '26px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 800,
+                                  textAlign: 'center',
+                                  borderRadius: '4px',
+                                  border: '1px solid #86efac',
+                                  backgroundColor: '#ffffff'
+                                }}
+                              />
+                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{currentUnitSymbol}</span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d97706' }}>
+                                ⏳ Pending Qty (امانت باقی):
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                max={itemQty}
+                                step="any"
+                                value={itemPendQty === 0 ? '0' : itemPendQty}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const safePend = Math.max(0, Math.min(itemQty, val));
+                                  const safeDeliv = Math.max(0, Math.round((itemQty - safePend) * 1000) / 1000);
+                                  const updated = [...cart];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    deliveredQuantity: safeDeliv,
+                                    pendingQuantity: safePend,
+                                    deliveryStatus: safePend <= 0 ? 'DELIVERED' : (safeDeliv <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY'),
+                                  };
+                                  setCart(updated);
+                                }}
+                                style={{
+                                  width: '70px',
+                                  height: '26px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 800,
+                                  textAlign: 'center',
+                                  borderRadius: '4px',
+                                  border: '1px solid #fde68a',
+                                  backgroundColor: '#ffffff',
+                                  color: itemPendQty > 0 ? '#b45309' : '#1e293b'
+                                }}
+                              />
+                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{currentUnitSymbol}</span>
+                            </div>
+                          </div>
+
+                          {itemPendQty > 0 && (
+                            <div style={{
+                              marginTop: '4px',
+                              fontSize: '0.70rem',
+                              color: '#b45309',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <span>⏳ <b>{itemPendQty} {currentUnitSymbol}</b> گاہک کی امانت رہے گی اور بعد میں ڈیلیور ہو گی۔ (اسٹاک ابھی مائنس ہو جائے گا)</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -3967,7 +4173,10 @@ export const SalesmanPortal: React.FC = () => {
                     const match = (completedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
                     if (match) {
                       const meta = JSON.parse(match[1]);
-                      pendingList = (meta.items || []).filter((it: any) => it.status !== 'DELIVERED');
+                      pendingList = (meta.items || []).filter((it: any) => {
+                        const pQ = it.pendingQuantity !== undefined ? Number(it.pendingQuantity) : (it.status !== 'DELIVERED' ? Number(it.quantity) : 0);
+                        return pQ > 0;
+                      });
                     }
                   } catch (e) {}
 
@@ -3987,14 +4196,20 @@ export const SalesmanPortal: React.FC = () => {
                       </div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px' }}>
                         <tbody>
-                          {pendingList.map((pi: any, pIdx: number) => (
-                            <tr key={pIdx} style={{ borderBottom: '1px dotted #ccc' }}>
-                              <td style={{ padding: '2px 0', fontWeight: 700 }}>• {pi.productName || 'Item'}</td>
-                              <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 800 }}>
-                                {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'} (Pending)
-                              </td>
-                            </tr>
-                          ))}
+                          {pendingList.map((pi: any, pIdx: number) => {
+                            const pendQ = pi.pendingQuantity !== undefined ? Number(pi.pendingQuantity) : Number(pi.quantity);
+                            const delivQ = pi.deliveredQuantity !== undefined ? Number(pi.deliveredQuantity) : Math.max(0, Number(pi.quantity) - pendQ);
+                            const uSymbol = pi.unitType === 'PRIMARY' ? 'Ctn' : (pi.unitSymbol || 'Pc');
+                            return (
+                              <tr key={pIdx} style={{ borderBottom: '1px dotted #ccc' }}>
+                                <td style={{ padding: '2px 0', fontWeight: 700 }}>• {pi.productName || 'Item'}</td>
+                                <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 800 }}>
+                                  <span style={{ color: '#b45309' }}>{pendQ} {uSymbol} (امانت باقی)</span>
+                                  {delivQ > 0 ? <span style={{ color: '#15803d', display: 'block', fontSize: '8.5px' }}>({delivQ} {uSymbol} دیا گیا)</span> : null}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                       <div style={{ fontSize: '8px', textAlign: 'center', marginTop: '3px', color: '#555', fontStyle: 'italic' }}>

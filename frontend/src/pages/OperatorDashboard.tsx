@@ -239,14 +239,19 @@ export const OperatorDashboard: React.FC = () => {
                     <div style={{ fontWeight: 700, color: '#475569', marginBottom: '3px', fontSize: '0.72rem' }}>
                       ⏳ Pending Items:
                     </div>
-                    {pd.pendingItems.map((pi: any, piIdx: number) => (
-                      <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a' }}>
-                        <span>• {pi.productName}</span>
-                        <span style={{ fontWeight: 700, color: '#d97706' }}>
-                          {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'}
-                        </span>
-                      </div>
-                    ))}
+                    {pd.pendingItems.map((pi: any, piIdx: number) => {
+                      const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;
+                      const delivQ = pi.deliveredQuantity || 0;
+                      return (
+                        <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', padding: '2px 0' }}>
+                          <span>• {pi.productName}</span>
+                          <span style={{ fontWeight: 700, color: '#d97706' }}>
+                            {pendQ} {pi.unitType === 'PRIMARY' ? 'Ctn' : (pi.unitSymbol || 'Pc')} امانت
+                            {delivQ > 0 ? <span style={{ color: '#059669', fontSize: '0.68rem', marginLeft: '4px' }}>({delivQ} دیا گیا)</span> : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

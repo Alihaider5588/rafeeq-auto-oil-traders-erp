@@ -15,7 +15,9 @@ const saleItemSchema = z.object({
   unitType: z.enum(['PRIMARY', 'SECONDARY']).default('SECONDARY').optional(),
   discount: z.number().min(0).default(0).optional(),
   discountPercent: z.number().min(0).max(100).default(0).optional(),
-  deliveryStatus: z.enum(['DELIVERED', 'PENDING_DELIVERY']).default('DELIVERED').optional(),
+  deliveryStatus: z.enum(['DELIVERED', 'PENDING_DELIVERY', 'PARTIAL_DELIVERY']).default('DELIVERED').optional(),
+  deliveredQuantity: z.number().min(0).optional(),
+  pendingQuantity: z.number().min(0).optional(),
   focQuantity: z.number().min(0).default(0).optional(),
   focFree: z.boolean().default(true).optional(),
   focNotes: z.string().optional().nullable(),
@@ -636,18 +638,42 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     const orderStatus = requireApproval ? OrderStatus.PENDING_APPROVAL : OrderStatus.COMPLETED;
     const saleDate = data.saleDate ? new Date(data.saleDate) : new Date();
 
-    // Check if entire bill or any individual item is marked for pending delivery (امانت / بعد میں وصولی)
-    const hasPendingDelivery = data.deliveryStatus === 'PENDING_DELIVERY' || data.items.some((it) => it.deliveryStatus === 'PENDING_DELIVERY');
+    // Check if entire bill or any individual item is marked for pending delivery (امانت / بعد میں وصولی / جزوی ڈیلیوری)
+    const hasPendingDelivery = data.deliveryStatus === 'PENDING_DELIVERY' ||
+      data.items.some((it) => {
+        const pendQ = it.pendingQuantity !== undefined ? Number(it.pendingQuantity) : (it.deliveryStatus === 'PENDING_DELIVERY' ? Number(it.quantity) : 0);
+        return pendQ > 0;
+      });
+
     const deliveryMeta = {
       status: hasPendingDelivery ? 'PENDING_DELIVERY' : 'DELIVERED',
       items: data.items.map((it) => {
         const prod = prodMap.get(it.productId);
+        const totalQ = Number(it.quantity);
+        let pendQ = 0;
+        let delivQ = totalQ;
+
+        if (it.pendingQuantity !== undefined && it.pendingQuantity !== null) {
+          pendQ = Math.max(0, Math.min(totalQ, Number(it.pendingQuantity)));
+          delivQ = Math.max(0, totalQ - pendQ);
+        } else if (it.deliveredQuantity !== undefined && it.deliveredQuantity !== null) {
+          delivQ = Math.max(0, Math.min(totalQ, Number(it.deliveredQuantity)));
+          pendQ = Math.max(0, totalQ - delivQ);
+        } else if (it.deliveryStatus === 'PENDING_DELIVERY' || data.deliveryStatus === 'PENDING_DELIVERY') {
+          pendQ = totalQ;
+          delivQ = 0;
+        }
+
+        const itemStatus = pendQ <= 0 ? 'DELIVERED' : (delivQ <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY');
+
         return {
           productId: it.productId,
           productName: prod?.name || 'Product',
-          quantity: it.quantity,
+          quantity: totalQ,
+          deliveredQuantity: delivQ,
+          pendingQuantity: pendQ,
           unitType: it.unitType || 'SECONDARY',
-          status: it.deliveryStatus || (data.deliveryStatus === 'PENDING_DELIVERY' ? 'PENDING_DELIVERY' : 'DELIVERED'),
+          status: itemStatus,
         };
       }),
       createdAt: new Date().toISOString(),
@@ -2085,7 +2111,10 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
           if (match) meta = JSON.parse(match[1]);
         } catch (e) { }
 
-        const pendingItems = (meta?.items || sale.items || []).filter((it: any) => it.status !== 'DELIVERED');
+        const pendingItems = (meta?.items || sale.items || []).filter((it: any) => {
+          const pendQ = it.pendingQuantity !== undefined ? Number(it.pendingQuantity) : (it.status !== 'DELIVERED' ? Number(it.quantity) : 0);
+          return pendQ > 0;
+        });
 
         return {
           saleId: sale.id,
@@ -2100,14 +2129,19 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
           deliveryStatus: meta?.status || 'PENDING_DELIVERY',
           pendingItems: pendingItems.map((pi: any) => {
             const matchedItem = sale.items.find((si) => si.productId === pi.productId);
+            const totalQ = Number(pi.quantity || matchedItem?.quantity || 0);
+            const pendQ = pi.pendingQuantity !== undefined ? Number(pi.pendingQuantity) : (pi.status !== 'DELIVERED' ? totalQ : 0);
+            const delivQ = pi.deliveredQuantity !== undefined ? Number(pi.deliveredQuantity) : Math.max(0, totalQ - pendQ);
             return {
               productId: pi.productId,
               productName: pi.productName || matchedItem?.product?.name || 'Product',
               sku: matchedItem?.product?.sku || '',
-              quantity: Number(pi.quantity || matchedItem?.quantity || 0),
+              quantity: totalQ,
+              deliveredQuantity: delivQ,
+              pendingQuantity: pendQ,
               unitType: pi.unitType || matchedItem?.unitType || 'SECONDARY',
               unitSymbol: matchedItem?.product?.unit?.symbol || 'Pcs',
-              status: pi.status || 'PENDING_DELIVERY',
+              status: pi.status || (pendQ > 0 ? (delivQ > 0 ? 'PARTIAL_DELIVERY' : 'PENDING_DELIVERY') : 'DELIVERED'),
             };
           }),
           createdAt: sale.createdAt,
@@ -2157,16 +2191,26 @@ export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Respo
 
     if (markAllDelivered) {
       meta.status = 'DELIVERED';
-      meta.items = (meta.items || []).map((it: any) => ({ ...it, status: 'DELIVERED' }));
+      meta.items = (meta.items || []).map((it: any) => ({
+        ...it,
+        status: 'DELIVERED',
+        deliveredQuantity: it.quantity,
+        pendingQuantity: 0,
+      }));
       meta.deliveredAt = new Date().toISOString();
     } else if (Array.isArray(deliveredItemIds)) {
       meta.items = (meta.items || []).map((it: any) => {
         if (deliveredItemIds.includes(it.productId)) {
-          return { ...it, status: 'DELIVERED' };
+          return {
+            ...it,
+            status: 'DELIVERED',
+            deliveredQuantity: it.quantity,
+            pendingQuantity: 0,
+          };
         }
         return it;
       });
-      const allDone = meta.items.every((it: any) => it.status === 'DELIVERED');
+      const allDone = meta.items.every((it: any) => (it.pendingQuantity || 0) <= 0 || it.status === 'DELIVERED');
       meta.status = allDone ? 'DELIVERED' : 'PENDING_DELIVERY';
       if (allDone) meta.deliveredAt = new Date().toISOString();
     }

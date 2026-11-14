@@ -1723,6 +1723,59 @@ export const SalesListPage: React.FC = () => {
                 );
               })()}
 
+              {/* 📦 PENDING DELIVERY ITEMS / بعد میں ملنے والا امانت سامان */}
+              {(() => {
+                let pendingList: any[] = [];
+                try {
+                  const match = (selectedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
+                  if (match) {
+                    const meta = JSON.parse(match[1]);
+                    pendingList = (meta.items || []).filter((it: any) => {
+                      const pQ = it.pendingQuantity !== undefined ? Number(it.pendingQuantity) : (it.status !== 'DELIVERED' ? Number(it.quantity) : 0);
+                      return pQ > 0;
+                    });
+                  }
+                } catch (e) {}
+
+                if (pendingList.length === 0) return null;
+
+                return (
+                  <div style={{
+                    border: '1.5px solid #000000',
+                    backgroundColor: '#fffbeb',
+                    padding: '6px 8px',
+                    marginBottom: '10px',
+                    borderRadius: '4px',
+                    fontSize: '10px'
+                  }}>
+                    <div style={{ fontWeight: 900, textAlign: 'center', borderBottom: '1px solid #000000', paddingBottom: '3px', marginBottom: '4px' }}>
+                      ⏳ PENDING DELIVERY ITEMS / بعد میں ملنے والا سامان (امانت)
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px' }}>
+                      <tbody>
+                        {pendingList.map((pi: any, pIdx: number) => {
+                          const pendQ = pi.pendingQuantity !== undefined ? Number(pi.pendingQuantity) : Number(pi.quantity);
+                          const delivQ = pi.deliveredQuantity !== undefined ? Number(pi.deliveredQuantity) : Math.max(0, Number(pi.quantity) - pendQ);
+                          const uSymbol = pi.unitType === 'PRIMARY' ? 'Ctn' : (pi.unitSymbol || 'Pc');
+                          return (
+                            <tr key={pIdx} style={{ borderBottom: '1px dotted #ccc' }}>
+                              <td style={{ padding: '2px 0', fontWeight: 700 }}>• {pi.productName || 'Item'}</td>
+                              <td style={{ padding: '2px 0', textAlign: 'right', fontWeight: 800 }}>
+                                <span style={{ color: '#b45309' }}>{pendQ} {uSymbol} (امانت باقی)</span>
+                                {delivQ > 0 ? <span style={{ color: '#15803d', display: 'block', fontSize: '8.5px' }}>({delivQ} {uSymbol} دیا گیا)</span> : null}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div style={{ fontSize: '8px', textAlign: 'center', marginTop: '3px', color: '#555', fontStyle: 'italic' }}>
+                      * Yeh saman dukan / godown me baqi hai, baad me receive karein.
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* 🎁 FOC SCHEME BONUS ITEMS BANNER */}
               {(() => {
                 let focList: any[] = [];
@@ -2633,14 +2686,19 @@ export const SalesListPage: React.FC = () => {
 
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {pItems.map((pi: any, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#0f172a', padding: '2px 0' }}>
-                          <span style={{ fontWeight: 600 }}>• {pi.productName}</span>
-                          <span style={{ fontWeight: 800, color: '#b45309' }}>
-                            {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'}
-                          </span>
-                        </div>
-                      ))}
+                      {pItems.map((pi: any, idx: number) => {
+                        const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;
+                        const delivQ = pi.deliveredQuantity || 0;
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#0f172a', padding: '2px 0' }}>
+                            <span style={{ fontWeight: 600 }}>• {pi.productName}</span>
+                            <span style={{ fontWeight: 800, color: '#b45309' }}>
+                              {pendQ} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'} امانت
+                              {delivQ > 0 ? <span style={{ color: '#059669', fontSize: '0.74rem', marginLeft: '6px' }}>({delivQ} دیا گیا)</span> : null}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })()}

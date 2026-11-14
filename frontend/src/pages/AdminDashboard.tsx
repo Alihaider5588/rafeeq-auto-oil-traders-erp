@@ -25,7 +25,8 @@ import {
   CreditCard,
   FileDown,
   Store,
-  Truck
+  Truck,
+  TrendingDown
 } from 'lucide-react';
 import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
@@ -234,20 +235,35 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="stat-card blue">
-          <div className="stat-label">Today's Gross Profit</div>
-          <div className="stat-value">Rs. {Number(today?.grossProfit || 0).toLocaleString()}</div>
+          <div className="stat-label">Today's Gross Profit (کُل منافع)</div>
+          <div className="stat-value" style={{ color: '#2563eb' }}>Rs. {Number(today?.grossProfit || 0).toLocaleString()}</div>
           <div className="stat-sub">
             <ArrowUpRight size={14} color="#2563eb" /> Sale Margin (Revenue - Cost)
           </div>
         </div>
 
-        <div className="stat-card emerald" style={{ borderLeft: '4px solid #10b981' }}>
-          <div className="stat-label">Today's Net Profit (خالص منافع)</div>
-          <div className="stat-value" style={{ color: Number(today?.netProfit || 0) >= 0 ? '#059669' : '#dc2626' }}>
+        <div className="stat-card rose" style={{ borderLeft: '4px solid #f43f5e', backgroundColor: '#fff1f2' }}>
+          <div className="stat-label" style={{ fontWeight: 800, color: '#9f1239' }}>Today's Daily Expenses (آج کے اخراجات)</div>
+          <div className="stat-value" style={{ color: '#e11d48' }}>
+            Rs. {Number(today?.totalExpenses || 0).toLocaleString()}
+          </div>
+          <div className="stat-sub" style={{ fontSize: '0.72rem', color: '#be123c', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span><TrendingDown size={14} color="#e11d48" /> Shop & Field daily kharche</span>
+            <Link to="/expenses" style={{ color: '#e11d48', fontWeight: 800, textDecoration: 'underline' }}>
+              Expenses Page →
+            </Link>
+          </div>
+        </div>
+
+        <div className="stat-card emerald" style={{ borderLeft: '4px solid #10b981', backgroundColor: '#f0fdf4' }}>
+          <div className="stat-label" style={{ fontWeight: 800, color: '#065f46' }}>
+            Today's Net Profit (خالص منافع - اخراجات منہا کر کے)
+          </div>
+          <div className="stat-value" style={{ color: Number(today?.netProfit || 0) >= 0 ? '#059669' : '#dc2626', fontSize: '1.45rem', fontWeight: 900 }}>
             Rs. {Number(today?.netProfit || 0).toLocaleString()}
           </div>
-          <div className="stat-sub">
-            After deducting Rs. {Number(today?.totalExpenses || 0).toLocaleString()} expenses
+          <div className="stat-sub" style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 700, backgroundColor: '#dcfce7', padding: '3px 6px', borderRadius: '4px', marginTop: '4px' }}>
+            منافع (Rs. {Number(today?.grossProfit || 0).toLocaleString()}) - اخراجات (Rs. {Number(today?.totalExpenses || 0).toLocaleString()})
           </div>
         </div>
       </div>
@@ -737,14 +753,19 @@ export const AdminDashboard: React.FC = () => {
                     <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px', fontSize: '0.74rem' }}>
                       ⏳ Pending Items to Handover:
                     </div>
-                    {pd.pendingItems.map((pi: any, piIdx: number) => (
-                      <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', padding: '2px 0' }}>
-                        <span>• {pi.productName}</span>
-                        <span style={{ fontWeight: 700, color: '#d97706' }}>
-                          {pi.quantity} {pi.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'}
-                        </span>
-                      </div>
-                    ))}
+                    {pd.pendingItems.map((pi: any, piIdx: number) => {
+                      const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;
+                      const delivQ = pi.deliveredQuantity || 0;
+                      return (
+                        <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', padding: '3px 0', borderBottom: '1px dotted #e2e8f0' }}>
+                          <span style={{ fontWeight: 600 }}>• {pi.productName}</span>
+                          <span style={{ fontWeight: 800, color: '#d97706', fontSize: '0.78rem' }}>
+                            {pendQ} {pi.unitType === 'PRIMARY' ? 'Ctn' : (pi.unitSymbol || 'Pc')} امانت
+                            {delivQ > 0 ? <span style={{ color: '#059669', fontSize: '0.70rem', marginLeft: '4px' }}>({delivQ} دیا گیا)</span> : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
