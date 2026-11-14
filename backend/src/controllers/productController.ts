@@ -89,6 +89,8 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
       showInCatalog: true,
       showPublicPrice: true,
       isActive: true,
+      specifications: true,
+      description: true,
       imageUrl: shouldIncludeImages,
       category: {
         select: { id: true, name: true, description: true },

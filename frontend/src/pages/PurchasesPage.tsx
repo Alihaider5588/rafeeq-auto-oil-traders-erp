@@ -6,6 +6,49 @@ import { useAuth } from '../context/AuthContext';
 import { exportPurchasesPDF } from '../utils/pdfExportUtils';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
 
+const extractJsonTag = (text: string | undefined | null, tagName: string) => {
+  if (!text) return null;
+  const startTag = `[${tagName}:`;
+  const startIdx = text.indexOf(startTag);
+  if (startIdx === -1) return null;
+  const contentStart = startIdx + startTag.length;
+  const firstChar = text[contentStart];
+  if (firstChar === '[' || firstChar === '{') {
+    const openChar = firstChar;
+    const closeChar = firstChar === '[' ? ']' : '}';
+    let depth = 0;
+    for (let i = contentStart; i < text.length; i++) {
+      if (text[i] === openChar) depth++;
+      else if (text[i] === closeChar) {
+        depth--;
+        if (depth === 0) {
+          try {
+            return JSON.parse(text.substring(contentStart, i + 1));
+          } catch (e) {
+            return null;
+          }
+        }
+      }
+    }
+  }
+  const endIdx = text.indexOf(']', contentStart);
+  if (endIdx !== -1) {
+    try {
+      return JSON.parse(text.substring(contentStart, endIdx));
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+
+const cleanPurchaseNotes = (text: string | undefined | null) => {
+  if (!text) return '';
+  return text
+    .replace(/\[PURCHASE_FOC:(\[[\s\S]*?\]|\{[\s\S]*?\})\]\s*/g, '')
+    .trim();
+};
+
 export const PurchasesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -619,6 +662,22 @@ export const PurchasesPage: React.FC = () => {
                     >
                       {p.invoiceNumber}
                     </button>
+                    {p.notes && p.notes.includes('[PURCHASE_FOC:') && (
+                      <div style={{ marginTop: '2px' }}>
+                        <span style={{
+                          backgroundColor: '#ede9fe',
+                          color: '#6d28d9',
+                          border: '1px solid #c4b5fd',
+                          borderRadius: '4px',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          padding: '1px 5px',
+                          display: 'inline-block'
+                        }}>
+                          🎁 Scheme / FOC Free Items
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{new Date(p.purchaseDate).toLocaleDateString()}</div>
@@ -1754,224 +1813,258 @@ export const PurchasesPage: React.FC = () => {
               </div>
 
               {/* Items Received Table */}
-              <div style={{ marginBottom: '16px' }}>
-                <table style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  fontSize: '11.5px',
-                  border: '1px solid #cbd5e1'
-                }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
-                      <th style={{ padding: '7px 8px', textAlign: 'center', width: '35px', borderRight: '1px solid #334155' }}>#</th>
-                      <th style={{ padding: '7px 10px', textAlign: 'left', borderRight: '1px solid #334155' }}>Product / Description (آئٹم نام)</th>
-                      <th style={{ padding: '7px 8px', textAlign: 'center', width: '90px', borderRight: '1px solid #334155' }}>Unit / پیکنگ</th>
-                      <th style={{ padding: '7px 8px', textAlign: 'center', width: '80px', borderRight: '1px solid #334155' }}>Qty Recv (تعداد)</th>
-                      <th style={{ padding: '7px 10px', textAlign: 'right', width: '100px', borderRight: '1px solid #334155' }}>Unit Rate</th>
-                      <th style={{ padding: '7px 10px', textAlign: 'right', width: '110px' }}>Total Cost (Rs.)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedPurchase.items && selectedPurchase.items.length > 0 ? (
-                      selectedPurchase.items.map((it: any, idx: number) => {
-                        const conv = Number(it.product?.conversionFactor) || 1;
-                        const isPrimary = it.unitType === 'PRIMARY';
-                        const primarySymbol = it.product?.primaryUnit?.symbol || 'Ctn';
-                        const secSymbol = it.product?.unit?.symbol || 'Pcs';
-                        const baseQty = Number(it.baseQuantity) || (isPrimary ? Number(it.quantity) * conv : Number(it.quantity));
-
-                        return (
-                          <tr key={it.id || idx} style={{
-                            borderBottom: '1px solid #e2e8f0',
-                            backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc'
-                          }}>
-                            <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748b', borderRight: '1px solid #e2e8f0' }}>
-                              {idx + 1}
-                            </td>
-                            <td style={{ padding: '7px 10px', borderRight: '1px solid #e2e8f0' }}>
-                              <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                                {it.product?.name || 'Product'}
-                              </div>
-                              <div style={{ fontSize: '10px', color: '#64748b' }}>
-                                {it.product?.brand ? `Brand: ${it.product.brand}` : ''}
-                                {it.product?.sku ? ` | SKU: ${it.product.sku}` : ''}
-                              </div>
-                            </td>
-                            <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 600, color: '#475569', borderRight: '1px solid #e2e8f0' }}>
-                              <span style={{
-                                backgroundColor: isPrimary ? '#fef3c7' : '#f1f5f9',
-                                color: isPrimary ? '#92400e' : '#475569',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                border: isPrimary ? '1px solid #fde68a' : '1px solid #cbd5e1'
-                              }}>
-                                {isPrimary ? `📦 ${primarySymbol} (${conv} ${secSymbol})` : `🧴 ${secSymbol}`}
-                              </span>
-                            </td>
-                            <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 800, color: '#0f172a', fontSize: '12px', borderRight: '1px solid #e2e8f0' }}>
-                              <div>{Number(it.quantity).toLocaleString()} {isPrimary ? primarySymbol : secSymbol}</div>
-                              {isPrimary && conv > 1 && (
-                                <div style={{ fontSize: '10px', color: '#0284c7', fontWeight: 600 }}>
-                                  ({baseQty} Total {secSymbol})
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, borderRight: '1px solid #e2e8f0' }}>
-                              <div>Rs. {Number(it.unitCost).toLocaleString()}</div>
-                              {isPrimary && conv > 1 && (
-                                <div style={{ fontSize: '10px', color: '#64748b' }}>
-                                  (= Rs. {Math.round((Number(it.unitCost) / conv) * 100) / 100} / {secSymbol})
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
-                              Rs. {Number(it.totalCost || (it.quantity * it.unitCost)).toLocaleString()}
-                            </td>
+              {(() => {
+                const purchaseFocList = extractJsonTag(selectedPurchase.notes, 'PURCHASE_FOC');
+                return (
+                  <>
+                    <div style={{ marginBottom: '16px' }}>
+                      <table style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        fontSize: '11.5px',
+                        border: '1px solid #cbd5e1'
+                      }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
+                            <th style={{ padding: '7px 8px', textAlign: 'center', width: '35px', borderRight: '1px solid #334155' }}>#</th>
+                            <th style={{ padding: '7px 10px', textAlign: 'left', borderRight: '1px solid #334155' }}>Product / Description (آئٹم نام)</th>
+                            <th style={{ padding: '7px 8px', textAlign: 'center', width: '90px', borderRight: '1px solid #334155' }}>Unit / پیکنگ</th>
+                            <th style={{ padding: '7px 8px', textAlign: 'center', width: '80px', borderRight: '1px solid #334155' }}>Qty Recv (تعداد)</th>
+                            <th style={{ padding: '7px 10px', textAlign: 'right', width: '100px', borderRight: '1px solid #334155' }}>Unit Rate</th>
+                            <th style={{ padding: '7px 10px', textAlign: 'right', width: '110px' }}>Total Cost (Rs.)</th>
                           </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>
-                          No item details recorded for this purchase invoice.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                  {selectedPurchase.items && selectedPurchase.items.length > 0 && (
-                    <tfoot>
-                      <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
-                        <td colSpan={3} style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid #e2e8f0' }}>
-                          Total Items / کل موصول شدہ تعداد:
-                        </td>
-                        <td style={{ padding: '7px 8px', textAlign: 'center', color: '#0284c7', fontSize: '13px', borderRight: '1px solid #e2e8f0' }}>
-                          {selectedPurchase.items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 0), 0)}
-                        </td>
-                        <td style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid #e2e8f0' }}>
-                          Gross Total:
-                        </td>
-                        <td style={{ padding: '7px 10px', textAlign: 'right', color: '#0f172a', fontSize: '12px' }}>
-                          Rs. {Number(selectedPurchase.totalAmount || selectedPurchase.netAmount).toLocaleString()}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
+                        </thead>
+                        <tbody>
+                          {selectedPurchase.items && selectedPurchase.items.length > 0 ? (
+                            selectedPurchase.items.map((it: any, idx: number) => {
+                              const conv = Number(it.product?.conversionFactor) || 1;
+                              const isPrimary = it.unitType === 'PRIMARY';
+                              const primarySymbol = it.product?.primaryUnit?.symbol || 'Ctn';
+                              const secSymbol = it.product?.unit?.symbol || 'Pcs';
+                              const baseQty = Number(it.baseQuantity) || (isPrimary ? Number(it.quantity) * conv : Number(it.quantity));
 
-              {/* Financial Breakdown & Notes */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
-                <div>
-                  {selectedPurchase.notes && selectedPurchase.notes.includes('[PURCHASE_FOC:') && (
-                    <div style={{
-                      backgroundColor: '#ede9fe',
-                      border: '1.5px solid #c4b5fd',
-                      borderRadius: '8px',
-                      padding: '10px 12px',
-                      marginBottom: '10px',
-                      fontSize: '11.5px',
-                      color: '#6d28d9'
-                    }}>
-                      <div style={{ fontWeight: 800, marginBottom: '4px' }}>🎁 Scheme / FOC Free Items Received (مفت مال):</div>
-                      {(() => {
-                        try {
-                          const m = selectedPurchase.notes.match(/\[PURCHASE_FOC:(.*?)\]/);
-                          if (!m) return null;
-                          const focList = JSON.parse(m[1]);
-                          return focList.map((f: any, i: number) => (
-                            <div key={i} style={{ fontSize: '11px', fontWeight: 600, marginTop: '2px' }}>
-                              • {f.productName}: <b>+{f.focQuantity} {f.unitType}</b> (Total +{f.baseFocQuantity} base units) مفت مال موصول ہوا۔ {f.schemeNotes ? `(${f.schemeNotes})` : ''}
+                              const matchingFoc = Array.isArray(purchaseFocList)
+                                ? purchaseFocList.find((f: any) => f.productId === it.productId || f.productName === it.product?.name)
+                                : null;
+
+                              return (
+                                <React.Fragment key={it.id || idx}>
+                                  <tr style={{
+                                    borderBottom: '1px solid #e2e8f0',
+                                    backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                                  }}>
+                                    <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748b', borderRight: '1px solid #e2e8f0' }}>
+                                      {idx + 1}
+                                    </td>
+                                    <td style={{ padding: '7px 10px', borderRight: '1px solid #e2e8f0' }}>
+                                      <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                                        {it.product?.name || 'Product'}
+                                      </div>
+                                      <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                        {it.product?.brand ? `Brand: ${it.product.brand}` : ''}
+                                        {it.product?.sku ? ` | SKU: ${it.product.sku}` : ''}
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 600, color: '#475569', borderRight: '1px solid #e2e8f0' }}>
+                                      <span style={{
+                                        backgroundColor: isPrimary ? '#fef3c7' : '#f1f5f9',
+                                        color: isPrimary ? '#92400e' : '#475569',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        border: isPrimary ? '1px solid #fde68a' : '1px solid #cbd5e1'
+                                      }}>
+                                        {isPrimary ? `📦 ${primarySymbol} (${conv} ${secSymbol})` : `🧴 ${secSymbol}`}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 800, color: '#0f172a', fontSize: '12px', borderRight: '1px solid #e2e8f0' }}>
+                                      <div>{Number(it.quantity).toLocaleString()} {isPrimary ? primarySymbol : secSymbol}</div>
+                                      {isPrimary && conv > 1 && (
+                                        <div style={{ fontSize: '10px', color: '#0284c7', fontWeight: 600 }}>
+                                          ({baseQty} Total {secSymbol})
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, borderRight: '1px solid #e2e8f0' }}>
+                                      <div>Rs. {Number(it.unitCost).toLocaleString()}</div>
+                                      {isPrimary && conv > 1 && (
+                                        <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                          (= Rs. {Math.round((Number(it.unitCost) / conv) * 100) / 100} / {secSymbol})
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                                      Rs. {Number(it.totalCost || (it.quantity * it.unitCost)).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                  {matchingFoc && Number(matchingFoc.focQuantity) > 0 && (
+                                    <tr style={{ backgroundColor: '#f5f3ff', borderBottom: '1px solid #e9d5ff' }}>
+                                      <td style={{ padding: '6px 8px', textAlign: 'center', color: '#7c3aed', fontWeight: 800 }}>🎁</td>
+                                      <td style={{ padding: '6px 10px', borderRight: '1px solid #e2e8f0' }}>
+                                        <div style={{ fontWeight: 700, color: '#6d28d9', fontSize: '11px' }}>
+                                          🎁 Scheme Bonus: {matchingFoc.productName || it.product?.name} (مفت مال)
+                                        </div>
+                                        {matchingFoc.schemeNotes && (
+                                          <div style={{ fontSize: '9.5px', color: '#7c3aed' }}>({matchingFoc.schemeNotes})</div>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, color: '#6d28d9', borderRight: '1px solid #e2e8f0' }}>
+                                        <span style={{ backgroundColor: '#ede9fe', padding: '2px 6px', borderRadius: '4px', border: '1px solid #c4b5fd', fontSize: '11px' }}>
+                                          {matchingFoc.unitType}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 800, color: '#6d28d9', fontSize: '12px', borderRight: '1px solid #e2e8f0' }}>
+                                        <div>+{matchingFoc.focQuantity} {matchingFoc.unitType}</div>
+                                        <div style={{ fontSize: '9.5px', color: '#7c3aed' }}>(+{matchingFoc.baseFocQuantity} base free)</div>
+                                      </td>
+                                      <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#6d28d9', borderRight: '1px solid #e2e8f0' }}>
+                                        Rs. 0
+                                      </td>
+                                      <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>
+                                        Rs. 0 (مفت)
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>
+                                No item details recorded for this purchase invoice.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                        {selectedPurchase.items && selectedPurchase.items.length > 0 && (
+                          <tfoot>
+                            <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
+                              <td colSpan={3} style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid #e2e8f0' }}>
+                                Total Items / کل موصول شدہ تعداد:
+                              </td>
+                              <td style={{ padding: '7px 8px', textAlign: 'center', color: '#0284c7', fontSize: '13px', borderRight: '1px solid #e2e8f0' }}>
+                                {selectedPurchase.items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 0), 0)}
+                              </td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', borderRight: '1px solid #e2e8f0' }}>
+                                Gross Total:
+                              </td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', color: '#0f172a', fontSize: '12px' }}>
+                                Rs. {Number(selectedPurchase.totalAmount || selectedPurchase.netAmount).toLocaleString()}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+
+                    {/* Financial Breakdown & Notes */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
+                      <div>
+                        {purchaseFocList && Array.isArray(purchaseFocList) && purchaseFocList.length > 0 && (
+                          <div style={{
+                            backgroundColor: '#ede9fe',
+                            border: '1.5px solid #c4b5fd',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            marginBottom: '10px',
+                            fontSize: '11.5px',
+                            color: '#6d28d9'
+                          }}>
+                            <div style={{ fontWeight: 800, marginBottom: '4px' }}>🎁 Scheme / FOC Free Items Received (مفت مال):</div>
+                            {purchaseFocList.map((f: any, i: number) => (
+                              <div key={i} style={{ fontSize: '11px', fontWeight: 600, marginTop: '2px' }}>
+                                • {f.productName}: <b>+{f.focQuantity} {f.unitType}</b> (Total +{f.baseFocQuantity} base units) مفت مال موصول ہوا۔ {f.schemeNotes ? `(${f.schemeNotes})` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {cleanPurchaseNotes(selectedPurchase.notes) ? (
+                          <div style={{
+                            backgroundColor: '#fffbeb',
+                            border: '1px dashed #f59e0b',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            fontSize: '11px'
+                          }}>
+                            <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '2px' }}>
+                              Notes / کمنٹس:
                             </div>
-                          ));
-                        } catch { return null; }
-                      })()}
-                    </div>
-                  )}
-
-                  {selectedPurchase.notes ? (
-                    <div style={{
-                      backgroundColor: '#fffbeb',
-                      border: '1px dashed #f59e0b',
-                      borderRadius: '8px',
-                      padding: '10px 12px',
-                      fontSize: '11px'
-                    }}>
-                      <div style={{ fontWeight: 800, color: '#b45309', marginBottom: '2px' }}>
-                        Notes / کمنٹس:
+                            <div style={{ color: '#78350f', whiteSpace: 'pre-wrap' }}>
+                              {cleanPurchaseNotes(selectedPurchase.notes)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{
+                            backgroundColor: '#f8fafc',
+                            border: '1px dashed #cbd5e1',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            fontSize: '11px',
+                            color: '#64748b'
+                          }}>
+                            ✓ Stock automatically updated in warehouse inventory upon receipt.
+                          </div>
+                        )}
                       </div>
-                      <div style={{ color: '#78350f', whiteSpace: 'pre-wrap' }}>
-                        {selectedPurchase.notes}
+
+                      <div style={{
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
+                        fontSize: '12px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ color: '#64748b' }}>Total Bill / کل بل:</span>
+                          <span style={{ fontWeight: 700 }}>
+                            Rs. {Number(selectedPurchase.netAmount).toLocaleString()}
+                          </span>
+                        </div>
+                        {Number(selectedPurchase.discount) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#16a34a' }}>
+                            <span>Discount (رعایت):</span>
+                            <span>- Rs. {Number(selectedPurchase.discount).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {Number(selectedPurchase.tax) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ color: '#64748b' }}>Tax:</span>
+                            <span>+ Rs. {Number(selectedPurchase.tax).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          borderTop: '1px dashed #cbd5e1',
+                          paddingTop: '6px',
+                          marginBottom: '4px'
+                        }}>
+                          <span style={{ fontWeight: 700, color: '#15803d' }}>Paid Amount (ادا شدہ):</span>
+                          <span style={{ fontWeight: 800, color: '#15803d' }}>
+                            Rs. {Number(selectedPurchase.paidAmount).toLocaleString()}
+                          </span>
+                        </div>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          borderTop: '1px solid #cbd5e1',
+                          paddingTop: '6px',
+                          fontSize: '13px'
+                        }}>
+                          <span style={{ fontWeight: 800, color: Number(selectedPurchase.remainingAmount) > 0 ? '#dc2626' : '#15803d' }}>
+                            Payable Balance (بقایا):
+                          </span>
+                          <span style={{ fontWeight: 900, color: Number(selectedPurchase.remainingAmount) > 0 ? '#dc2626' : '#15803d' }}>
+                            Rs. {Number(selectedPurchase.remainingAmount).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  ) : (
-                    <div style={{
-                      backgroundColor: '#f8fafc',
-                      border: '1px dashed #cbd5e1',
-                      borderRadius: '8px',
-                      padding: '10px 12px',
-                      fontSize: '11px',
-                      color: '#64748b'
-                    }}>
-                      ✓ Stock automatically updated in warehouse inventory upon receipt.
-                    </div>
-                  )}
-                </div>
-
-                <div style={{
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  fontSize: '12px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ color: '#64748b' }}>Total Bill / کل بل:</span>
-                    <span style={{ fontWeight: 700 }}>
-                      Rs. {Number(selectedPurchase.netAmount).toLocaleString()}
-                    </span>
-                  </div>
-                  {Number(selectedPurchase.discount) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#16a34a' }}>
-                      <span>Discount (رعایت):</span>
-                      <span>- Rs. {Number(selectedPurchase.discount).toLocaleString()}</span>
-                    </div>
-                  )}
-                  {Number(selectedPurchase.tax) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ color: '#64748b' }}>Tax:</span>
-                      <span>+ Rs. {Number(selectedPurchase.tax).toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    borderTop: '1px dashed #cbd5e1',
-                    paddingTop: '6px',
-                    marginBottom: '4px'
-                  }}>
-                    <span style={{ fontWeight: 700, color: '#15803d' }}>Paid Amount (ادا شدہ):</span>
-                    <span style={{ fontWeight: 800, color: '#15803d' }}>
-                      Rs. {Number(selectedPurchase.paidAmount).toLocaleString()}
-                    </span>
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid #cbd5e1',
-                    paddingTop: '6px',
-                    fontSize: '13px'
-                  }}>
-                    <span style={{ fontWeight: 800, color: Number(selectedPurchase.remainingAmount) > 0 ? '#dc2626' : '#15803d' }}>
-                      Payable Balance (بقایا):
-                    </span>
-                    <span style={{ fontWeight: 900, color: Number(selectedPurchase.remainingAmount) > 0 ? '#dc2626' : '#15803d' }}>
-                      Rs. {Number(selectedPurchase.remainingAmount).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                  </>
+                );
+              })()}
 
               {/* Signatures & Verification */}
               <div style={{

@@ -1962,6 +1962,13 @@ export const SalesmanPortal: React.FC = () => {
                           if (m) itemBatch = JSON.parse(m[1]);
                         } catch (e) {}
                       }
+                      let itemFoc: any = null;
+                      if (p.specifications && p.specifications.includes('[FOC_META:')) {
+                        try {
+                          const m = p.specifications.match(/\[FOC_META:(.*?)\]/);
+                          if (m) itemFoc = JSON.parse(m[1]);
+                        } catch (e) {}
+                      }
                       return (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <span style={{ fontWeight: 800, fontSize: '0.93rem', color: isSelected ? '#92400e' : '#0f172a' }}>
@@ -1978,6 +1985,19 @@ export const SalesmanPortal: React.FC = () => {
                               fontWeight: 800
                             }}>
                               {itemBatch.status === 'CHEAPER' ? `📉 سستا (-Rs. ${itemBatch.diff})` : `📈 مہنگا (+Rs. ${itemBatch.diff})`}
+                            </span>
+                          )}
+                          {itemFoc && Number(itemFoc.available) > 0 && (
+                            <span style={{
+                              backgroundColor: '#ede9fe',
+                              color: '#6d28d9',
+                              border: '1px solid #c4b5fd',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800
+                            }}>
+                              🎁 Scheme ({itemFoc.available} {p.unit?.symbol || 'Pcs'} Free)
                             </span>
                           )}
                         </div>

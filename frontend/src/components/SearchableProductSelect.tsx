@@ -401,6 +401,34 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                           • {p.brand}
                         </span>
                       )}
+                      {p.specifications && p.specifications.includes('[FOC_META:') && (() => {
+                        try {
+                          const startTag = '[FOC_META:';
+                          const sIdx = p.specifications.indexOf(startTag);
+                          if (sIdx !== -1) {
+                            const eIdx = p.specifications.indexOf(']', sIdx + startTag.length);
+                            if (eIdx !== -1) {
+                              const parsed = JSON.parse(p.specifications.substring(sIdx + startTag.length, eIdx));
+                              if (parsed && Number(parsed.available) > 0) {
+                                return (
+                                  <span style={{
+                                    backgroundColor: '#ede9fe',
+                                    color: '#6d28d9',
+                                    border: '1px solid #c4b5fd',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 800
+                                  }}>
+                                    🎁 {parsed.available} Free Scheme
+                                  </span>
+                                );
+                              }
+                            }
+                          }
+                        } catch (e) {}
+                        return null;
+                      })()}
                     </div>
 
                     {/* Packaging & details subtitle */}
