@@ -212,7 +212,7 @@ export const OperatorDashboard: React.FC = () => {
                         {pd.customer?.shopName || 'Customer'}
                       </div>
                       <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        📞 {pd.customer?.phone || 'No Phone'} {pd.customer?.area ? `• ${pd.customer.area}` : ''}
+                        Ph: {pd.customer?.phone || 'No Phone'} {pd.customer?.area ? `• ${pd.customer.area}` : ''}
                       </div>
                     </div>
                     <span style={{
@@ -237,7 +237,7 @@ export const OperatorDashboard: React.FC = () => {
                     fontSize: '0.75rem'
                   }}>
                     <div style={{ fontWeight: 700, color: '#475569', marginBottom: '3px', fontSize: '0.72rem' }}>
-                      ⏳ Pending Items:
+                      Pending Items / امانت سامان:
                     </div>
                     {pd.pendingItems.map((pi: any, piIdx: number) => {
                       const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;

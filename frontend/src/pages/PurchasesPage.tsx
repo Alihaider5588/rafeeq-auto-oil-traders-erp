@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import api from '../services/api';
 import { Supplier, Product } from '../types';
-import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2, Eye, Printer, FileText, Search, RefreshCw, Download, Percent } from 'lucide-react';
+import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building2, Eye, Printer, FileText, Search, RefreshCw, Download, Percent, Gift, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportPurchasesPDF } from '../utils/pdfExportUtils';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
@@ -948,8 +948,8 @@ export const PurchasesPage: React.FC = () => {
                                 color: it.unitType === 'PRIMARY' ? '#92400e' : '#1e293b'
                               }}
                             >
-                              <option value="PRIMARY">📦 {primarySymbol} ({conv} {secSymbol})</option>
-                              <option value="SECONDARY">🧴 {secSymbol} (کھلے پیس)</option>
+                              <option value="PRIMARY">{primarySymbol} ({conv} {secSymbol})</option>
+                              <option value="SECONDARY">{secSymbol} (کھلے پیس)</option>
                             </select>
                           ) : (
                             <div style={{
@@ -1164,14 +1164,14 @@ export const PurchasesPage: React.FC = () => {
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                             {isPrimary ? (
                               <span>
-                                📦 <b>{it.quantity || 0} {primarySymbol}</b> = <b style={{ color: '#0284c7' }}>{totalPieces} Total {secSymbol}</b> stock mein jama honge{' '}
+                                <b>{it.quantity || 0} {primarySymbol}</b> = <b style={{ color: '#0284c7' }}>{totalPieces} Total {secSymbol}</b> stock mein jama honge{' '}
                                 <span style={{ color: '#16a34a', fontWeight: 700 }}>
                                   (@ Rs. {(Math.round(pieceRate * 100) / 100).toLocaleString()} / {secSymbol})
                                 </span>
                               </span>
                             ) : (
                               <span>
-                                🧴 <b>{it.quantity || 0} {secSymbol}</b> stock mein jama honge
+                                <b>{it.quantity || 0} {secSymbol}</b> stock mein jama honge
                                 {hasPrimary && conv > 0 && (
                                   <span> (= {(Math.round(((it.quantity || 0) / conv) * 100) / 100)} {primarySymbol})</span>
                                 )}
@@ -1725,8 +1725,8 @@ export const PurchasesPage: React.FC = () => {
                 <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '0.5px', color: '#0f172a' }}>
                   RAFIQ AUTO & OIL TRADERS
                 </div>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: '#d97706', marginTop: '2px' }}>
-                  رفیق آٹو اینڈ آئل ٹریڈرز
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#475569', marginTop: '2px' }}>
+                  رفیق آٹو اینڈ آئل ٹریڈرز — اوکاڑہ
                 </div>
                 <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
                   54-Stop Near MCB Bank, Dipalpur Road, Okara &bull; Ph: 0306-9258573 | 0327-7497457
@@ -1875,7 +1875,7 @@ export const PurchasesPage: React.FC = () => {
                                         fontWeight: 700,
                                         border: isPrimary ? '1px solid #fde68a' : '1px solid #cbd5e1'
                                       }}>
-                                        {isPrimary ? `📦 ${primarySymbol} (${conv} ${secSymbol})` : `🧴 ${secSymbol}`}
+                                        {isPrimary ? `${primarySymbol} (${conv} ${secSymbol})` : secSymbol}
                                       </span>
                                     </td>
                                     <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 800, color: '#0f172a', fontSize: '12px', borderRight: '1px solid #e2e8f0' }}>
@@ -1900,10 +1900,10 @@ export const PurchasesPage: React.FC = () => {
                                   </tr>
                                   {matchingFoc && Number(matchingFoc.focQuantity) > 0 && (
                                     <tr style={{ backgroundColor: '#f5f3ff', borderBottom: '1px solid #e9d5ff' }}>
-                                      <td style={{ padding: '6px 8px', textAlign: 'center', color: '#7c3aed', fontWeight: 800 }}>🎁</td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'center', color: '#7c3aed', fontWeight: 800 }}>•</td>
                                       <td style={{ padding: '6px 10px', borderRight: '1px solid #e2e8f0' }}>
                                         <div style={{ fontWeight: 700, color: '#6d28d9', fontSize: '11px' }}>
-                                          🎁 Scheme Bonus: {matchingFoc.productName || it.product?.name} (مفت مال)
+                                          Scheme Bonus: {matchingFoc.productName || it.product?.name} (مفت مال)
                                         </div>
                                         {matchingFoc.schemeNotes && (
                                           <div style={{ fontSize: '9.5px', color: '#7c3aed' }}>({matchingFoc.schemeNotes})</div>
@@ -1971,7 +1971,9 @@ export const PurchasesPage: React.FC = () => {
                             fontSize: '11.5px',
                             color: '#6d28d9'
                           }}>
-                            <div style={{ fontWeight: 800, marginBottom: '4px' }}>🎁 Scheme / FOC Free Items Received (مفت مال):</div>
+                            <div style={{ fontWeight: 800, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Gift size={15} /> کمپنی اسکیم و بونس اشیاء موصول (FOC Scheme Bonus):
+                            </div>
                             {purchaseFocList.map((f: any, i: number) => (
                               <div key={i} style={{ fontSize: '11px', fontWeight: 600, marginTop: '2px' }}>
                                 • {f.productName}: <b>+{f.focQuantity} {f.unitType}</b> (Total +{f.baseFocQuantity} base units) مفت مال موصول ہوا۔ {f.schemeNotes ? `(${f.schemeNotes})` : ''}

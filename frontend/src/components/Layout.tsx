@@ -478,63 +478,73 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <img 
               src="/logo.png" 
               alt="Rafiq Auto & Oil Traders" 
-              style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: '8px', backgroundColor: '#fff', padding: '2px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }} 
+              style={{ width: '38px', height: '38px', objectFit: 'contain', borderRadius: '10px', backgroundColor: '#fff', padding: '3px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0' }} 
             />
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <h2 style={{ fontSize: '1.02rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '0.02em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h1 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.01em' }}>
                   RAFIQ AUTO & OIL TRADERS
-                </h2>
+                </h1>
+                <span style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>|</span>
                 <span 
                   className="urdu-text" 
                   style={{ 
-                    fontSize: '0.88rem', 
-                    color: '#b45309', 
+                    fontSize: '0.95rem', 
+                    color: '#d97706', 
                     fontWeight: 700, 
-                    backgroundColor: '#fef3c7', 
-                    padding: '2px 8px', 
-                    borderRadius: '6px',
-                    border: '1px solid #fde68a',
-                    lineHeight: 1.3
+                    lineHeight: 1.2
                   }}
                 >
                   رفیق آٹو اینڈ آئل ٹریڈرز
                 </span>
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
+              <div style={{ fontSize: '0.73rem', color: '#64748b', marginTop: '1px', fontWeight: 500 }}>
                 54-Stop Near MCB Bank, Dipalpur Road, Okara
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Audio Effects Toggle */}
+            {/* Audio Feedback Controller */}
             <button
               type="button"
               onClick={handleToggleSound}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '5px',
-                backgroundColor: soundActive ? '#fef3c7' : '#f1f5f9',
-                color: soundActive ? '#b45309' : '#64748b',
-                border: `1px solid ${soundActive ? '#fde68a' : '#cbd5e1'}`,
-                borderRadius: '20px',
+                gap: '6px',
+                backgroundColor: soundActive ? '#ecfdf5' : '#f8fafc',
+                color: soundActive ? '#059669' : '#64748b',
+                border: `1px solid ${soundActive ? '#a7f3d0' : '#e2e8f0'}`,
+                borderRadius: '9999px',
                 padding: '4px 10px',
                 fontSize: '0.74rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: soundActive ? '0 1px 3px rgba(16, 185, 129, 0.12)' : 'none'
               }}
-              title={soundActive ? 'UI Click & Print Sounds Active (Click to mute)' : 'UI Sounds Muted (Click to enable)'}
+              title={soundActive ? 'Sound feedback active (Click to mute)' : 'Sound feedback muted (Click to enable)'}
             >
-              {soundActive ? <Volume2 size={14} color="#d97706" /> : <VolumeX size={14} color="#94a3b8" />}
-              <span>{soundActive ? 'Sound On' : 'Muted'}</span>
+              {soundActive ? <Volume2 size={13} color="#059669" /> : <VolumeX size={13} color="#94a3b8" />}
+              <span>{soundActive ? 'Audio Feedback' : 'Muted'}</span>
             </button>
 
             <SyncButton />
-            <div className="topbar-date" style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>
-              {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              fontSize: '0.76rem',
+              color: '#334155',
+              fontWeight: 700
+            }}>
+              <span>{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
             </div>
           </div>
         </header>

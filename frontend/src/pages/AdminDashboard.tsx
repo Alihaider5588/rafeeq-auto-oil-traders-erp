@@ -26,7 +26,9 @@ import {
   FileDown,
   Store,
   Truck,
-  TrendingDown
+  TrendingDown,
+  Droplets,
+  Check
 } from 'lucide-react';
 import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
@@ -148,7 +150,7 @@ export const AdminDashboard: React.FC = () => {
             fontWeight: 800,
             boxShadow: '0 4px 12px rgba(217, 119, 6, 0.35)'
           }}>
-            🛢️
+            <Droplets size={20} color="#ffffff" />
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -169,7 +171,7 @@ export const AdminDashboard: React.FC = () => {
             className="btn btn-primary"
             style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.82rem' }}
           >
-            ⚡ Refresh Live Data
+            <RefreshCw size={13} /> Refresh Live Data
           </button>
         </div>
       </div>
@@ -336,7 +338,7 @@ export const AdminDashboard: React.FC = () => {
           <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '12px', padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Store size={15} /> 🏪 Counter Sales Cash (دکان نقد)
+                <Store size={15} /> Counter Sales Cash (دکان نقد)
               </span>
               <span style={{ fontSize: '0.72rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
                 Today Inflow
@@ -355,7 +357,7 @@ export const AdminDashboard: React.FC = () => {
           <div style={{ backgroundColor: '#faf5ff', border: '1.5px solid #e9d5ff', borderRadius: '12px', padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#6b21a8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Truck size={15} /> 🚐 Van Supply Cash (وین نقد وصولی)
+                <Truck size={15} /> Van Supply Cash (وین نقد وصولی)
               </span>
               <span style={{ fontSize: '0.72rem', backgroundColor: '#f3e8ff', color: '#7e22ce', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
                 Today Inflow
@@ -374,7 +376,7 @@ export const AdminDashboard: React.FC = () => {
           <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '12px', padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Landmark size={15} /> 📖 Khata Recoveries (کھاتہ وصولی)
+                <Landmark size={15} /> Khata Recoveries (کھاتہ وصولی)
               </span>
               <span style={{ fontSize: '0.72rem', backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
                 Today Inflow
@@ -392,7 +394,7 @@ export const AdminDashboard: React.FC = () => {
           <div style={{ backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <DollarSign size={15} /> 💰 Total Cash In Hand (کُل نقد)
+                <DollarSign size={15} /> Total Cash In Hand (کُل نقد)
               </span>
               <span style={{ fontSize: '0.72rem', backgroundColor: '#e2e8f0', color: '#334155', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
                 Today Total
@@ -647,7 +649,7 @@ export const AdminDashboard: React.FC = () => {
             justifyContent: 'center',
             fontWeight: 800,
           }}>
-            🛒
+            <ShoppingCart size={18} color="#2563eb" />
           </div>
           <div>
             <div style={{ fontWeight: 800, color: '#1e40af', fontSize: '0.95rem' }}>
@@ -726,7 +728,7 @@ export const AdminDashboard: React.FC = () => {
                         {pd.customer?.shopName || 'Customer'}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        📞 {pd.customer?.phone || 'No Phone'} {pd.customer?.area ? `• ${pd.customer.area}` : ''}
+                        Ph: {pd.customer?.phone || 'No Phone'} {pd.customer?.area ? `• ${pd.customer.area}` : ''}
                       </div>
                     </div>
                     <span style={{
@@ -751,7 +753,7 @@ export const AdminDashboard: React.FC = () => {
                     fontSize: '0.78rem'
                   }}>
                     <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px', fontSize: '0.74rem' }}>
-                      ⏳ Pending Items to Handover:
+                      Pending Items to Handover / امانت سامان:
                     </div>
                     {pd.pendingItems.map((pi: any, piIdx: number) => {
                       const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;
@@ -791,7 +793,7 @@ export const AdminDashboard: React.FC = () => {
                       gap: '4px'
                     }}
                   >
-                    ✓ {deliveringId === pd.saleId ? 'Updating...' : 'Deliver Now (سامان دے دیا)'}
+                    <Check size={13} /> {deliveringId === pd.saleId ? 'Updating...' : 'Deliver Now (سامان دے دیا)'}
                   </button>
                 </div>
               </div>
@@ -929,8 +931,8 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #f87171', padding: '3px 8px', borderRadius: '4px', fontSize: '0.76rem', fontWeight: 800, display: 'inline-block' }}>
-                      ⚠️ {stockDisplay} left
+                    <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #f87171', padding: '3px 8px', borderRadius: '4px', fontSize: '0.76rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertTriangle size={12} color="#dc2626" /> {stockDisplay} left
                     </span>
                     {hasPkg && (
                       <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>

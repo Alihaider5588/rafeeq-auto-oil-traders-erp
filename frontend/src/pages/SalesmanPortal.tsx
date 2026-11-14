@@ -28,7 +28,10 @@ import {
   ChevronDown,
   ChevronUp,
   Bookmark,
-  FileText
+  FileText,
+  Check,
+  Gift,
+  Package
 } from 'lucide-react';
 import { playPrintSound } from '../utils/soundEffects';
 
@@ -1984,7 +1987,7 @@ export const SalesmanPortal: React.FC = () => {
                               fontSize: '0.68rem',
                               fontWeight: 800
                             }}>
-                              {itemBatch.status === 'CHEAPER' ? `📉 سستا (-Rs. ${itemBatch.diff})` : `📈 مہنگا (+Rs. ${itemBatch.diff})`}
+                              {itemBatch.status === 'CHEAPER' ? `Cost Discount (-Rs. ${itemBatch.diff})` : `Cost Surcharge (+Rs. ${itemBatch.diff})`}
                             </span>
                           )}
                           {itemFoc && Number(itemFoc.available) > 0 && (
@@ -1997,7 +2000,7 @@ export const SalesmanPortal: React.FC = () => {
                               fontSize: '0.68rem',
                               fontWeight: 800
                             }}>
-                              🎁 Scheme ({itemFoc.available} {p.unit?.symbol || 'Pcs'} Free)
+                              Scheme: {itemFoc.available} {p.unit?.symbol || 'Pcs'} Free
                             </span>
                           )}
                         </div>
@@ -2497,9 +2500,9 @@ export const SalesmanPortal: React.FC = () => {
                         gap: '6px',
                         marginBottom: '10px'
                       }}>
-                        <Sparkles size={14} color="#059669" />
+                        <History size={14} color="#059669" />
                         <span>
-                          <b>Customer Past Rate Applied:</b> Rs. {item.rateInfo.suggestedRate.toLocaleString()} on{' '}
+                          <b>Customer Past Agreed Rate:</b> Rs. {item.rateInfo.suggestedRate.toLocaleString()} on{' '}
                           {item.rateInfo.previousDate ? new Date(item.rateInfo.previousDate).toLocaleDateString() : 'Previous Order'}{' '}
                           (Inv #{item.rateInfo.previousInvoice || 'N/A'})
                         </span>
@@ -2513,7 +2516,7 @@ export const SalesmanPortal: React.FC = () => {
                         color: '#64748b',
                         marginBottom: '10px'
                       }}>
-                        Default catalog rate applied (No prior purchase history for this customer).
+                        Standard catalog rate applied (No prior purchase history for this customer).
                       </div>
                     )}
 
@@ -2529,8 +2532,8 @@ export const SalesmanPortal: React.FC = () => {
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                           <span style={{ fontWeight: 800, color: batchPricing.status === 'CHEAPER' ? '#15803d' : '#b45309' }}>
-                            {batchPricing.status === 'CHEAPER' ? '📉 کمپنی سے سستا مال ملا:' : '📈 کمپنی سے مہنگا مال ملا:'}
-                            {' '}لاگت میں Rs. {batchPricing.diff} {batchPricing.status === 'CHEAPER' ? 'کمی' : 'اضافہ'}
+                            {batchPricing.status === 'CHEAPER' ? 'کمپنی لاگت رعایت (Cost Discount):' : 'اضافی کمپنی لاگت (Cost Surcharge):'}
+                            {' '}لاگت فرق: Rs. {batchPricing.diff}
                           </span>
                           <span style={{ backgroundColor: batchPricing.status === 'CHEAPER' ? '#dcfce7' : '#fef3c7', color: batchPricing.status === 'CHEAPER' ? '#166534' : '#92400e', padding: '1px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
                             لاٹ باقی: {batchPricing.remainingBatchQty} Pcs
@@ -2538,8 +2541,8 @@ export const SalesmanPortal: React.FC = () => {
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '8px' }}>
                           {batchPricing.status === 'CHEAPER'
-                            ? `یہ لاٹ کمپنی سے Rs. ${batchPricing.diff} سستی آئی ہے۔ کیا آپ گاہک کو لیس (Discount) کرنا چاہتے ہیں؟`
-                            : `یہ لاٹ کمپنی سے Rs. ${batchPricing.diff} مہنگی آئی ہے۔ برائے مہربانی ریٹ چیک کر لیں۔`}
+                            ? `یہ لاٹ کمپنی سے Rs. ${batchPricing.diff} سستی آئی ہے۔ کیا آپ گاہک کے ریٹ میں رعایت لاگو کرنا چاہتے ہیں؟`
+                            : `یہ لاٹ کمپنی سے Rs. ${batchPricing.diff} مہنگی موصول ہوئی ہے۔ ریٹ کی تصدیق کر لیں۔`}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           {batchPricing.status === 'CHEAPER' ? (
@@ -2554,7 +2557,7 @@ export const SalesmanPortal: React.FC = () => {
                               className="btn btn-sm btn-success"
                               style={{ fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px' }}
                             >
-                              💰 لیس کریں (-Rs. {Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1)})
+                              رعایت لاگو کریں (-Rs. {Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1)})
                             </button>
                           ) : (
                             <button
@@ -2568,7 +2571,7 @@ export const SalesmanPortal: React.FC = () => {
                               className="btn btn-sm btn-warning"
                               style={{ fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px' }}
                             >
-                              📈 ریٹ میں +Rs. {Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1)} اضافہ کریں
+                              اضافی لاگت ایڈجسٹ کریں (+Rs. {Number(batchPricing.diff) * (item.unitType === 'PRIMARY' ? conv : 1)})
                             </button>
                           )}
                           <button
@@ -2604,8 +2607,8 @@ export const SalesmanPortal: React.FC = () => {
                             value={item.unitType}
                             onChange={(e) => handleUnitChange(index, e.target.value as any)}
                           >
-                            <option value="PRIMARY">📦 {primaryLabel} ({primarySymbol} = {conv} {secondarySymbol}) [کارٹن]</option>
-                            <option value="SECONDARY">🧴 {secondaryLabel} ({secondarySymbol}) [کُھلے پیس]</option>
+                            <option value="PRIMARY">{primaryLabel} ({primarySymbol} = {conv} {secondarySymbol}) [کارٹن]</option>
+                            <option value="SECONDARY">{secondaryLabel} ({secondarySymbol}) [کُھلے پیس]</option>
                           </select>
                         ) : (
                           <div style={{
@@ -2739,7 +2742,7 @@ export const SalesmanPortal: React.FC = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <AlertTriangle size={16} color="#e11d48" style={{ minWidth: '16px' }} />
                           <span>
-                            <strong>⚠️ Khareed Qeemat (Purchase Cost) Reminder:</strong> Yeh item purchase rate (<strong>Rs. {effectivePurchasePrice.toLocaleString()}</strong>) se <strong>Rs. {lossPerUnit.toLocaleString()} kam</strong> rate par sale ho raha hai!
+                            <strong>لاگت ریٹ الرٹ (Purchase Cost Reminder):</strong> یہ آئٹم خرید ریٹ (<strong>Rs. {effectivePurchasePrice.toLocaleString()}</strong>) سے <strong>Rs. {lossPerUnit.toLocaleString()} کم</strong> ریٹ پر فروخت ہو رہا ہے۔
                           </span>
                         </div>
                         <span style={{
@@ -2768,8 +2771,9 @@ export const SalesmanPortal: React.FC = () => {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            🎁 Scheme / FOC (مفت مال):
+                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <Gift size={13} color={(parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#64748b'} />
+                            اسکیم / FOC مال (Bonus):
                           </span>
                           {focMeta && Number(focMeta.available) > 0 && (
                             <span style={{
@@ -2893,8 +2897,8 @@ export const SalesmanPortal: React.FC = () => {
                             fontWeight: 800
                           }}>
                             {item.focFree !== false
-                              ? `✓ +${item.focQuantity} ${currentUnitSymbol} مفت دیا جا رہا ہے (بل میں Rs. 0 لگے گا)`
-                              : `+${item.focQuantity} ${currentUnitSymbol} چارج ہوگا`}
+                              ? `بونس مفت: +${item.focQuantity} ${currentUnitSymbol} (Rs. 0)`
+                              : `چارج ایبل: +${item.focQuantity} ${currentUnitSymbol}`}
                           </span>
                         )}
                       </div>
@@ -2914,8 +2918,9 @@ export const SalesmanPortal: React.FC = () => {
                           fontSize: '0.78rem'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
-                            <span style={{ color: '#334155', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              📦 Delivery / حوالگی سامان:
+                            <span style={{ color: '#334155', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <Package size={14} color="#0284c7" />
+                              حوالگی و ترسیل سامان (Delivery Status):
                             </span>
                             <div style={{ display: 'flex', gap: '4px' }}>
                               <button
@@ -2931,7 +2936,7 @@ export const SalesmanPortal: React.FC = () => {
                                   setCart(updated);
                                 }}
                                 style={{
-                                  padding: '2px 8px',
+                                  padding: '3px 8px',
                                   borderRadius: '4px',
                                   border: '1px solid',
                                   fontSize: '0.72rem',
@@ -2939,10 +2944,13 @@ export const SalesmanPortal: React.FC = () => {
                                   cursor: 'pointer',
                                   backgroundColor: itemPendQty <= 0 ? '#16a34a' : '#ffffff',
                                   color: itemPendQty <= 0 ? '#ffffff' : '#15803d',
-                                  borderColor: itemPendQty <= 0 ? '#16a34a' : '#86efac'
+                                  borderColor: itemPendQty <= 0 ? '#16a34a' : '#86efac',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
                                 }}
                               >
-                                ✓ مکمل ڈیلیور
+                                <Check size={12} /> مکمل ڈیلیور
                               </button>
                               <button
                                 type="button"
@@ -2958,7 +2966,7 @@ export const SalesmanPortal: React.FC = () => {
                                   setCart(updated);
                                 }}
                                 style={{
-                                  padding: '2px 8px',
+                                  padding: '3px 8px',
                                   borderRadius: '4px',
                                   border: '1px solid',
                                   fontSize: '0.72rem',
@@ -2966,11 +2974,14 @@ export const SalesmanPortal: React.FC = () => {
                                   cursor: 'pointer',
                                   backgroundColor: itemPendQty > 0 && itemDelivQty > 0 ? '#2563eb' : '#ffffff',
                                   color: itemPendQty > 0 && itemDelivQty > 0 ? '#ffffff' : '#1d4ed8',
-                                  borderColor: itemPendQty > 0 && itemDelivQty > 0 ? '#2563eb' : '#93c5fd'
+                                  borderColor: itemPendQty > 0 && itemDelivQty > 0 ? '#2563eb' : '#93c5fd',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
                                 }}
                                 title="آدھا ڈیلیور اور آدھا امانت پینڈنگ"
                               >
-                                ⚖️ آدھا / جزوی (Partial)
+                                <Layers size={12} /> جزوی ڈیلیور (Partial)
                               </button>
                               <button
                                 type="button"
@@ -2985,7 +2996,7 @@ export const SalesmanPortal: React.FC = () => {
                                   setCart(updated);
                                 }}
                                 style={{
-                                  padding: '2px 8px',
+                                  padding: '3px 8px',
                                   borderRadius: '4px',
                                   border: '1px solid',
                                   fontSize: '0.72rem',
@@ -2993,10 +3004,13 @@ export const SalesmanPortal: React.FC = () => {
                                   cursor: 'pointer',
                                   backgroundColor: itemPendQty >= itemQty && itemQty > 0 ? '#d97706' : '#ffffff',
                                   color: itemPendQty >= itemQty && itemQty > 0 ? '#ffffff' : '#b45309',
-                                  borderColor: itemPendQty >= itemQty && itemQty > 0 ? '#d97706' : '#fde68a'
+                                  borderColor: itemPendQty >= itemQty && itemQty > 0 ? '#d97706' : '#fde68a',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
                                 }}
                               >
-                                ⏳ تمام امانت (Full Pending)
+                                <Clock size={12} /> امانت / پینڈنگ (Pending)
                               </button>
                             </div>
                           </div>
@@ -3014,8 +3028,8 @@ export const SalesmanPortal: React.FC = () => {
                             gap: '8px'
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>
-                                ✓ Delivered Qty (ڈیلیور شدہ):
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <Check size={12} /> ڈیلیور شدہ (Delivered):
                               </span>
                               <input
                                 type="number"
@@ -3051,8 +3065,8 @@ export const SalesmanPortal: React.FC = () => {
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d97706' }}>
-                                ⏳ Pending Qty (امانت باقی):
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d97706', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <Clock size={12} /> امانت باقی (Pending):
                               </span>
                               <input
                                 type="number"
@@ -3272,16 +3286,19 @@ export const SalesmanPortal: React.FC = () => {
                         fontSize: '0.92rem', 
                         cursor: 'pointer', 
                         color: isCounterSale ? '#065f46' : '#1e293b', 
-                        display: 'block', 
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
                         marginBottom: '2px' 
                       }}
                     >
-                      {isCounterSale ? '🏪 Counter Sale (Shop / Dukan ki Sale)' : '🚐 Van Sale (Field / Supply Delivery)'}
+                      {isCounterSale ? <Store size={15} color="#059669" /> : <Truck size={15} color="#0284c7" />}
+                      {isCounterSale ? 'Counter Sale (دکان نقد سیل)' : 'Van Sale (فیلڈ وین سپلائی)'}
                     </label>
                     <div style={{ fontSize: '0.76rem', color: isCounterSale ? '#047857' : '#64748b' }}>
                       {isCounterSale 
-                        ? '✓ Check-in Active: Ye sale shop counter sale me shamil hogi aur Admin panel me Counter Sales me show hogi.' 
-                        : '○ Checkout / Unchecked: Ye sale Van Sales me shamil hogi aur Admin panel me Van Sales me show hogi.'}
+                        ? 'دکان کاؤنٹر سیل: کیش دراز اور کاؤنٹر سیلز ریکارڈ میں اندراج ہوگا۔' 
+                        : 'فیلڈ وین سپلائی: وین آرڈر اور وین سیلز ریکارڈ میں اندراج ہوگا۔'}
                     </div>
                   </div>
                 </div>
@@ -3289,7 +3306,7 @@ export const SalesmanPortal: React.FC = () => {
                   className={`badge ${isCounterSale ? 'badge-success' : 'badge-secondary'}`} 
                   style={{ fontSize: '0.8rem', padding: '6px 10px', fontWeight: 800, whiteSpace: 'nowrap' }}
                 >
-                  {isCounterSale ? '🏪 COUNTER' : '🚐 VAN'}
+                  {isCounterSale ? 'COUNTER SALE' : 'VAN SUPPLY'}
                 </span>
               </div>
 
@@ -3303,12 +3320,12 @@ export const SalesmanPortal: React.FC = () => {
                   border: '2px solid #22c55e',
                   color: '#15803d'
                 }}>
-                  <div style={{ fontWeight: 900, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckCircle size={22} color="#16a34a" />
-                    ✓ Net Udhar: Rs. 0 (Khata Mukammal Clear / Empty!)
+                  <div style={{ fontWeight: 800, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle size={20} color="#16a34a" />
+                    کھاتہ کلیئر: کوئی بقایا ادھار نہیں (Rs. 0)
                   </div>
                   <div style={{ fontSize: '0.82rem', marginTop: '4px', color: '#166534' }}>
-                    Customer ne apna current bill aur sabqa udhar mukammal ada kar diya hai. Is invoice ke save hotay hi customer ka ledger 0 ho jaye ga.
+                    گاہک نے اپنا موجودہ بل اور سابقہ ادھار مکمل ادا کر دیا ہے۔
                   </div>
                   {(parseFloat(String(receivedPayment)) || 0) > totalPayableWithDebt && (
                     <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed #86efac', fontWeight: 800, fontSize: '0.92rem', color: '#047857' }}>
@@ -3325,21 +3342,21 @@ export const SalesmanPortal: React.FC = () => {
                   border: isCreditExceeded ? '2px solid #ef4444' : netRemainingDebt > previousDebt ? '1.5px solid #fdba74' : '1.5px solid #93c5fd',
                   color: isCreditExceeded ? '#991b1b' : netRemainingDebt > previousDebt ? '#c2410c' : '#1e40af'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 900, fontSize: '1.05rem' }}>
-                    <span>Net Baqaya Udhar (Remaining Debt):</span>
-                    <span style={{ fontSize: '1.2rem', color: isCreditExceeded ? '#dc2626' : netRemainingDebt > previousDebt ? '#ea580c' : '#2563eb' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '0.98rem' }}>
+                    <span>بقایا واجب الادا (Net Customer Balance):</span>
+                    <span style={{ fontSize: '1.15rem', fontWeight: 900, color: isCreditExceeded ? '#dc2626' : netRemainingDebt > previousDebt ? '#ea580c' : '#2563eb' }}>
                       Rs. {netRemainingDebt.toLocaleString()}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.8rem', marginTop: '4px', fontWeight: 500 }}>
                     {netRemainingDebt > previousDebt && (
-                      <span>⚠️ Udhar barh gaya hai: Purana udhar Rs. {previousDebt.toLocaleString()} tha, ab Rs. {(netRemainingDebt - previousDebt).toLocaleString()} mazeed udhar barh gaya hai.</span>
+                      <span>نئی خریداری کا ادھار کھاتے میں شامل ہو کر کل واجب الادا رقم بن گئی ہے۔</span>
                     )}
                     {netRemainingDebt < previousDebt && (
-                      <span>📉 Purana udhar kam ho gaya: Purana Rs. {previousDebt.toLocaleString()} tha, ab Rs. {(previousDebt - netRemainingDebt).toLocaleString()} ada ho kar kam ho gaya hai.</span>
+                      <span>سابقہ ادھار میں سے وصولی منہا ہو کر بقایا بیلنس اپ ڈیٹ ہو جائے گا۔</span>
                     )}
                     {netRemainingDebt === previousDebt && (
-                      <span>↔️ Current bill cash wasool ho gaya, purana udhar Rs. {previousDebt.toLocaleString()} barabar hai.</span>
+                      <span>بل کی رقم نقد موصول ہو گئی، سابقہ کھاتہ بیلنس برقرار ہے۔</span>
                     )}
                   </div>
                 </div>
@@ -3357,24 +3374,22 @@ export const SalesmanPortal: React.FC = () => {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <AlertCircle size={22} color="#dc2626" />
-                      <span style={{ fontWeight: 800, fontSize: '0.96rem' }}>
-                        ⛔ Walk-in Customer Ko Udhar Dena Sakht Mana Hai!
+                      <AlertCircle size={20} color="#dc2626" />
+                      <span style={{ fontWeight: 800, fontSize: '0.92rem' }}>
+                        واک اِن کاؤنٹر پالیسی: ادھار بل جاری نہیں کیا جا سکتا
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowAddCustomerModal(true)}
                       className="btn btn-primary btn-sm"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800 }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                     >
-                      <UserPlus size={15} /> + Add Customer in List
+                      <UserPlus size={14} /> کھاتہ دار شامل کریں
                     </button>
                   </div>
-                  <div style={{ fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
-                    Walk-in counter customer ka koi pichla khata / record nahi hota. Baqaya udhar: <b>Rs. {(totalBill - (parseFloat(String(receivedPayment)) || 0)).toLocaleString()}</b>.
-                    <br />
-                    Agar is customer ko udhar lena hai to pehle isay <b>Customer List</b> me shamil karein taake iska proper khata aur ledger maintain ho sakay.
+                  <div style={{ fontSize: '0.82rem', marginTop: '6px', lineHeight: 1.5, color: '#7f1d1d' }}>
+                    واک اِن گاہک کا مستقل کھاتہ موجود نہیں ہے۔ ادھار دینے کے لیے گاہک کو کسٹمر لسٹ میں درج کریں۔
                   </div>
                 </div>
               )}
@@ -3389,14 +3404,12 @@ export const SalesmanPortal: React.FC = () => {
                   border: '2px solid #dc2626',
                   color: '#991b1b'
                 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertCircle size={22} color="#dc2626" />
-                    ⛔ Credit Limit Exceeded! (Udhar Limit Pori Ho Gayi Hai)
+                  <div style={{ fontWeight: 800, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={18} color="#e11d48" />
+                    گاہک ادھار حد تجاوز (Credit Limit Exceeded)
                   </div>
-                  <div style={{ fontSize: '0.84rem', marginTop: '6px', lineHeight: 1.5 }}>
-                    Is customer ka kul udhar (Rs. {netRemainingDebt.toLocaleString()}) iski manzoor shuda credit limit (Rs. {customerCreditLimit.toLocaleString()}) se barh chuka hai.
-                    <br />
-                    <b>Agar is customer ko mazeed maal / supply deni hai to neeche diye gaye button par click kar ke foran credit limit barhayein:</b>
+                  <div style={{ fontSize: '0.82rem', marginTop: '4px', lineHeight: 1.5, color: '#881337' }}>
+                    اس کھاتے کا کل ادھار (Rs. {netRemainingDebt.toLocaleString()}) منظور شدہ کریڈٹ حد (Rs. {customerCreditLimit.toLocaleString()}) سے متجاوز ہے۔
                   </div>
                   <div style={{ marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <button
@@ -3404,20 +3417,19 @@ export const SalesmanPortal: React.FC = () => {
                       onClick={() => openCreditLimitModal(Math.max(customerCreditLimit + 50000, Math.ceil(netRemainingDebt / 5000) * 5000 + 10000))}
                       className="btn btn-sm"
                       style={{
-                        backgroundColor: '#dc2626',
+                        backgroundColor: '#e11d48',
                         color: '#ffffff',
-                        fontWeight: 800,
-                        padding: '8px 14px',
+                        fontWeight: 700,
+                        padding: '6px 14px',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
                         borderRadius: '6px',
                         border: 'none',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)'
+                        cursor: 'pointer'
                       }}
                     >
-                      ⚡ Increase Credit Limit to Allow Supply (کریڈٹ لمٹ بڑھائیں اور سپلائی دیں)
+                      کریڈٹ حد میں اضافہ کریں
                     </button>
                   </div>
                 </div>
@@ -3524,11 +3536,11 @@ export const SalesmanPortal: React.FC = () => {
                   'Submitting Order to Server...'
                 ) : isWalkInCreditAttempt ? (
                   <>
-                    <AlertCircle size={20} /> ⚠️ Walk-in Poora Cash Wasool Karein (Click to Submit)
+                    <AlertCircle size={18} /> واک اِن: مکمل نقد وصولی درج کریں
                   </>
                 ) : isCreditExceeded ? (
                   <>
-                    <AlertCircle size={20} /> ⚠️ Credit Limit Barhayein Ya Cash Lein (Click to View)
+                    <AlertTriangle size={18} /> ادھار حد متجاوز: نقد وصول کریں یا حد بڑھائیں
                   </>
                 ) : (
                   <>
@@ -4081,7 +4093,7 @@ export const SalesmanPortal: React.FC = () => {
                               {matchingFoc && Number(matchingFoc.focQuantity) > 0 && (
                                 <tr style={{ verticalAlign: 'top', backgroundColor: '#f5f3ff' }}>
                                   <td style={{ padding: '2px 0 2px 8px', fontSize: '10px', color: '#6d28d9' }}>
-                                    🎁 <i>+ {matchingFoc.focQuantity} {matchingFoc.unitSymbol} FREE (Scheme مفت مال)</i>
+                                    <i>• Bonus Free: +{matchingFoc.focQuantity} {matchingFoc.unitSymbol} (اسکیم بونس مفت)</i>
                                     {matchingFoc.notes ? <div style={{ fontSize: '8.5px', color: '#555' }}>({matchingFoc.notes})</div> : null}
                                   </td>
                                   <td style={{ textAlign: 'center', padding: '2px 0', fontSize: '10px', color: '#6d28d9', fontWeight: 800 }}>
@@ -4220,7 +4232,7 @@ export const SalesmanPortal: React.FC = () => {
                       fontSize: '10px'
                     }}>
                       <div style={{ fontWeight: 900, textAlign: 'center', borderBottom: '1px solid #000000', paddingBottom: '3px', marginBottom: '4px' }}>
-                        ⏳ PENDING DELIVERY ITEMS / بعد میں ملنے والا سامان (امانت)
+                        امانت سامان (Pending Handover / Delivery Items)
                       </div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px' }}>
                         <tbody>
@@ -4265,7 +4277,7 @@ export const SalesmanPortal: React.FC = () => {
                       fontSize: '10px'
                     }}>
                       <div style={{ fontWeight: 900, color: '#6d28d9', marginBottom: '3px', textAlign: 'center', borderBottom: '1px dotted #c4b5fd', paddingBottom: '3px' }}>
-                        🎁 مفت اسکیم مال (Company Scheme / FOC Bonus)
+                        کمپنی اسکیم و بونس اشیاء (Scheme / FOC Bonus)
                       </div>
                       {focList.map((f: any, idx: number) => (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#4c1d95', padding: '2px 0' }}>

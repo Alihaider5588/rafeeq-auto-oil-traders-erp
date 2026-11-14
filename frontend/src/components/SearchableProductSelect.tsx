@@ -420,7 +420,7 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                                     fontSize: '0.68rem',
                                     fontWeight: 800
                                   }}>
-                                    🎁 {parsed.available} Free Scheme
+                                    Scheme Bonus: {parsed.available} Pcs
                                   </span>
                                 );
                               }
@@ -444,10 +444,10 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
                     >
                       {hasPrimary ? (
                         <span style={{ color: '#b45309', fontWeight: 600 }}>
-                          📦 1 {pSym} = {conv} {sSym}
+                          1 {pSym} = {conv} {sSym}
                         </span>
                       ) : (
-                        <span>🧴 Unit: {sSym}</span>
+                        <span>Unit: {sSym}</span>
                       )}
                       <span>|</span>
                       <span>

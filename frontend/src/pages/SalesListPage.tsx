@@ -758,13 +758,13 @@ export const SalesListPage: React.FC = () => {
               style={{ width: 'auto', minWidth: '165px', height: '38px', fontSize: '0.85rem' }}
             >
               <option value="">All Types (تمام بل)</option>
-              <option value="COUNTER_CASH">🏪 Counter Cash (نقد کاؤنٹر)</option>
-              <option value="COUNTER_CREDIT">🏪 Counter Udhar (ادھار کاؤنٹر)</option>
-              <option value="VAN_CASH">🚐 Van Cash (نقد وین)</option>
-              <option value="VAN_CREDIT">🚐 Van Udhar (ادھار وین)</option>
-              <option value="COUNTER">🏪 All Counter Sales (تمام کاؤنٹر)</option>
-              <option value="VAN">🚐 All Van Sales (تمام وین)</option>
-              <option value="PENDING_ONLY">⏳ Pending Delivery Only (صرف امانت بل)</option>
+              <option value="COUNTER_CASH">Counter Cash (نقد کاؤنٹر)</option>
+              <option value="COUNTER_CREDIT">Counter Udhar (ادھار کاؤنٹر)</option>
+              <option value="VAN_CASH">Van Cash (نقد وین)</option>
+              <option value="VAN_CREDIT">Van Udhar (ادھار وین)</option>
+              <option value="COUNTER">All Counter Sales (تمام کاؤنٹر)</option>
+              <option value="VAN">All Van Sales (تمام وین)</option>
+              <option value="PENDING_ONLY">Pending Delivery Only (صرف امانت بل)</option>
             </select>
 
             <select
@@ -1586,7 +1586,7 @@ export const SalesListPage: React.FC = () => {
                     fontSize: '11px',
                     color: '#b45309'
                   }}>
-                    ⚠️ ORDER PENDING (امانت / ڈلیوری باقی ہے)
+                    امانت سامان (Delivery Pending)
                     <div style={{ fontSize: '9px', fontWeight: 600, marginTop: '2px', color: '#78350f' }}>
                       Status: Delivery Pending (بعد میں سامان وصولی)
                     </div>
@@ -1637,7 +1637,7 @@ export const SalesListPage: React.FC = () => {
                             {matchingFoc && Number(matchingFoc.focQuantity) > 0 && (
                               <tr style={{ verticalAlign: 'top', backgroundColor: '#f5f3ff' }}>
                                 <td style={{ padding: '2px 0 2px 8px', fontSize: '10px', color: '#6d28d9' }}>
-                                  🎁 <i>+ {matchingFoc.focQuantity} {matchingFoc.unitSymbol} FREE (Scheme مفت مال)</i>
+                                  <i>• Bonus Free: +{matchingFoc.focQuantity} {matchingFoc.unitSymbol} (اسکیم بونس مفت)</i>
                                   {matchingFoc.notes ? <div style={{ fontSize: '8.5px', color: '#555' }}>({matchingFoc.notes})</div> : null}
                                 </td>
                                 <td style={{ textAlign: 'center', padding: '2px 0', fontSize: '10px', color: '#6d28d9', fontWeight: 800 }}>
@@ -1749,7 +1749,7 @@ export const SalesListPage: React.FC = () => {
                     fontSize: '10px'
                   }}>
                     <div style={{ fontWeight: 900, textAlign: 'center', borderBottom: '1px solid #000000', paddingBottom: '3px', marginBottom: '4px' }}>
-                      ⏳ PENDING DELIVERY ITEMS / بعد میں ملنے والا سامان (امانت)
+                      امانت سامان (Pending Handover / Delivery Items)
                     </div>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5px' }}>
                       <tbody>
@@ -1794,7 +1794,7 @@ export const SalesListPage: React.FC = () => {
                     fontSize: '10px'
                   }}>
                     <div style={{ fontWeight: 900, color: '#6d28d9', marginBottom: '3px', textAlign: 'center', borderBottom: '1px dotted #c4b5fd', paddingBottom: '3px' }}>
-                      🎁 مفت اسکیم مال (Company Scheme / FOC Bonus)
+                      کمپنی اسکیم و بونس اشیاء (Scheme / FOC Bonus)
                     </div>
                     {focList.map((f: any, idx: number) => (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#4c1d95', padding: '2px 0' }}>
@@ -2644,7 +2644,7 @@ export const SalesListPage: React.FC = () => {
                   Handover Items for Invoice #{deliverModalSale.invoiceNumber}
                 </h3>
                 <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-                  Customer: <b>{deliverModalSale.customer?.shopName}</b> (📞 {deliverModalSale.customer?.phone})
+                  Customer: <b>{deliverModalSale.customer?.shopName}</b> (Ph: {deliverModalSale.customer?.phone})
                 </p>
               </div>
               <button
@@ -2664,7 +2664,7 @@ export const SalesListPage: React.FC = () => {
                 marginBottom: '16px'
               }}>
                 <div style={{ fontWeight: 800, color: '#92400e', fontSize: '0.86rem', marginBottom: '6px' }}>
-                  ⏳ Billed Items Pending Delivery:
+                  Billed Items Pending Delivery / امانت سامان:
                 </div>
                 {(() => {
                   let pItems: any[] = [];
