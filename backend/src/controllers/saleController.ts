@@ -1363,6 +1363,56 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
         where: { saleId: existingSale.id },
       });
 
+      // Delivery status & Amanat handling for edited invoice
+      const hasPendingDelivery = data.deliveryStatus === 'PENDING_DELIVERY' ||
+        data.items.some((it) => it.deliveryStatus === 'PENDING_DELIVERY' || it.deliveryStatus === 'PARTIAL_DELIVERY' || Number(it.pendingQuantity || 0) > 0);
+
+      let editNotesStr = (data.notes !== undefined ? (data.notes || '') : (existingSale.notes || '')).trim();
+      editNotesStr = editNotesStr.replace(/\[DELIVERY_META:.*?\]\s*/g, '').trim();
+
+      if (hasPendingDelivery) {
+        const deliveryMeta = {
+          status: 'PENDING_DELIVERY',
+          items: data.items.map((it) => {
+            const itemQty = Number(it.quantity);
+            const itemDelivStatus = it.deliveryStatus || 'PENDING_DELIVERY';
+            const itemPendQty = it.pendingQuantity !== undefined 
+              ? Number(it.pendingQuantity) 
+              : (itemDelivStatus === 'PENDING_DELIVERY' ? itemQty : 0);
+            const itemDelivQty = it.deliveredQuantity !== undefined 
+              ? Number(it.deliveredQuantity) 
+              : Math.max(0, itemQty - itemPendQty);
+
+            return {
+              productId: it.productId,
+              quantity: itemQty,
+              deliveredQuantity: itemDelivQty,
+              pendingQuantity: itemPendQty,
+              unitType: it.unitType || 'SECONDARY',
+              status: itemPendQty <= 0 ? 'DELIVERED' : (itemDelivQty <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY'),
+            };
+          }),
+          createdAt: new Date().toISOString(),
+          deliveredAt: null,
+        };
+        editNotesStr = `[DELIVERY_META:${JSON.stringify(deliveryMeta)}] ${editNotesStr}`.trim();
+      } else {
+        const deliveryMeta = {
+          status: 'DELIVERED',
+          items: data.items.map((it) => ({
+            productId: it.productId,
+            quantity: Number(it.quantity),
+            deliveredQuantity: Number(it.quantity),
+            pendingQuantity: 0,
+            unitType: it.unitType || 'SECONDARY',
+            status: 'DELIVERED',
+          })),
+          createdAt: new Date().toISOString(),
+          deliveredAt: new Date().toISOString(),
+        };
+        editNotesStr = `[DELIVERY_META:${JSON.stringify(deliveryMeta)}] ${editNotesStr}`.trim();
+      }
+
       // 4. UPDATE SALE RECORD WITH NEW DETAILS
       const updatedSale = await tx.sale.update({
         where: { id: existingSale.id },
@@ -1379,7 +1429,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
           grossProfit: new Prisma.Decimal(totalGrossProfit),
           paymentMethod: data.paymentMethod,
           saleType: data.saleType || existingSale.saleType || 'VAN',
-          notes: data.notes || existingSale.notes,
+          notes: editNotesStr || null,
           items: {
             create: newItemDetails.map((it) => ({
               productId: it.productId,
@@ -2111,10 +2161,32 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
           if (match) meta = JSON.parse(match[1]);
         } catch (e) { }
 
-        const pendingItems = (meta?.items || sale.items || []).filter((it: any) => {
-          const pendQ = it.pendingQuantity !== undefined ? Number(it.pendingQuantity) : (it.status !== 'DELIVERED' ? Number(it.quantity) : 0);
-          return pendQ > 0;
+        // Process all items in this sale to extract both delivered and pending portions
+        const allDeliveryItems = (sale.items || []).map((si) => {
+          const metaItem = (meta?.items || []).find((mi: any) => mi.productId === si.productId);
+          const totalQ = Number(metaItem?.quantity !== undefined ? metaItem.quantity : si.quantity);
+          const pendQ = metaItem?.pendingQuantity !== undefined 
+            ? Number(metaItem.pendingQuantity) 
+            : (metaItem?.status === 'DELIVERED' ? 0 : (meta?.status === 'DELIVERED' ? 0 : totalQ));
+          const delivQ = metaItem?.deliveredQuantity !== undefined 
+            ? Number(metaItem.deliveredQuantity) 
+            : Math.max(0, totalQ - pendQ);
+
+          return {
+            productId: si.productId,
+            productName: metaItem?.productName || si.product?.name || 'Product',
+            sku: si.product?.sku || '',
+            quantity: totalQ,
+            deliveredQuantity: delivQ,
+            pendingQuantity: pendQ,
+            unitType: metaItem?.unitType || si.unitType || 'SECONDARY',
+            unitSymbol: si.product?.unit?.symbol || (si.unitType === 'PRIMARY' ? 'Ctn' : 'Pc'),
+            status: pendQ <= 0 ? 'DELIVERED' : (delivQ <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY'),
+          };
         });
+
+        const pendingItems = allDeliveryItems.filter((it) => it.pendingQuantity > 0);
+        const deliveredItems = allDeliveryItems.filter((it) => it.deliveredQuantity > 0);
 
         return {
           saleId: sale.id,
@@ -2127,23 +2199,11 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
           receivedAmount: Number(sale.receivedAmount),
           remainingBalance: Number(sale.remainingBalance),
           deliveryStatus: meta?.status || 'PENDING_DELIVERY',
-          pendingItems: pendingItems.map((pi: any) => {
-            const matchedItem = sale.items.find((si) => si.productId === pi.productId);
-            const totalQ = Number(pi.quantity || matchedItem?.quantity || 0);
-            const pendQ = pi.pendingQuantity !== undefined ? Number(pi.pendingQuantity) : (pi.status !== 'DELIVERED' ? totalQ : 0);
-            const delivQ = pi.deliveredQuantity !== undefined ? Number(pi.deliveredQuantity) : Math.max(0, totalQ - pendQ);
-            return {
-              productId: pi.productId,
-              productName: pi.productName || matchedItem?.product?.name || 'Product',
-              sku: matchedItem?.product?.sku || '',
-              quantity: totalQ,
-              deliveredQuantity: delivQ,
-              pendingQuantity: pendQ,
-              unitType: pi.unitType || matchedItem?.unitType || 'SECONDARY',
-              unitSymbol: matchedItem?.product?.unit?.symbol || 'Pcs',
-              status: pi.status || (pendQ > 0 ? (delivQ > 0 ? 'PARTIAL_DELIVERY' : 'PENDING_DELIVERY') : 'DELIVERED'),
-            };
-          }),
+          allDeliveryItems,
+          pendingItems,
+          deliveredItems,
+          totalDeliveredQty: deliveredItems.reduce((acc, it) => acc + it.deliveredQuantity, 0),
+          totalPendingQty: pendingItems.reduce((acc, it) => acc + it.pendingQuantity, 0),
           createdAt: sale.createdAt,
           userNotes: (sale.notes || '').replace(/\[DELIVERY_META:.*?\]\s*/, '').trim(),
         };
@@ -2160,7 +2220,7 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
 export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { deliveredItemIds, markAllDelivered = true, deliveryNotes } = req.body;
+    const { deliveredItemIds, markAllDelivered = true, deliveryNotes, items: updatedItemQtys } = req.body;
 
     const sale = await prisma.sale.findFirst({
       where: { OR: [{ id }, { invoiceNumber: id }] },
@@ -2198,6 +2258,26 @@ export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Respo
         pendingQuantity: 0,
       }));
       meta.deliveredAt = new Date().toISOString();
+    } else if (Array.isArray(updatedItemQtys) && updatedItemQtys.length > 0) {
+      meta.items = (meta.items || []).map((it: any) => {
+        const matching = updatedItemQtys.find((u: any) => u.productId === it.productId);
+        if (matching) {
+          const tot = Number(matching.quantity !== undefined ? matching.quantity : it.quantity);
+          const deliv = Number(matching.deliveredQuantity !== undefined ? matching.deliveredQuantity : (it.deliveredQuantity || 0));
+          const pend = Number(matching.pendingQuantity !== undefined ? matching.pendingQuantity : Math.max(0, tot - deliv));
+          return {
+            ...it,
+            quantity: tot,
+            deliveredQuantity: deliv,
+            pendingQuantity: pend,
+            status: pend <= 0 ? 'DELIVERED' : (deliv <= 0 ? 'PENDING_DELIVERY' : 'PARTIAL_DELIVERY'),
+          };
+        }
+        return it;
+      });
+      const allDone = meta.items.every((it: any) => (Number(it.pendingQuantity) || 0) <= 0 || it.status === 'DELIVERED');
+      meta.status = allDone ? 'DELIVERED' : 'PENDING_DELIVERY';
+      if (allDone) meta.deliveredAt = new Date().toISOString();
     } else if (Array.isArray(deliveredItemIds)) {
       meta.items = (meta.items || []).map((it: any) => {
         if (deliveredItemIds.includes(it.productId)) {

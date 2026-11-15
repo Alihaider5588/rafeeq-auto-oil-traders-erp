@@ -131,6 +131,7 @@ export interface Sale {
   paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE';
   status: 'COMPLETED' | 'PENDING_APPROVAL' | 'CANCELLED';
   saleType?: 'COUNTER' | 'VAN';
+  deliveryStatus?: string;
   notes?: string;
   items: SaleItem[];
 }

@@ -28,7 +28,9 @@ import {
   Truck,
   TrendingDown,
   Droplets,
-  Check
+  Check,
+  CheckCircle,
+  Package
 } from 'lucide-react';
 import { exportStockAlertsPDF } from '../utils/stockAlertPdf';
 
@@ -744,30 +746,93 @@ export const AdminDashboard: React.FC = () => {
                     </span>
                   </div>
 
+                  {/* Summary Status Badges */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    {pd.deliveredItems && pd.deliveredItems.length > 0 && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        backgroundColor: '#dcfce7',
+                        color: '#15803d',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid #86efac'
+                      }}>
+                        ✓ {pd.deliveredItems.length} آئٹمز ڈیلیور
+                      </span>
+                    )}
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      backgroundColor: '#fef3c7',
+                      color: '#b45309',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid #fde68a'
+                    }}>
+                      ⏳ {pd.pendingItems?.length || 0} آئٹمز امانت باقی
+                    </span>
+                  </div>
+
+                  {/* 1. DELIVERED ITEMS SECTION */}
                   <div style={{
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: '#f0fdf4',
                     borderRadius: '6px',
-                    padding: '8px',
-                    margin: '8px 0',
-                    border: '1px dashed #cbd5e1',
-                    fontSize: '0.78rem'
+                    padding: '7px 9px',
+                    marginBottom: '6px',
+                    border: '1px solid #bbf7d0',
+                    fontSize: '0.76rem'
                   }}>
-                    <div style={{ fontWeight: 700, color: '#334155', marginBottom: '4px', fontSize: '0.74rem' }}>
-                      Pending Items to Handover / امانت سامان:
+                    <div style={{ fontWeight: 800, color: '#166534', marginBottom: '3px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle size={12} color="#16a34a" />
+                      ڈیلیور شدہ سامان (Handed Over):
                     </div>
-                    {pd.pendingItems.map((pi: any, piIdx: number) => {
-                      const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;
-                      const delivQ = pi.deliveredQuantity || 0;
-                      return (
-                        <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#0f172a', padding: '3px 0', borderBottom: '1px dotted #e2e8f0' }}>
-                          <span style={{ fontWeight: 600 }}>• {pi.productName}</span>
-                          <span style={{ fontWeight: 800, color: '#d97706', fontSize: '0.78rem' }}>
-                            {pendQ} {pi.unitType === 'PRIMARY' ? 'Ctn' : (pi.unitSymbol || 'Pc')} امانت
-                            {delivQ > 0 ? <span style={{ color: '#059669', fontSize: '0.70rem', marginLeft: '4px' }}>({delivQ} دیا گیا)</span> : ''}
+                    {pd.deliveredItems && pd.deliveredItems.length > 0 ? (
+                      pd.deliveredItems.map((di: any, diIdx: number) => (
+                        <div key={diIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#14532d', padding: '2px 0', borderBottom: '1px dotted #bbf7d0' }}>
+                          <span style={{ fontWeight: 600 }}>• {di.productName}</span>
+                          <span style={{ fontWeight: 800, color: '#15803d', fontSize: '0.75rem' }}>
+                            {di.deliveredQuantity} {di.unitType === 'PRIMARY' ? 'Ctn' : (di.unitSymbol || 'Pc')} ڈیلیور
                           </span>
                         </div>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      <div style={{ color: '#65a30d', fontStyle: 'italic', fontSize: '0.70rem' }}>
+                        ابھی تک کوئی مال کسٹمر کو نہیں دیا گیا (تمام مال امانت ہے)
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. PENDING AMANAT ITEMS SECTION */}
+                  <div style={{
+                    backgroundColor: '#fffbeb',
+                    borderRadius: '6px',
+                    padding: '7px 9px',
+                    marginBottom: '8px',
+                    border: '1px solid #fde68a',
+                    fontSize: '0.76rem'
+                  }}>
+                    <div style={{ fontWeight: 800, color: '#92400e', marginBottom: '3px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={12} color="#d97706" />
+                      گودام میں امانت باقی سامان (Pending in Godown):
+                    </div>
+                    {pd.pendingItems && pd.pendingItems.length > 0 ? (
+                      pd.pendingItems.map((pi: any, piIdx: number) => {
+                        const pendQ = pi.pendingQuantity !== undefined ? pi.pendingQuantity : pi.quantity;
+                        return (
+                          <div key={piIdx} style={{ display: 'flex', justifyContent: 'space-between', color: '#78350f', padding: '2px 0', borderBottom: '1px dotted #fed7aa' }}>
+                            <span style={{ fontWeight: 600 }}>• {pi.productName}</span>
+                            <span style={{ fontWeight: 800, color: '#b45309', fontSize: '0.75rem' }}>
+                              {pendQ} {pi.unitType === 'PRIMARY' ? 'Ctn' : (pi.unitSymbol || 'Pc')} امانت
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div style={{ color: '#16a34a', fontWeight: 700, fontSize: '0.70rem' }}>
+                        ✓ تمام سامان ڈیلیور ہو چکا ہے
+                      </div>
+                    )}
                   </div>
                 </div>
 
