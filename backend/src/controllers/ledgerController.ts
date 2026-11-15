@@ -16,6 +16,8 @@ const paymentSchema = z.object({
   reference: z.string().optional(),
   notes: z.string().min(1, 'Reason / Narration (Wajah) likhna lazmi hai'),
   date: z.string().optional().nullable(),
+  partnerName: z.string().optional().nullable(),
+  isDualPartner: z.boolean().optional(),
 });
 
 export const getCustomerLedger = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -188,7 +190,35 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           },
         });
 
-        return { payment, remainingBalance: newRec, targetName: customer.shopName, direction: isCashOut ? 'OUT' : 'IN' };
+        const voucherType = isCashOut ? 'CUSTOMER_REFUND' : 'CUSTOMER_PAYMENT';
+        const receipt = {
+          receiptNumber,
+          voucherType,
+          partyType: data.isDualPartner ? 'DUAL_PARTNER' : 'CUSTOMER',
+          isDualPartner: Boolean(data.isDualPartner),
+          partnerName: data.partnerName || null,
+          partyName: customer.shopName,
+          contactPerson: customer.ownerName,
+          phone: customer.phone,
+          address: customer.address,
+          previousBalance: curRec,
+          paidAmount: data.amount,
+          remainingBalance: newRec,
+          direction: isCashOut ? 'OUT' : 'IN',
+          paymentMethod: data.paymentMethod,
+          reference: data.reference || '',
+          notes: data.notes,
+          paymentDate: paymentDate.toISOString(),
+          recordedByName: req.user?.fullName || 'Cashier / Admin',
+        };
+
+        return { 
+          payment, 
+          remainingBalance: newRec, 
+          targetName: customer.shopName, 
+          direction: isCashOut ? 'OUT' : 'IN',
+          receipt,
+        };
       }
 
       // 2. Supplier Payment (Disbursement OUT or Refund IN)
@@ -232,7 +262,35 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           },
         });
 
-        return { payment, remainingBalance: newPay, targetName: supplier.companyName, direction: isSupplierCashIn ? 'IN' : 'OUT' };
+        const voucherType = isSupplierCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT';
+        const receipt = {
+          receiptNumber,
+          voucherType,
+          partyType: data.isDualPartner ? 'DUAL_PARTNER' : 'SUPPLIER',
+          isDualPartner: Boolean(data.isDualPartner),
+          partnerName: data.partnerName || null,
+          partyName: supplier.companyName,
+          contactPerson: supplier.contactPerson,
+          phone: supplier.phone,
+          address: supplier.address,
+          previousBalance: curPay,
+          paidAmount: data.amount,
+          remainingBalance: newPay,
+          direction: isSupplierCashIn ? 'IN' : 'OUT',
+          paymentMethod: data.paymentMethod,
+          reference: data.reference || '',
+          notes: data.notes,
+          paymentDate: paymentDate.toISOString(),
+          recordedByName: req.user?.fullName || 'Cashier / Admin',
+        };
+
+        return { 
+          payment, 
+          remainingBalance: newPay, 
+          targetName: supplier.companyName, 
+          direction: isSupplierCashIn ? 'IN' : 'OUT',
+          receipt,
+        };
       }
     });
 
@@ -585,11 +643,36 @@ export const recordContraOffset = async (req: AuthenticatedRequest, res: Respons
         },
       });
 
+      const contraReceipt = {
+        receiptNumber: voucherNumber,
+        voucherType: 'CONTRA_VOUCHER',
+        partyType: 'DUAL_PARTNER',
+        isDualPartner: true,
+        partyName: `${customer.shopName} / ${supplier.companyName}`,
+        customerName: customer.shopName,
+        supplierName: supplier.companyName,
+        phone: customer.phone || supplier.phone,
+        previousReceivable: curRec,
+        previousPayable: curPay,
+        previousBalance: curRec - curPay,
+        paidAmount: offsetAmount,
+        newReceivable: newRec,
+        newPayable: newPay,
+        remainingBalance: newRec - newPay,
+        direction: 'CONTRA',
+        paymentMethod: 'CONTRA_ADJUSTMENT',
+        reference: voucherNumber,
+        notes: notes.trim(),
+        paymentDate: offsetDate.toISOString(),
+        recordedByName: req.user?.fullName || 'Cashier / Admin',
+      };
+
       return {
         voucherNumber,
         newReceivable: newRec,
         newPayable: newPay,
         netMutualBalance: newRec - newPay,
+        receipt: contraReceipt,
       };
     });
 
@@ -721,6 +804,28 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
           });
         }
 
+        const isCustomer = Boolean(payment.customerId);
+        const party = isCustomer ? payment.customer : payment.supplier;
+        const rawAmt = Number(payment.amount);
+        const isCashOut = (payment.notes || '').includes('[CASH_OUT]') || (payment.notes || '').toLowerCase().includes('adaiyigi');
+
+        const receipt = {
+          receiptNumber: payment.receiptNumber,
+          voucherType: isCustomer ? (isCashOut ? 'CUSTOMER_REFUND' : 'CUSTOMER_PAYMENT') : (isCashOut ? 'SUPPLIER_PAYMENT' : 'SUPPLIER_REFUND'),
+          partyType: isCustomer ? 'CUSTOMER' : 'SUPPLIER',
+          partyName: isCustomer ? (payment.customer?.shopName || 'Customer') : (payment.supplier?.companyName || 'Supplier'),
+          contactPerson: isCustomer ? payment.customer?.ownerName : payment.supplier?.contactPerson,
+          phone: party?.phone || '',
+          address: party?.address || '',
+          paidAmount: rawAmt,
+          direction: isCashOut ? 'OUT' : 'IN',
+          paymentMethod: payment.paymentMethod,
+          reference: payment.reference || '',
+          notes: (payment.notes || '').replace(/\[(CASH_IN|CASH_OUT)\]\s*/g, '').trim(),
+          paymentDate: payment.paymentDate,
+          recordedByName: recordedBy?.fullName || 'Cashier / Admin',
+        };
+
         res.json({
           success: true,
           kind: 'PAYMENT',
@@ -728,6 +833,7 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
             ...payment,
             recordedBy,
           },
+          receipt,
         });
         return;
       }

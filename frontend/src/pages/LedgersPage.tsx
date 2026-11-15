@@ -25,9 +25,11 @@ import {
   Calendar,
   Plus,
   Minus,
+  Receipt,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportConsolidatedAllPartyBalancesPDF, exportSingleLedgerStatementPDF } from '../utils/pdfExportUtils';
+import { playPrintSound } from '../utils/soundEffects';
 
 export const LedgersPage: React.FC = () => {
   const { user } = useAuth();
@@ -73,6 +75,10 @@ export const LedgersPage: React.FC = () => {
   const [contraAmount, setContraAmount] = useState('');
   const [contraNotes, setContraNotes] = useState('');
   const [contraSubmitting, setContraSubmitting] = useState(false);
+
+  // Instant Payment Receipt / Slip modal
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [paymentReceiptData, setPaymentReceiptData] = useState<any | null>(null);
 
   // Feedback alerts
   const [operationError, setOperationError] = useState('');
@@ -181,6 +187,8 @@ export const LedgersPage: React.FC = () => {
       } else if (activeTab === 'SUPPLIERS') {
         payload.supplierId = selectedEntityId;
       } else if (activeTab === 'DUAL_PARTNERS') {
+        payload.isDualPartner = true;
+        payload.partnerName = dualLedgerData?.partner?.name || selectedDualPartner?.name;
         if (payTargetType === 'CUSTOMER') {
           payload.customerId = dualLedgerData?.partner?.customerId || selectedEntityId;
         } else {
@@ -192,6 +200,12 @@ export const LedgersPage: React.FC = () => {
       if (res.data.success) {
         setOperationSuccess('Payment voucher successfully posted to ledger!');
         setOperationError('');
+        const receipt = res.data.data?.receipt || res.data.receipt;
+        if (receipt) {
+          setPaymentReceiptData(receipt);
+          setShowReceiptModal(true);
+          playPrintSound();
+        }
         setPayAmount('');
         setPayNotes('');
         setPayReference('');
@@ -230,6 +244,12 @@ export const LedgersPage: React.FC = () => {
       if (res.data.success) {
         setOperationSuccess(res.data.message || 'Contra settlement voucher posted successfully!');
         setOperationError('');
+        const receipt = res.data.data?.receipt || res.data.receipt;
+        if (receipt) {
+          setPaymentReceiptData(receipt);
+          setShowReceiptModal(true);
+          playPrintSound();
+        }
         setShowContraModal(false);
         setContraAmount('');
         setContraNotes('');
@@ -241,6 +261,61 @@ export const LedgersPage: React.FC = () => {
     } finally {
       setContraSubmitting(false);
     }
+  };
+
+  const handleOpenPaymentReceiptFromEntry = async (entry: any) => {
+    try {
+      const res = await api.get('/ledgers/entry-detail', {
+        params: {
+          referenceId: entry.referenceId || '',
+          type: entry.type || entry.transactionType || '',
+          id: entry.id || '',
+        },
+      });
+
+      if (res.data?.success && res.data?.receipt) {
+        setPaymentReceiptData(res.data.receipt);
+        setShowReceiptModal(true);
+        return;
+      }
+    } catch (err) {
+      console.warn('Could not load receipt from server, constructing fallback:', err);
+    }
+
+    const partyName =
+      activeTab === 'CUSTOMERS'
+        ? selectedCustomer?.shopName || 'Customer'
+        : activeTab === 'SUPPLIERS'
+        ? selectedSupplier?.companyName || 'Supplier'
+        : selectedDualPartner?.name || 'Dual Partner';
+
+    const isCust = activeTab === 'CUSTOMERS' || entry.source === 'CUSTOMER_ACCOUNT';
+    const amt = Number(entry.credit) > 0 ? Number(entry.credit) : Number(entry.debit);
+    const isCashIn = Number(entry.credit) > 0;
+
+    const fallbackReceipt = {
+      receiptNumber: entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
+      voucherType: isCust ? (isCashIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT'),
+      partyType: activeTab === 'DUAL_PARTNERS' ? 'DUAL_PARTNER' : (isCust ? 'CUSTOMER' : 'SUPPLIER'),
+      isDualPartner: activeTab === 'DUAL_PARTNERS',
+      partnerName: selectedDualPartner?.name || null,
+      partyName,
+      contactPerson: isCust ? selectedCustomer?.ownerName : selectedSupplier?.contactPerson,
+      phone: isCust ? selectedCustomer?.phone : selectedSupplier?.phone,
+      address: isCust ? selectedCustomer?.area : selectedSupplier?.address,
+      previousBalance: Number(entry.runningBalance) + (isCashIn ? amt : -amt),
+      paidAmount: amt,
+      remainingBalance: Number(entry.runningBalance),
+      direction: isCashIn ? 'IN' : 'OUT',
+      paymentMethod: 'CASH',
+      reference: entry.referenceId || '-',
+      notes: entry.description || '',
+      paymentDate: entry.date,
+      recordedByName: user?.fullName || 'Cashier / Admin',
+    };
+
+    setPaymentReceiptData(fallbackReceipt);
+    setShowReceiptModal(true);
   };
 
   const selectedCustomer = activeTab === 'CUSTOMERS' ? customers.find((c) => c.id === selectedEntityId) : null;
@@ -1091,6 +1166,31 @@ export const LedgersPage: React.FC = () => {
                         <Eye size={13} />
                         Detail
                       </button>
+
+                      {((entry.type || '').includes('PAYMENT') || (entry.type || '').includes('CONTRA') || entry.description?.includes('Contra') || (entry.type || '').includes('ADJUSTMENT')) && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPaymentReceiptFromEntry(entry)}
+                          className="btn btn-outline"
+                          style={{
+                            color: '#059669',
+                            borderColor: '#a7f3d0',
+                            backgroundColor: '#ecfdf5',
+                            padding: '4px 8px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
+                          title="Payment Voucher Receipt Slip (رسید پرنٹ کریں)"
+                        >
+                          <Printer size={13} />
+                          رسید
+                        </button>
+                      )}
 
                       {canDeleteLedger && (
                         <button
@@ -2164,6 +2264,366 @@ export const LedgersPage: React.FC = () => {
                 <div style={{ textAlign: 'center', fontSize: '8px', color: '#666', marginTop: '16px' }}>
                   This statement was generated electronically from Rafiq Auto & Oil Traders ERP System | Okara
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Instant Payment Receipt / Slip Voucher Modal */}
+      {showReceiptModal && paymentReceiptData && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 130, padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            width: '460px',
+            maxWidth: '96%',
+            maxHeight: '94vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)'
+          }}>
+            {/* Modal Controls Bar (Hidden during print) */}
+            <div className="no-print" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '14px 20px',
+              borderBottom: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Receipt size={20} color="#059669" />
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                  Payment Receipt / کھاتہ رسید
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPrintSound();
+                    window.print();
+                  }}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    backgroundColor: '#059669',
+                    borderColor: '#047857',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Printer size={15} /> Print Slip (پرنٹ رسید)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReceiptModal(false);
+                    setPaymentReceiptData(null);
+                  }}
+                  className="btn btn-outline btn-sm"
+                  style={{ padding: '4px 8px' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Printable Thermal Receipt Container */}
+            <div style={{ padding: '20px 16px', overflowY: 'auto' }}>
+              <div className="printable-area thermal-receipt" style={{
+                width: '100%',
+                maxWidth: '380px',
+                margin: '0 auto',
+                backgroundColor: '#ffffff',
+                border: '1px dashed #cbd5e1',
+                padding: '16px 14px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                lineHeight: 1.4,
+                color: '#000000',
+                fontFamily: 'Courier New, Courier, monospace'
+              }}>
+                {/* Header */}
+                <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '10px', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                    RAFIQ AUTO & OIL TRADERS
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, margin: '2px 0' }}>
+                    رفیق آٹو اینڈ آئل ٹریڈرز
+                  </div>
+                  <div style={{ fontSize: '10px', margin: '2px 0' }}>
+                    54-Stop Near MCB Bank, Dipalpur Road, Okara
+                  </div>
+                  <div style={{ fontSize: '10px' }}>
+                    Ph: 0306-9258573 | 0327-7497457
+                  </div>
+                  <div style={{
+                    marginTop: '8px',
+                    display: 'inline-block',
+                    padding: '3px 12px',
+                    border: '1px solid #000',
+                    borderRadius: '4px',
+                    fontWeight: 900,
+                    fontSize: '11px',
+                    backgroundColor: '#f1f5f9'
+                  }}>
+                    {paymentReceiptData.voucherType === 'CONTRA_VOUCHER'
+                      ? '🤝 CONTRA OFFSET / آپسی کٹائی واؤچر'
+                      : paymentReceiptData.direction === 'IN'
+                      ? '💵 CASH RECEIPT / وصولی رسید (CASH IN)'
+                      : '💸 PAYMENT VOUCHER / ادائیگی واؤچر (CASH OUT)'}
+                  </div>
+                </div>
+
+                {/* Receipt Metadata */}
+                <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px', fontSize: '11px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span><b>REC #:</b> {paymentReceiptData.receiptNumber || '-'}</span>
+                    <span>
+                      <b>DATE:</b> {paymentReceiptData.paymentDate ? new Date(paymentReceiptData.paymentDate).toLocaleDateString() : new Date().toLocaleDateString()} {paymentReceiptData.paymentDate ? new Date(paymentReceiptData.paymentDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                    <span><b>PARTY:</b> {paymentReceiptData.partyName || '-'}</span>
+                    <span><b>TYPE:</b> {paymentReceiptData.isDualPartner ? 'مشترکہ کھاتہ' : (paymentReceiptData.partyType === 'CUSTOMER' ? 'گاہک' : 'سپلائر')}</span>
+                  </div>
+                  {paymentReceiptData.contactPerson && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                      <span><b>OWNER:</b> {paymentReceiptData.contactPerson}</span>
+                      <span><b>PH:</b> {paymentReceiptData.phone || '-'}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                    <span><b>MODE:</b> {paymentReceiptData.paymentMethod || 'CASH'}</span>
+                    <span><b>REF:</b> {paymentReceiptData.reference || '-'}</span>
+                  </div>
+                </div>
+
+                {/* Financial Details (Sabqa, Ada/Wasool, and Baqaya) */}
+                <div style={{ marginBottom: '10px' }}>
+                  {paymentReceiptData.voucherType === 'CONTRA_VOUCHER' ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px dotted #ccc' }}>
+                        <span>Customer Bal (سابقہ لینا):</span>
+                        <b>Rs. {Number(paymentReceiptData.previousReceivable || 0).toLocaleString()}</b>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px dotted #ccc' }}>
+                        <span>Supplier Bal (سابقہ دینا):</span>
+                        <b>Rs. {Number(paymentReceiptData.previousPayable || 0).toLocaleString()}</b>
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '6px 8px',
+                        backgroundColor: '#eff6ff',
+                        border: '1px dashed #3b82f6',
+                        borderRadius: '4px',
+                        fontWeight: 900,
+                        margin: '6px 0',
+                        fontSize: '12px'
+                      }}>
+                        <span>آپسی کٹائی رقم (Offset Amount):</span>
+                        <span style={{ color: '#1d4ed8' }}>Rs. {Number(paymentReceiptData.paidAmount || 0).toLocaleString()}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px dotted #ccc' }}>
+                        <span>New Cust Receivable (باقی لینا):</span>
+                        <b>Rs. {Number(paymentReceiptData.newReceivable || 0).toLocaleString()}</b>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px dotted #ccc' }}>
+                        <span>New Supp Payable (باقی دینا):</span>
+                        <b>Rs. {Number(paymentReceiptData.newPayable || 0).toLocaleString()}</b>
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '6px 8px',
+                        backgroundColor: '#f8fafc',
+                        border: '1.5px solid #000',
+                        borderRadius: '4px',
+                        fontWeight: 900,
+                        marginTop: '6px',
+                        fontSize: '13px'
+                      }}>
+                        <span>خالص باقی مشترکہ بیلنس:</span>
+                        <span>Rs. {Math.abs(Number(paymentReceiptData.remainingBalance || 0)).toLocaleString()} {paymentReceiptData.remainingBalance > 0 ? '(لینا ہے)' : paymentReceiptData.remainingBalance < 0 ? '(دینا ہے)' : '(صاف)'}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Previous Due / Balance */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '4px 0',
+                        fontSize: '12px',
+                        borderBottom: '1px dotted #94a3b8'
+                      }}>
+                        <span>سابقہ بقایا رقم (Previous Due):</span>
+                        <b>Rs. {Number(paymentReceiptData.previousBalance || 0).toLocaleString()}</b>
+                      </div>
+
+                      {/* Paid / Received Amount */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '7px 8px',
+                        margin: '7px 0',
+                        backgroundColor: paymentReceiptData.direction === 'IN' ? '#ecfdf5' : '#fef2f2',
+                        border: paymentReceiptData.direction === 'IN' ? '1.5px solid #059669' : '1.5px solid #dc2626',
+                        borderRadius: '6px',
+                        fontWeight: 900,
+                        fontSize: '13px'
+                      }}>
+                        <span>
+                          {paymentReceiptData.direction === 'IN' ? 'وصول شدہ رقم (Received Amount):' : 'ادا شدہ رقم (Paid Amount):'}
+                        </span>
+                        <span style={{
+                          color: paymentReceiptData.direction === 'IN' ? '#047857' : '#b91c1c',
+                          fontSize: '14px'
+                        }}>
+                          Rs. {Number(paymentReceiptData.paidAmount || 0).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Remaining Balance / Net Due */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 10px',
+                        backgroundColor: Number(paymentReceiptData.remainingBalance || 0) > 0 ? '#fffbeb' : '#f8fafc',
+                        border: '2px solid #000000',
+                        borderRadius: '6px',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        marginTop: '6px'
+                      }}>
+                        <span>
+                          {paymentReceiptData.partyType === 'SUPPLIER'
+                            ? 'باقی واجب الادا (Payable Balance):'
+                            : 'خالص باقی ادھار (Remaining Due):'}
+                        </span>
+                        <span style={{
+                          color: Number(paymentReceiptData.remainingBalance || 0) > 0 ? '#b45309' : '#059669',
+                          fontSize: '15px'
+                        }}>
+                          Rs. {Number(paymentReceiptData.remainingBalance || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Narration / Notes */}
+                {paymentReceiptData.notes && (
+                  <div style={{
+                    borderTop: '1px dashed #000000',
+                    paddingTop: '6px',
+                    marginBottom: '10px',
+                    fontSize: '10px'
+                  }}>
+                    <b>تفصیل / وجہ (Narration):</b> {paymentReceiptData.notes}
+                  </div>
+                )}
+
+                {/* Operator info */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '9px',
+                  color: '#475569',
+                  borderTop: '1px dotted #cbd5e1',
+                  paddingTop: '4px',
+                  marginBottom: '14px'
+                }}>
+                  <span>Recorded By: <b>{paymentReceiptData.recordedByName || 'Admin'}</b></span>
+                  <span>Rafiq Auto ERP</span>
+                </div>
+
+                {/* Signature Lines */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '14px',
+                  marginTop: '18px',
+                  paddingTop: '10px',
+                  borderTop: '1px dashed #000000',
+                  textAlign: 'center',
+                  fontSize: '10px'
+                }}>
+                  <div>
+                    <div style={{ borderBottom: '1px solid #000000', height: '20px' }}></div>
+                    <div style={{ marginTop: '4px', fontWeight: 700 }}>دستخط وصول کنندہ</div>
+                    <div style={{ fontSize: '8px', color: '#64748b' }}>(Receiver Sign)</div>
+                  </div>
+                  <div>
+                    <div style={{ borderBottom: '1px solid #000000', height: '20px' }}></div>
+                    <div style={{ marginTop: '4px', fontWeight: 700 }}>دستخط دکاندار / کیشئر</div>
+                    <div style={{ fontSize: '8px', color: '#64748b' }}>(Store / Cashier Stamp)</div>
+                  </div>
+                </div>
+
+                {/* Bottom Notice */}
+                <div style={{ textAlign: 'center', fontSize: '9px', marginTop: '12px', color: '#334155' }}>
+                  * یہ کمپیوٹرائزڈ رسید رفیق آٹو اینڈ آئل ٹریڈرز اوکاڑہ کے سسٹم سے جاری کی گئی ہے *
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer (Screen View) */}
+            <div className="no-print" style={{
+              padding: '12px 20px',
+              backgroundColor: '#f8fafc',
+              borderTop: '1px solid #e2e8f0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                Thermal 80mm POS Receipt Ready
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPrintSound();
+                    window.print();
+                  }}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    backgroundColor: '#059669',
+                    borderColor: '#047857',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Printer size={15} /> پرنٹ رسید (Print Slip)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReceiptModal(false);
+                    setPaymentReceiptData(null);
+                  }}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontWeight: 700 }}
+                >
+                  بند کریں (Close)
+                </button>
               </div>
             </div>
           </div>
