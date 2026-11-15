@@ -11,6 +11,7 @@ import {
 import { exportSalesPDF } from '../utils/pdfExportUtils';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { playPrintSound } from '../utils/soundEffects';
+import { extractJsonTag, removeJsonTag } from '../utils/tagUtils';
 
 export const SalesListPage: React.FC = () => {
   const { user } = useAuth();
@@ -303,16 +304,8 @@ export const SalesListPage: React.FC = () => {
     setEditCustomerId(sale.customerId);
     setEditSaleType((sale.saleType as any) || 'VAN');
 
-    let metaItems: any[] = [];
-    if (sale.notes && sale.notes.includes('[DELIVERY_META:')) {
-      try {
-        const match = sale.notes.match(/\[DELIVERY_META:(.*?)\]/);
-        if (match) {
-          const meta = JSON.parse(match[1]);
-          metaItems = meta.items || [];
-        }
-      } catch (e) {}
-    }
+    const parsedDeliveryMeta = extractJsonTag(sale.notes, 'DELIVERY_META');
+    const metaItems: any[] = parsedDeliveryMeta?.items || [];
 
     setEditItems(
       (sale.items || []).map((it: any) => {
@@ -344,7 +337,9 @@ export const SalesListPage: React.FC = () => {
     const dt = sale.saleDate ? new Date(sale.saleDate) : new Date((sale as any).createdAt || Date.now());
     const offset = dt.getTimezoneOffset() * 60000;
     setEditSaleDate(new Date(dt.getTime() - offset).toISOString().slice(0, 16));
-    setEditNotes((sale.notes || '').replace(/\[DELIVERY_META:.*?\]\s*/g, '').replace(/\[FOC_ITEMS:.*?\]\s*/g, '').trim());
+    let cleanedNotes = removeJsonTag(sale.notes, 'DELIVERY_META');
+    cleanedNotes = removeJsonTag(cleanedNotes, 'FOC_ITEMS');
+    setEditNotes(cleanedNotes);
   };
 
   const handleAddEditItem = () => {
@@ -1634,15 +1629,8 @@ export const SalesListPage: React.FC = () => {
                 </div>
                 {/* Delivery Status Banner */}
                 {(() => {
-                  let parsedDeliveryMeta: any = null;
-                  let parsedDeliveryItems: any[] = [];
-                  try {
-                    const match = (selectedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
-                    if (match) {
-                      parsedDeliveryMeta = JSON.parse(match[1]);
-                      parsedDeliveryItems = parsedDeliveryMeta.items || [];
-                    }
-                  } catch (e) {}
+                  const parsedDeliveryMeta = extractJsonTag(selectedSale.notes, 'DELIVERY_META');
+                  const parsedDeliveryItems = parsedDeliveryMeta?.items || [];
 
                   let totalDeliveredCount = 0;
                   let totalPendingCount = 0;
@@ -1743,24 +1731,9 @@ export const SalesListPage: React.FC = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      let parsedFocList: any[] = [];
-                      if (selectedSale.notes && selectedSale.notes.includes('[FOC_ITEMS:')) {
-                        try {
-                          const match = selectedSale.notes.match(/\[FOC_ITEMS:(.*?)\]/);
-                          if (match) parsedFocList = JSON.parse(match[1]);
-                        } catch (e) {}
-                      }
-
-                      let parsedDelivItems: any[] = [];
-                      if (selectedSale.notes && selectedSale.notes.includes('[DELIVERY_META:')) {
-                        try {
-                          const matchD = selectedSale.notes.match(/\[DELIVERY_META:(.*?)\]/);
-                          if (matchD) {
-                            const metaD = JSON.parse(matchD[1]);
-                            parsedDelivItems = metaD.items || [];
-                          }
-                        } catch (e) {}
-                      }
+                      const parsedFocList = extractJsonTag(selectedSale.notes, 'FOC_ITEMS') || [];
+                      const parsedDelivMeta = extractJsonTag(selectedSale.notes, 'DELIVERY_META');
+                      const parsedDelivItems = parsedDelivMeta?.items || [];
 
                       return selectedSale.items?.map((it, idx) => {
                         const isPrimary = it.unitType === 'PRIMARY';
@@ -1910,15 +1883,8 @@ export const SalesListPage: React.FC = () => {
 
               {/* 📦 DELIVERY BREAKDOWN: DELIVERED VS PENDING AMANAT */}
               {(() => {
-                let deliveryMeta: any = null;
-                let delivItems: any[] = [];
-                try {
-                  const match = (selectedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
-                  if (match) {
-                    deliveryMeta = JSON.parse(match[1]);
-                    delivItems = deliveryMeta.items || [];
-                  }
-                } catch (e) {}
+                const deliveryMeta = extractJsonTag(selectedSale.notes, 'DELIVERY_META');
+                const delivItems = deliveryMeta?.items || [];
 
                 // If no delivery meta at all and no PENDING_DELIVERY flag, don't show the box
                 if (!deliveryMeta && !selectedSale.notes?.includes('PENDING_DELIVERY') && selectedSale.deliveryStatus !== 'PENDING_DELIVERY') {
@@ -3079,14 +3045,8 @@ export const SalesListPage: React.FC = () => {
                   Billed Items Pending Delivery / امانت سامان:
                 </div>
                 {(() => {
-                  let pItems: any[] = [];
-                  try {
-                    const match = (deliverModalSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
-                    if (match) {
-                      const meta = JSON.parse(match[1]);
-                      pItems = (meta.items || []).filter((it: any) => it.status !== 'DELIVERED');
-                    }
-                  } catch (e) {}
+                  const meta = extractJsonTag(deliverModalSale.notes, 'DELIVERY_META');
+                  let pItems: any[] = (meta?.items || []).filter((it: any) => it.status !== 'DELIVERED' && Number(it.pendingQuantity || 0) > 0);
 
                   if (pItems.length === 0) {
                     pItems = (deliverModalSale.items || []).map((it: any) => ({

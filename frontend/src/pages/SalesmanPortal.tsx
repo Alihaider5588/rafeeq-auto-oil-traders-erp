@@ -34,6 +34,7 @@ import {
   Package
 } from 'lucide-react';
 import { playPrintSound } from '../utils/soundEffects';
+import { extractJsonTag, removeJsonTag } from '../utils/tagUtils';
 
 export interface PosDraftOrder {
   id: string;
@@ -4048,15 +4049,8 @@ export const SalesmanPortal: React.FC = () => {
 
                   {/* Delivery Status Banner */}
                   {(() => {
-                    let parsedDeliveryMeta: any = null;
-                    let parsedDeliveryItems: any[] = [];
-                    try {
-                      const match = (completedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
-                      if (match) {
-                        parsedDeliveryMeta = JSON.parse(match[1]);
-                        parsedDeliveryItems = parsedDeliveryMeta.items || [];
-                      }
-                    } catch (e) {}
+                    const parsedDeliveryMeta = extractJsonTag(completedSale.notes, 'DELIVERY_META');
+                    const parsedDeliveryItems = parsedDeliveryMeta?.items || [];
 
                     let totalDeliveredCount = 0;
                     let totalPendingCount = 0;
@@ -4157,24 +4151,9 @@ export const SalesmanPortal: React.FC = () => {
                     </thead>
                     <tbody>
                       {(() => {
-                        let parsedFocList: any[] = [];
-                        if (completedSale.notes && completedSale.notes.includes('[FOC_ITEMS:')) {
-                          try {
-                            const match = completedSale.notes.match(/\[FOC_ITEMS:(.*?)\]/);
-                            if (match) parsedFocList = JSON.parse(match[1]);
-                          } catch (e) {}
-                        }
-
-                        let parsedDelivItems: any[] = [];
-                        if (completedSale.notes && completedSale.notes.includes('[DELIVERY_META:')) {
-                          try {
-                            const matchD = completedSale.notes.match(/\[DELIVERY_META:(.*?)\]/);
-                            if (matchD) {
-                              const metaD = JSON.parse(matchD[1]);
-                              parsedDelivItems = metaD.items || [];
-                            }
-                          } catch (e) {}
-                        }
+                        const parsedFocList = extractJsonTag(completedSale.notes, 'FOC_ITEMS') || [];
+                        const parsedDelivMeta = extractJsonTag(completedSale.notes, 'DELIVERY_META');
+                        const parsedDelivItems = parsedDelivMeta?.items || [];
 
                         return completedSale.items?.map((it: any, idx: number) => {
                           const isPrimary = it.unitType === 'PRIMARY';
@@ -4353,15 +4332,8 @@ export const SalesmanPortal: React.FC = () => {
 
                 {/* 📦 DELIVERY BREAKDOWN: DELIVERED VS PENDING AMANAT */}
                 {(() => {
-                  let deliveryMeta: any = null;
-                  let delivItems: any[] = [];
-                  try {
-                    const match = (completedSale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
-                    if (match) {
-                      deliveryMeta = JSON.parse(match[1]);
-                      delivItems = deliveryMeta.items || [];
-                    }
-                  } catch (e) {}
+                  const deliveryMeta = extractJsonTag(completedSale.notes, 'DELIVERY_META');
+                  const delivItems = deliveryMeta?.items || [];
 
                   // If no delivery meta at all and no PENDING_DELIVERY flag, don't show the box
                   if (!deliveryMeta && !completedSale.notes?.includes('PENDING_DELIVERY') && completedSale.deliveryStatus !== 'PENDING_DELIVERY') {

@@ -8,6 +8,81 @@ import { Prisma } from '@prisma/client';
 import { clearProductsCache } from './productController';
 import { clearDashboardCache } from './reportController';
 
+export const extractJsonTag = (text: string | undefined | null, tagName: string): any => {
+  if (!text) return null;
+  const startTag = `[${tagName}:`;
+  const startIdx = text.indexOf(startTag);
+  if (startIdx === -1) return null;
+  const contentStart = startIdx + startTag.length;
+  const firstChar = text[contentStart];
+  if (firstChar === '{' || firstChar === '[') {
+    const openChar = firstChar;
+    const closeChar = firstChar === '{' ? '}' : ']';
+    let depth = 0;
+    for (let i = contentStart; i < text.length; i++) {
+      if (text[i] === openChar) depth++;
+      else if (text[i] === closeChar) {
+        depth--;
+        if (depth === 0) {
+          try {
+            return JSON.parse(text.substring(contentStart, i + 1));
+          } catch (e) {
+            return null;
+          }
+        }
+      }
+    }
+  }
+  const endIdx = text.indexOf(']', contentStart);
+  if (endIdx !== -1) {
+    try {
+      return JSON.parse(text.substring(contentStart, endIdx));
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+
+export const removeJsonTag = (text: string | undefined | null, tagName: string): string => {
+  if (!text) return '';
+  const startTag = `[${tagName}:`;
+  let currentText = text;
+  while (true) {
+    const startIdx = currentText.indexOf(startTag);
+    if (startIdx === -1) break;
+    const contentStart = startIdx + startTag.length;
+    const firstChar = currentText[contentStart];
+    if (firstChar === '{' || firstChar === '[') {
+      const openChar = firstChar;
+      const closeChar = firstChar === '{' ? '}' : ']';
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = contentStart; i < currentText.length; i++) {
+        if (currentText[i] === openChar) depth++;
+        else if (currentText[i] === closeChar) {
+          depth--;
+          if (depth === 0) {
+            endIdx = (currentText[i + 1] === ']') ? i + 2 : i + 1;
+            break;
+          }
+        }
+      }
+      if (endIdx !== -1) {
+        currentText = (currentText.substring(0, startIdx) + currentText.substring(endIdx)).trim();
+        continue;
+      }
+    }
+    const fallbackEnd = currentText.indexOf(']', contentStart);
+    if (fallbackEnd !== -1) {
+      currentText = (currentText.substring(0, startIdx) + currentText.substring(fallbackEnd + 1)).trim();
+    } else {
+      break;
+    }
+  }
+  return currentText;
+};
+
 const saleItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().positive('Quantity must be greater than 0'),
@@ -1368,7 +1443,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
         data.items.some((it) => it.deliveryStatus === 'PENDING_DELIVERY' || it.deliveryStatus === 'PARTIAL_DELIVERY' || Number(it.pendingQuantity || 0) > 0);
 
       let editNotesStr = (data.notes !== undefined ? (data.notes || '') : (existingSale.notes || '')).trim();
-      editNotesStr = editNotesStr.replace(/\[DELIVERY_META:.*?\]\s*/g, '').trim();
+      editNotesStr = removeJsonTag(editNotesStr, 'DELIVERY_META');
 
       if (hasPendingDelivery) {
         const deliveryMeta = {
@@ -2155,11 +2230,7 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
 
     const pendingDeliveries = sales
       .map((sale) => {
-        let meta: any = null;
-        try {
-          const match = (sale.notes || '').match(/\[DELIVERY_META:(.*?)\]/);
-          if (match) meta = JSON.parse(match[1]);
-        } catch (e) { }
+        const meta = extractJsonTag(sale.notes, 'DELIVERY_META');
 
         // Process all items in this sale to extract both delivered and pending portions
         const allDeliveryItems = (sale.items || []).map((si) => {
@@ -2205,7 +2276,7 @@ export const getPendingDeliveries = async (req: AuthenticatedRequest, res: Respo
           totalDeliveredQty: deliveredItems.reduce((acc, it) => acc + it.deliveredQuantity, 0),
           totalPendingQty: pendingItems.reduce((acc, it) => acc + it.pendingQuantity, 0),
           createdAt: sale.createdAt,
-          userNotes: (sale.notes || '').replace(/\[DELIVERY_META:.*?\]\s*/, '').trim(),
+          userNotes: removeJsonTag(sale.notes, 'DELIVERY_META'),
         };
       })
       .filter((s) => s.deliveryStatus === 'PENDING_DELIVERY' && s.pendingItems.length > 0);
@@ -2232,14 +2303,9 @@ export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    let meta: any = { status: 'PENDING_DELIVERY', items: [] };
     const notesStr = sale.notes || '';
-    const match = notesStr.match(/\[DELIVERY_META:(.*?)\]/);
-    if (match) {
-      try {
-        meta = JSON.parse(match[1]);
-      } catch (e) { }
-    } else {
+    let meta: any = extractJsonTag(notesStr, 'DELIVERY_META') || { status: 'PENDING_DELIVERY', items: [] };
+    if (!meta.items || meta.items.length === 0) {
       meta.items = sale.items.map((it) => ({
         productId: it.productId,
         productName: it.product.name,
@@ -2295,7 +2361,7 @@ export const updateDeliveryStatus = async (req: AuthenticatedRequest, res: Respo
       if (allDone) meta.deliveredAt = new Date().toISOString();
     }
 
-    const cleanUserNotes = notesStr.replace(/\[DELIVERY_META:.*?\]\s*/, '').trim();
+    const cleanUserNotes = removeJsonTag(notesStr, 'DELIVERY_META');
     const updatedNotes = `[DELIVERY_META:${JSON.stringify(meta)}] ${cleanUserNotes}${deliveryNotes ? ` (Delivered Note: ${deliveryNotes})` : ''}`.trim();
 
     await prisma.sale.update({

@@ -5,48 +5,10 @@ import { ShoppingBag, Plus, Calendar, Trash2, AlertCircle, CheckCircle, Building
 import { useAuth } from '../context/AuthContext';
 import { exportPurchasesPDF } from '../utils/pdfExportUtils';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
-
-const extractJsonTag = (text: string | undefined | null, tagName: string) => {
-  if (!text) return null;
-  const startTag = `[${tagName}:`;
-  const startIdx = text.indexOf(startTag);
-  if (startIdx === -1) return null;
-  const contentStart = startIdx + startTag.length;
-  const firstChar = text[contentStart];
-  if (firstChar === '[' || firstChar === '{') {
-    const openChar = firstChar;
-    const closeChar = firstChar === '[' ? ']' : '}';
-    let depth = 0;
-    for (let i = contentStart; i < text.length; i++) {
-      if (text[i] === openChar) depth++;
-      else if (text[i] === closeChar) {
-        depth--;
-        if (depth === 0) {
-          try {
-            return JSON.parse(text.substring(contentStart, i + 1));
-          } catch (e) {
-            return null;
-          }
-        }
-      }
-    }
-  }
-  const endIdx = text.indexOf(']', contentStart);
-  if (endIdx !== -1) {
-    try {
-      return JSON.parse(text.substring(contentStart, endIdx));
-    } catch (e) {
-      return null;
-    }
-  }
-  return null;
-};
+import { extractJsonTag, removeJsonTag } from '../utils/tagUtils';
 
 const cleanPurchaseNotes = (text: string | undefined | null) => {
-  if (!text) return '';
-  return text
-    .replace(/\[PURCHASE_FOC:(\[[\s\S]*?\]|\{[\s\S]*?\})\]\s*/g, '')
-    .trim();
+  return removeJsonTag(text, 'PURCHASE_FOC');
 };
 
 export const PurchasesPage: React.FC = () => {
