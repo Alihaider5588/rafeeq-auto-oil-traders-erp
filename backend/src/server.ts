@@ -20,7 +20,7 @@ import ownerBrandRoutes from './routes/ownerBrandRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import employeeRoutes from './routes/employeeRoutes';
 import syncRoutes from './routes/syncRoutes';
-import { getSyncMetadata, getPendingLocalCount, runTwoWaySync } from './services/syncService';
+import { getSyncMetadata, getPendingLocalCount, runTwoWaySync, ensureLocalBackup } from './services/syncService';
 
 import { getAllowedCorsOrigins } from './utils/security';
 import { apiLimiter } from './middlewares/rateLimiter';
@@ -179,23 +179,29 @@ function startHourlyAutoSync() {
   const ONE_HOUR = 60 * 60 * 1000;
   console.log('[Auto-Sync] Background hourly sync service initialized (Interval: 1 hour).');
 
-  setInterval(async () => {
+  const executeAutoSync = async (reason: string) => {
     try {
-      const meta = getSyncMetadata();
-      const lastSyncDate = meta.lastSyncTime ? new Date(meta.lastSyncTime) : null;
-      const pendingCount = await getPendingLocalCount(lastSyncDate);
-
-      if (pendingCount > 0) {
-        console.log(`[Auto-Sync] Found ${pendingCount} pending local record(s). Attempting hourly cloud sync...`);
-        const result = await runTwoWaySync();
-        console.log('[Auto-Sync] Hourly sync completed successfully:', result.pushed);
-      } else {
-        console.log('[Auto-Sync] No new local transactions since last sync. Skipping cloud wake-up to save compute hours.');
-      }
+      console.log(`[Auto-Sync] Initiating two-way auto-sync (${reason})...`);
+      const result = await runTwoWaySync();
+      console.log('[Auto-Sync] Auto-sync completed successfully:', {
+        pushed: result.pushed,
+        pulled: result.pulled,
+      });
     } catch (err: any) {
       // Gracefully catch network / DNS errors if shop is currently offline
-      console.log(`[Auto-Sync] Internet unavailable or sync paused: ${err.message || 'Offline'}. Will retry next hour.`);
+      console.log(`[Auto-Sync] Internet unavailable or sync paused: ${err?.message || 'Offline'}. Will retry next interval.`);
     }
+  };
+
+  // Run initial auto-sync 30 seconds after server boots up
+  setTimeout(() => {
+    executeAutoSync('Startup sync');
+  }, 30000);
+
+  // Run every 1 hour unconditionally to ensure both local transactions are uploaded
+  // and cloud updates (prices, salesman orders, payments) are pulled
+  setInterval(() => {
+    executeAutoSync('Hourly scheduled sync');
   }, ONE_HOUR);
 }
 
@@ -210,6 +216,9 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     console.log(` Network: http://0.0.0.0:${port} (Accessible from Mobile/Laptop)`);
     console.log(` Security: Rate Limiting & Whitelist CORS Active`);
     console.log(`=======================================================`);
+
+    // Ensure daily database backup snapshot is created
+    ensureLocalBackup();
 
     startHourlyAutoSync();
   });

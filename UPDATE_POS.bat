@@ -33,6 +33,12 @@ cd ..
 echo [OK] Frontend updated.
 echo.
 
+echo [4/4] Syncing latest Cloud Data (Prices, Orders, Customers)...
+cd backend
+call node -e "require('./dist/services/syncService').runTwoWaySync().then(r => console.log('[OK] Data sync completed successfully.')).catch(e => console.log('[Notice] Auto-sync skipped (Offline). Will auto-sync on startup.'));"
+cd ..
+echo.
+
 echo =====================================================================
 echo           [SUCCESS] UPDATE COMPLETED!
 echo  Your offline data (sales, customers, stock) was preserved safely.

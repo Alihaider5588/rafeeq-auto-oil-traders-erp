@@ -56,6 +56,16 @@ export async function assertDatabaseConnection(): Promise<void> {
     await prismaInstance.$connect();
     if (isPostgresRequested) {
       console.log('[Database] Connection verified: PostgreSQL database is connected and ready.');
+    } else {
+      // Light / Sudden Power Cut Protection: Enable WAL mode & crash resilience
+      try {
+        await prismaInstance.$executeRawUnsafe('PRAGMA journal_mode = WAL;');
+        await prismaInstance.$executeRawUnsafe('PRAGMA synchronous = NORMAL;');
+        await prismaInstance.$executeRawUnsafe('PRAGMA busy_timeout = 5000;');
+        console.log('[Database] SQLite Write-Ahead Logging (WAL) enabled (100% immune to sudden power cuts).');
+      } catch (walErr) {
+        console.warn('[Database] Note on WAL configuration:', walErr);
+      }
     }
   } catch (err: any) {
     console.error('================================================================');

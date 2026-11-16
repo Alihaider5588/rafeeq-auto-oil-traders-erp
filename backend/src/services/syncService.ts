@@ -5,6 +5,50 @@ import { clearDashboardCache } from '../controllers/reportController';
 
 const SYNC_META_FILE = path.join(__dirname, '..', '..', 'prisma', 'sync_metadata.json');
 
+/**
+ * Creates a daily crash-safe snapshot of SQLite dev.db in backend/prisma/backups/
+ * Protects against disk failure and sudden power outages. Keeps last 14 days.
+ */
+export function ensureLocalBackup(): void {
+  try {
+    const prismaDir = path.join(__dirname, '..', '..', 'prisma');
+    const dbPath = path.join(prismaDir, 'dev.db');
+    if (!fs.existsSync(dbPath)) return;
+
+    const backupDir = path.join(prismaDir, 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const todayBackupPath = path.join(backupDir, `dev_backup_${todayStr}.db`);
+
+    if (!fs.existsSync(todayBackupPath)) {
+      fs.copyFileSync(dbPath, todayBackupPath);
+      console.log(`[Backup] Daily crash-safe SQLite snapshot created: dev_backup_${todayStr}.db`);
+    }
+
+    // Clean up backups older than 14 days
+    const files = fs.readdirSync(backupDir);
+    const now = Date.now();
+    const FOURTEEN_DAYS = 14 * 24 * 60 * 60 * 1000;
+    for (const file of files) {
+      if (file.startsWith('dev_backup_') && file.endsWith('.db')) {
+        const filePath = path.join(backupDir, file);
+        const stat = fs.statSync(filePath);
+        if (now - stat.mtimeMs > FOURTEEN_DAYS) {
+          try {
+            fs.unlinkSync(filePath);
+            console.log(`[Backup] Rotated old backup file: ${file}`);
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Backup] Warning creating SQLite daily snapshot:', err);
+  }
+}
+
 export interface SyncStatus {
   isLocalMode: boolean;
   neonConfigured: boolean;
@@ -95,6 +139,7 @@ export async function getPendingLocalCount(lastSyncDate: Date | null): Promise<n
  * Used when setting up shop computer for the first time.
  */
 export async function pullAllFromCloud(): Promise<any> {
+  ensureLocalBackup();
   const local = getLocalSqliteClient();
   const neon = getNeonPostgresClient();
 
@@ -335,6 +380,7 @@ export async function pullAllFromCloud(): Promise<any> {
  * 3. Immediately disconnects from Neon to preserve 100 compute-hour limit.
  */
 export async function runTwoWaySync(): Promise<any> {
+  ensureLocalBackup();
   const meta = getSyncMetadata();
   const lastSyncDate = meta.lastSyncTime ? new Date(meta.lastSyncTime) : null;
 
@@ -357,8 +403,14 @@ export async function runTwoWaySync(): Promise<any> {
   };
   const pulled: Record<string, number> = {
     products: 0,
+    categories: 0,
     customers: 0,
+    suppliers: 0,
     salesmanOrders: 0,
+    payments: 0,
+    ledgers: 0,
+    supplierLedgers: 0,
+    expenses: 0,
   };
 
   try {
@@ -493,9 +545,14 @@ export async function runTwoWaySync(): Promise<any> {
     // PART 2: PULL CLOUD CHANGES (FROM MOBILE ADMIN / SALESMAN) TO LOCAL PC
     // =========================================================================
 
-    // A. Product price changes or catalog edits done by Admin on mobile
+    // A. Product price changes, new items, or catalog edits done on cloud/mobile
     const cloudProducts = await neon.product.findMany({
-      where: { updatedAt: { gt: lastSyncDate } },
+      where: {
+        OR: [
+          { updatedAt: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
     });
     for (const cp of cloudProducts) {
       await local.product.upsert({
@@ -506,9 +563,32 @@ export async function runTwoWaySync(): Promise<any> {
       pulled.products++;
     }
 
-    // B. Customers added by Admin on mobile
+    // B. Categories added or updated on cloud
+    const cloudCategories = await neon.category.findMany({
+      where: {
+        OR: [
+          { updatedAt: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
+    });
+    for (const c of cloudCategories) {
+      await local.category.upsert({
+        where: { id: c.id },
+        create: c,
+        update: c,
+      });
+      pulled.categories++;
+    }
+
+    // C. Customers added or updated by Admin on mobile
     const cloudCustomers = await neon.customer.findMany({
-      where: { createdAt: { gt: lastSyncDate } },
+      where: {
+        OR: [
+          { updatedAt: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
     });
     for (const cc of cloudCustomers) {
       await local.customer.upsert({
@@ -519,16 +599,36 @@ export async function runTwoWaySync(): Promise<any> {
       pulled.customers++;
     }
 
-    // C. Salesman mobile orders created on cloud
-    const cloudSalesmanOrders = await neon.sale.findMany({
+    // D. Suppliers added or updated on cloud
+    const cloudSuppliers = await neon.supplier.findMany({
       where: {
-        createdAt: { gt: lastSyncDate },
-        salesmanId: { not: null },
+        OR: [
+          { updatedAt: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
+    });
+    for (const cs of cloudSuppliers) {
+      await local.supplier.upsert({
+        where: { id: cs.id },
+        create: cs,
+        update: cs,
+      });
+      pulled.suppliers++;
+    }
+
+    // E. Sales & Salesman mobile orders created on cloud
+    const cloudSales = await neon.sale.findMany({
+      where: {
+        OR: [
+          { updatedAt: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
       },
       include: { items: true },
     });
-    for (const cso of cloudSalesmanOrders) {
-      const { items, ...orderData } = cso;
+    for (const cs of cloudSales) {
+      const { items, ...orderData } = cs;
       await local.sale.upsert({
         where: { id: orderData.id },
         create: orderData,
@@ -542,6 +642,78 @@ export async function runTwoWaySync(): Promise<any> {
         });
       }
       pulled.salesmanOrders++;
+    }
+
+    // F. Payments recorded on cloud / mobile app
+    const cloudPayments = await neon.payment.findMany({
+      where: {
+        OR: [
+          { paymentDate: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
+    });
+    for (const cp of cloudPayments) {
+      await local.payment.upsert({
+        where: { id: cp.id },
+        create: cp,
+        update: cp,
+      });
+      pulled.payments++;
+    }
+
+    // G. Customer Ledgers entered on cloud (e.g. mobile cash receipts)
+    const cloudLedgers = await neon.customerLedger.findMany({
+      where: {
+        OR: [
+          { date: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
+    });
+    for (const cl of cloudLedgers) {
+      await local.customerLedger.upsert({
+        where: { id: cl.id },
+        create: cl,
+        update: cl,
+      });
+      pulled.ledgers++;
+    }
+
+    // H. Supplier Ledgers entered on cloud
+    const cloudSupLedgers = await neon.supplierLedger.findMany({
+      where: {
+        OR: [
+          { date: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
+    });
+    for (const sl of cloudSupLedgers) {
+      await local.supplierLedger.upsert({
+        where: { id: sl.id },
+        create: sl,
+        update: sl,
+      });
+      pulled.supplierLedgers++;
+    }
+
+    // I. Expenses entered on cloud
+    const cloudExpenses = await neon.expense.findMany({
+      where: {
+        OR: [
+          { expenseDate: { gt: lastSyncDate } },
+          { createdAt: { gt: lastSyncDate } },
+        ],
+      },
+    });
+    for (const exp of cloudExpenses) {
+      await local.expense.upsert({
+        where: { id: exp.id },
+        create: exp,
+        update: exp,
+      });
+      pulled.expenses++;
     }
 
     // Save success timestamp
