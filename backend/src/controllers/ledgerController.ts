@@ -14,6 +14,7 @@ const paymentSchema = z.object({
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   reference: z.string().optional(),
+  invoiceNumber: z.string().optional().nullable(),
   notes: z.string().min(1, 'Reason / Narration (Wajah) likhna lazmi hai'),
   date: z.string().optional().nullable(),
   partnerName: z.string().optional().nullable(),
@@ -164,13 +165,16 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           data: { currentReceivable: new Prisma.Decimal(newRec) },
         });
 
+        const effectiveRef = (data.invoiceNumber ? `INV:${data.invoiceNumber}` : '') +
+          (data.reference ? (data.invoiceNumber ? ` | ${data.reference}` : data.reference) : '');
+
         await tx.customerLedger.create({
           data: {
             customerId: customer.id,
             date: paymentDate,
             transactionType: isCashOut ? TransactionType.ADJUSTMENT : TransactionType.CUSTOMER_PAYMENT,
-            referenceId: receiptNumber,
-            description: `${isCashOut ? 'Cash Out / Adaiyigi / Refund' : 'Cash In / Wasooli'} #${receiptNumber} - ${data.notes}`,
+            referenceId: data.invoiceNumber || receiptNumber,
+            description: `${isCashOut ? 'Cash Out / Adaiyigi / Refund' : 'Cash In / Wasooli'} #${receiptNumber}${data.invoiceNumber ? ` [Invoice #${data.invoiceNumber}]` : ''} - ${data.notes}`,
             debit: new Prisma.Decimal(isCashOut ? data.amount : 0),
             credit: new Prisma.Decimal(isCashOut ? 0 : data.amount),
             runningBalance: new Prisma.Decimal(newRec),
@@ -184,8 +188,8 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             amount: new Prisma.Decimal(data.amount),
             paymentMethod: data.paymentMethod,
             paymentDate,
-            reference: data.reference,
-            notes: `${isCashOut ? '[CASH_OUT] ' : '[CASH_IN] '}${data.notes}`,
+            reference: effectiveRef || data.reference,
+            notes: `${isCashOut ? '[CASH_OUT] ' : '[CASH_IN] '}${data.invoiceNumber ? `[INV:${data.invoiceNumber}] ` : ''}${data.notes}`,
             recordedById: userId,
           },
         });
@@ -193,6 +197,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
         const voucherType = isCashOut ? 'CUSTOMER_REFUND' : 'CUSTOMER_PAYMENT';
         const receipt = {
           receiptNumber,
+          invoiceNumber: data.invoiceNumber || receiptNumber,
           voucherType,
           partyType: data.isDualPartner ? 'DUAL_PARTNER' : 'CUSTOMER',
           isDualPartner: Boolean(data.isDualPartner),
@@ -206,7 +211,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           remainingBalance: newRec,
           direction: isCashOut ? 'OUT' : 'IN',
           paymentMethod: data.paymentMethod,
-          reference: data.reference || '',
+          reference: effectiveRef || data.reference || '',
           notes: data.notes,
           paymentDate: paymentDate.toISOString(),
           recordedByName: req.user?.fullName || 'Cashier / Admin',
@@ -236,13 +241,16 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           data: { currentPayable: new Prisma.Decimal(newPay) },
         });
 
+        const effectiveRef = (data.invoiceNumber ? `BILL:${data.invoiceNumber}` : '') +
+          (data.reference ? (data.invoiceNumber ? ` | ${data.reference}` : data.reference) : '');
+
         await tx.supplierLedger.create({
           data: {
             supplierId: supplier.id,
             date: paymentDate,
             transactionType: isSupplierCashIn ? TransactionType.ADJUSTMENT : TransactionType.SUPPLIER_PAYMENT,
-            referenceId: receiptNumber,
-            description: `${isSupplierCashIn ? 'Cash In / Refund from Supplier' : 'Cash Out / Payment to Supplier'} #${receiptNumber} - ${data.notes}`,
+            referenceId: data.invoiceNumber || receiptNumber,
+            description: `${isSupplierCashIn ? 'Cash In / Refund from Supplier' : 'Cash Out / Payment to Supplier'} #${receiptNumber}${data.invoiceNumber ? ` [Bill #${data.invoiceNumber}]` : ''} - ${data.notes}`,
             debit: new Prisma.Decimal(isSupplierCashIn ? 0 : data.amount),
             credit: new Prisma.Decimal(isSupplierCashIn ? data.amount : 0),
             runningBalance: new Prisma.Decimal(newPay),
@@ -256,8 +264,8 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             amount: new Prisma.Decimal(data.amount),
             paymentMethod: data.paymentMethod,
             paymentDate,
-            reference: data.reference,
-            notes: `${isSupplierCashIn ? '[CASH_IN] ' : '[CASH_OUT] '}${data.notes}`,
+            reference: effectiveRef || data.reference,
+            notes: `${isSupplierCashIn ? '[CASH_IN] ' : '[CASH_OUT] '}${data.invoiceNumber ? `[BILL:${data.invoiceNumber}] ` : ''}${data.notes}`,
             recordedById: userId,
           },
         });
@@ -265,6 +273,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
         const voucherType = isSupplierCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT';
         const receipt = {
           receiptNumber,
+          invoiceNumber: data.invoiceNumber || receiptNumber,
           voucherType,
           partyType: data.isDualPartner ? 'DUAL_PARTNER' : 'SUPPLIER',
           isDualPartner: Boolean(data.isDualPartner),
@@ -278,7 +287,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           remainingBalance: newPay,
           direction: isSupplierCashIn ? 'IN' : 'OUT',
           paymentMethod: data.paymentMethod,
-          reference: data.reference || '',
+          reference: effectiveRef || data.reference || '',
           notes: data.notes,
           paymentDate: paymentDate.toISOString(),
           recordedByName: req.user?.fullName || 'Cashier / Admin',
@@ -856,10 +865,36 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
     }
 
     if (ledgerEntry) {
+      const isCust = 'customerId' in ledgerEntry;
+      const amt = Number(ledgerEntry.credit) > 0 ? Number(ledgerEntry.credit) : Number(ledgerEntry.debit);
+      const isCashIn = Number(ledgerEntry.credit) > 0;
+      const party = isCust ? ledgerEntry.customer : ledgerEntry.supplier;
+
+      const receipt = {
+        receiptNumber: ledgerEntry.referenceId || `REC-${ledgerEntry.id.slice(0, 8)}`,
+        invoiceNumber: ledgerEntry.referenceId || `REC-${ledgerEntry.id.slice(0, 8)}`,
+        voucherType: isCust ? (isCashIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT'),
+        partyType: isCust ? 'CUSTOMER' : 'SUPPLIER',
+        partyName: isCust ? (party?.shopName || 'Customer') : (party?.companyName || 'Supplier'),
+        contactPerson: isCust ? party?.ownerName : party?.contactPerson,
+        phone: party?.phone || '',
+        address: party?.address || '',
+        previousBalance: Number(ledgerEntry.runningBalance) + (isCashIn ? amt : -amt),
+        paidAmount: amt,
+        remainingBalance: Number(ledgerEntry.runningBalance),
+        direction: isCashIn ? 'IN' : 'OUT',
+        paymentMethod: 'CASH',
+        reference: ledgerEntry.referenceId || '-',
+        notes: ledgerEntry.description || '',
+        paymentDate: ledgerEntry.date ? ledgerEntry.date.toISOString() : new Date().toISOString(),
+        recordedByName: req.user?.fullName || 'Cashier / Admin',
+      };
+
       res.json({
         success: true,
         kind: 'LEDGER_ENTRY',
         ledgerEntry,
+        receipt,
       });
       return;
     }
@@ -868,5 +903,142 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
   } catch (error) {
     console.error('getLedgerEntryDetail error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve transaction detail' });
+  }
+};
+
+export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+    const [todayPayments, custCreditsAgg, custDebitsAdjAgg, suppDebitsAgg, suppCreditsAdjAgg] = await Promise.all([
+      prisma.payment.findMany({
+        where: {
+          paymentDate: { gte: startOfToday, lte: endOfToday },
+        },
+        include: {
+          customer: { select: { id: true, shopName: true, ownerName: true, phone: true } },
+          supplier: { select: { id: true, companyName: true, contactPerson: true, phone: true } },
+        },
+        orderBy: { paymentDate: 'desc' },
+      }),
+      // Customer Ledger Credits today (payments / collections received)
+      prisma.customerLedger.aggregate({
+        where: {
+          date: { gte: startOfToday, lte: endOfToday },
+          credit: { gt: 0 },
+        },
+        _sum: { credit: true },
+        _count: { id: true },
+      }),
+      // Customer Ledger Debits today that are Cash Out / Refund adjustments
+      prisma.customerLedger.aggregate({
+        where: {
+          date: { gte: startOfToday, lte: endOfToday },
+          debit: { gt: 0 },
+          transactionType: { in: ['ADJUSTMENT', 'CUSTOMER_PAYMENT'] },
+          description: { contains: 'Cash Out' },
+        },
+        _sum: { debit: true },
+        _count: { id: true },
+      }),
+      // Supplier Ledger Debits today (payments disbursed)
+      prisma.supplierLedger.aggregate({
+        where: {
+          date: { gte: startOfToday, lte: endOfToday },
+          debit: { gt: 0 },
+        },
+        _sum: { debit: true },
+        _count: { id: true },
+      }),
+      // Supplier Ledger Credits today that are refund adjustments
+      prisma.supplierLedger.aggregate({
+        where: {
+          date: { gte: startOfToday, lte: endOfToday },
+          credit: { gt: 0 },
+          description: { contains: 'Cash In' },
+        },
+        _sum: { credit: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    let directCashIn = 0;
+    let directCashOut = 0;
+    let custCollectionsCount = 0;
+    let suppDisbursementsCount = 0;
+
+    for (const p of todayPayments) {
+      const amt = Number(p.amount);
+      const isCust = Boolean(p.customerId);
+      const isCashOut = (p.notes || '').includes('[CASH_OUT]') || (p.notes || '').toLowerCase().includes('cash out') || (p.notes || '').toLowerCase().includes('adaiyigi');
+      const isCashIn = (p.notes || '').includes('[CASH_IN]') || (p.notes || '').toLowerCase().includes('cash in') || (p.notes || '').toLowerCase().includes('wasooli');
+
+      if (isCust) {
+        if (isCashOut) {
+          directCashOut += amt;
+        } else {
+          directCashIn += amt;
+          custCollectionsCount++;
+        }
+      } else if (p.supplierId) {
+        if (isCashIn) {
+          directCashIn += amt;
+        } else {
+          directCashOut += amt;
+          suppDisbursementsCount++;
+        }
+      } else {
+        if (isCashOut) directCashOut += amt;
+        else directCashIn += amt;
+      }
+    }
+
+    const totalReceived = Math.max(
+      Number(custCreditsAgg._sum.credit || 0) + Number(suppCreditsAdjAgg._sum.credit || 0),
+      directCashIn
+    );
+
+    const totalPaid = Math.max(
+      Number(suppDebitsAgg._sum.debit || 0) + Number(custDebitsAdjAgg._sum.debit || 0),
+      directCashOut
+    );
+
+    res.json({
+      success: true,
+      data: {
+        date: today.toISOString().slice(0, 10),
+        totalReceived,
+        totalPaid,
+        netCashFlow: totalReceived - totalPaid,
+        customerCollections: Number(custCreditsAgg._sum.credit || 0) || directCashIn,
+        supplierDisbursements: Number(suppDebitsAgg._sum.debit || 0) || directCashOut,
+        receivedCount: Math.max(Number(custCreditsAgg._count.id || 0) + Number(suppCreditsAdjAgg._count.id || 0), custCollectionsCount),
+        paidCount: Math.max(Number(suppDebitsAgg._count.id || 0) + Number(custDebitsAdjAgg._count.id || 0), suppDisbursementsCount),
+        recentTransactions: todayPayments.map((p) => {
+          const isCust = Boolean(p.customerId);
+          const isCashOut = (p.notes || '').includes('[CASH_OUT]') || (p.notes || '').toLowerCase().includes('cash out') || (p.notes || '').toLowerCase().includes('adaiyigi');
+          const isCashIn = (p.notes || '').includes('[CASH_IN]') || (p.notes || '').toLowerCase().includes('cash in') || (p.notes || '').toLowerCase().includes('wasooli');
+          const dir = isCust ? (isCashOut ? 'OUT' : 'IN') : (isCashIn ? 'IN' : 'OUT');
+
+          return {
+            id: p.id,
+            receiptNumber: p.receiptNumber,
+            amount: Number(p.amount),
+            direction: dir,
+            partyName: p.customer?.shopName || p.supplier?.companyName || 'Cash Account',
+            partyType: isCust ? 'CUSTOMER' : (p.supplierId ? 'SUPPLIER' : 'GENERAL'),
+            paymentMethod: p.paymentMethod,
+            paymentDate: p.paymentDate,
+            reference: p.reference || '',
+            notes: (p.notes || '').replace(/\[(CASH_IN|CASH_OUT)\]\s*/gi, '').trim(),
+          };
+        }),
+      },
+    });
+  } catch (error: any) {
+    console.error('getTodayLedgerSummary error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve today ledger summary' });
   }
 };

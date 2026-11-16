@@ -60,6 +60,8 @@ export const LedgersPage: React.FC = () => {
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('CASH');
   const [payReference, setPayReference] = useState('');
+  const [payInvoiceNumber, setPayInvoiceNumber] = useState('');
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
   const [payNotes, setPayNotes] = useState('');
   const [payTargetType, setPayTargetType] = useState<'CUSTOMER' | 'SUPPLIER'>('CUSTOMER');
   const [payDirection, setPayDirection] = useState<'IN' | 'OUT'>('IN');
@@ -69,6 +71,10 @@ export const LedgersPage: React.FC = () => {
     return d.toISOString().slice(0, 16);
   });
   const [paySubmitting, setPaySubmitting] = useState(false);
+
+  // Today's Ledger Financial Summary (Cash In / Wasooli vs Cash Out / Adaiyigi)
+  const [todaySummary, setTodaySummary] = useState<any>(null);
+  const [loadingTodaySummary, setLoadingTodaySummary] = useState(false);
 
   // Contra settlement modal (Mutual offset)
   const [showContraModal, setShowContraModal] = useState(false);
@@ -111,6 +117,24 @@ export const LedgersPage: React.FC = () => {
     }
   }, [selectedEntityId]);
 
+  const loadTodaySummary = async () => {
+    try {
+      setLoadingTodaySummary(true);
+      const res = await api.get('/ledgers/today-summary');
+      if (res.data?.success && res.data?.data) {
+        setTodaySummary(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load today ledger summary:', err);
+    } finally {
+      setLoadingTodaySummary(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTodaySummary();
+  }, []);
+
   const loadEntities = async () => {
     try {
       if (activeTab === 'CUSTOMERS') {
@@ -129,6 +153,7 @@ export const LedgersPage: React.FC = () => {
         setDualPartners(list);
         setSelectedEntityId(list.length > 0 ? list[0].id : '');
       }
+      loadTodaySummary();
     } catch (e) {
       console.error(e);
     }
@@ -167,6 +192,10 @@ export const LedgersPage: React.FC = () => {
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedEntityId) {
+      alert('Bara-e-meherbani pehle Party / Account select karein!');
+      return;
+    }
     if (!payNotes.trim()) {
       alert('Reason / Narration (Wajah) likhna lazmi hai!');
       return;
@@ -178,6 +207,7 @@ export const LedgersPage: React.FC = () => {
         direction: payDirection,
         paymentMethod: payMethod,
         reference: payReference,
+        invoiceNumber: payInvoiceNumber.trim() || undefined,
         notes: payNotes,
         date: payDate,
       };
@@ -198,10 +228,14 @@ export const LedgersPage: React.FC = () => {
 
       const res = await api.post('/ledgers/payment', payload);
       if (res.data.success) {
-        setOperationSuccess('Payment voucher successfully posted to ledger!');
+        setOperationSuccess(
+          payDirection === 'IN'
+            ? 'Cash In / Wasooli voucher darj ho gaya aur 80mm POS receipt tayar ho gayi!'
+            : 'Cash Out / Adaiyigi voucher darj ho gaya aur 80mm POS receipt tayar ho gayi!'
+        );
         setOperationError('');
         const receipt = res.data.data?.receipt || res.data.receipt;
-        if (receipt) {
+        if (receipt && autoPrintReceipt) {
           setPaymentReceiptData(receipt);
           setShowReceiptModal(true);
           playPrintSound();
@@ -209,9 +243,11 @@ export const LedgersPage: React.FC = () => {
         setPayAmount('');
         setPayNotes('');
         setPayReference('');
+        setPayInvoiceNumber('');
         setShowPaymentModal(false);
         loadLedger(selectedEntityId);
         loadEntities();
+        loadTodaySummary();
       }
     } catch (err: any) {
       const errMsg = err.response?.data?.message || 'Payment voucher could not be recorded';
@@ -255,6 +291,7 @@ export const LedgersPage: React.FC = () => {
         setContraNotes('');
         await loadLedger(selectedEntityId);
         await loadEntities();
+        await loadTodaySummary();
       }
     } catch (err: any) {
       setOperationError(err.response?.data?.message || 'Contra settlement failed.');
@@ -295,6 +332,7 @@ export const LedgersPage: React.FC = () => {
 
     const fallbackReceipt = {
       receiptNumber: entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
+      invoiceNumber: entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
       voucherType: isCust ? (isCashIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT'),
       partyType: activeTab === 'DUAL_PARTNERS' ? 'DUAL_PARTNER' : (isCust ? 'CUSTOMER' : 'SUPPLIER'),
       isDualPartner: activeTab === 'DUAL_PARTNERS',
@@ -743,6 +781,190 @@ export const LedgersPage: React.FC = () => {
         </div>
       )}
 
+      {/* Today's Ledger Financial Summary Banner (آج کی کل وصولی اور ادائیگی) */}
+      <div className="card no-print" style={{
+        marginBottom: '20px',
+        padding: '16px 20px',
+        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+        border: '1.5px solid #cbd5e1',
+        borderRadius: '14px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              backgroundColor: '#0284c7',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(2, 132, 199, 0.35)'
+            }}>
+              <Calendar size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
+                  آج کی لیجر وصولی اور ادائیگی (Today's Ledger Cash Flow)
+                </h3>
+                <span className="badge badge-info" style={{ fontSize: '0.75rem', fontWeight: 800 }}>
+                  📅 {new Date().toLocaleDateString('ur-PK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+                {loadingTodaySummary && (
+                  <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <RefreshCw size={12} className="spin" /> Updating...
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                آج کے دن لیجر میں کسٹمرز سے موصول شدہ (Cash In) اور سپلائرز کو ادا شدہ (Cash Out) کا مکمل خلاصہ
+              </div>
+            </div>
+          </div>
+
+          {canEditLedger && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
+                  setPayDirection('IN');
+                  setShowPaymentModal(true);
+                }}
+                className="btn"
+                style={{
+                  backgroundColor: '#16a34a',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.84rem',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)'
+                }}
+                title="Cash In / Wasooli (کسٹمر یا سپلائر سے رقم وصول کریں اور 80mm انوائس بنائیں)"
+              >
+                <Plus size={16} /> 🟢 رقم وصول کریں (Cash In)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
+                  setPayDirection('OUT');
+                  setShowPaymentModal(true);
+                }}
+                className="btn"
+                style={{
+                  backgroundColor: '#dc2626',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.84rem',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)'
+                }}
+                title="Cash Out / Adaiyigi (سپلائر یا کسٹمر کو رقم ادا کریں)"
+              >
+                <Minus size={16} /> 🔴 رقم ادا کریں (Cash Out)
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 3 Metric Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+          {/* Card 1: Today Received (Cash In) */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            border: '2px solid #86efac',
+            borderLeft: '6px solid #16a34a',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#15803d' }}>
+                🟢 آج کی کل وصولی (Cash In)
+              </span>
+              <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#166534', fontWeight: 800, fontSize: '0.72rem' }}>
+                {todaySummary?.receivedCount || 0} وصولیاں
+              </span>
+            </div>
+            <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#15803d', margin: '4px 0 2px 0' }}>
+              Rs. {Number(todaySummary?.totalReceived || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              کسٹمرز و کھاتوں سے پرانے ادھار کی وصولی
+            </div>
+          </div>
+
+          {/* Card 2: Today Paid (Cash Out) */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            border: '2px solid #fca5a5',
+            borderLeft: '6px solid #dc2626',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#b91c1c' }}>
+                🔴 آج کی کل ادائیگی (Cash Out)
+              </span>
+              <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#991b1b', fontWeight: 800, fontSize: '0.72rem' }}>
+                {todaySummary?.paidCount || 0} ادائیگیاں
+              </span>
+            </div>
+            <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', margin: '4px 0 2px 0' }}>
+              Rs. {Number(todaySummary?.totalPaid || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              سپلائرز و پارٹیوں کو ادا شدہ نقد رقم
+            </div>
+          </div>
+
+          {/* Card 3: Today Net Flow */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            border: '2px solid #cbd5e1',
+            borderLeft: `6px solid ${(todaySummary?.netCashFlow || 0) >= 0 ? '#0284c7' : '#d97706'}`,
+            borderRadius: '12px',
+            padding: '14px 18px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#334155' }}>
+                ⚖️ آج کا نیٹ کیش فلو (Net Flow)
+              </span>
+              <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#334155', fontWeight: 800, fontSize: '0.72rem' }}>
+                {(todaySummary?.netCashFlow || 0) >= 0 ? 'Surplus (بچت)' : 'Deficit (خسارہ)'}
+              </span>
+            </div>
+            <div style={{
+              fontSize: '1.65rem',
+              fontWeight: 900,
+              color: (todaySummary?.netCashFlow || 0) >= 0 ? '#0369a1' : '#b45309',
+              margin: '4px 0 2px 0'
+            }}>
+              Rs. {Number(todaySummary?.netCashFlow || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              خالص بیلنس (وصولی منفی ادائیگی)
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="no-print" style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <button
@@ -1167,7 +1389,7 @@ export const LedgersPage: React.FC = () => {
                         Detail
                       </button>
 
-                      {((entry.type || '').includes('PAYMENT') || (entry.type || '').includes('CONTRA') || entry.description?.includes('Contra') || (entry.type || '').includes('ADJUSTMENT')) && (
+                      {(Number(entry.credit) > 0 || Number(entry.debit) > 0 || (entry.type || '').includes('PAYMENT') || (entry.type || '').includes('CONTRA') || entry.description?.includes('Contra') || (entry.type || '').includes('ADJUSTMENT')) && (
                         <button
                           type="button"
                           onClick={() => handleOpenPaymentReceiptFromEntry(entry)}
@@ -1185,10 +1407,10 @@ export const LedgersPage: React.FC = () => {
                             cursor: 'pointer',
                             fontWeight: 700,
                           }}
-                          title="Payment Voucher Receipt Slip (رسید پرنٹ کریں)"
+                          title="80mm POS Invoice / Receipt Slip (80mm انوائس رسید دیکھیں اور پرنٹ کریں)"
                         >
-                          <Printer size={13} />
-                          رسید
+                          <Receipt size={13} />
+                          Invoice / رسید
                         </button>
                       )}
 
@@ -1455,6 +1677,38 @@ export const LedgersPage: React.FC = () => {
             )}
 
             <form onSubmit={handleRecordPayment}>
+              {/* Party / Account Selector */}
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700 }}>
+                  Account / Party (کھاتہ / پارٹی) *
+                </label>
+                <select
+                  className="form-control"
+                  value={selectedEntityId}
+                  onChange={(e) => setSelectedEntityId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose Account (پارٹی منتخب کریں) --</option>
+                  {activeTab === 'CUSTOMERS'
+                    ? customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.shopName} ({c.ownerName}) - Outstanding Due: Rs. {Number(c.currentReceivable).toLocaleString()}
+                        </option>
+                      ))
+                    : activeTab === 'SUPPLIERS'
+                    ? suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.companyName} - Payable Due: Rs. {Number(s.currentPayable).toLocaleString()}
+                        </option>
+                      ))
+                    : dualPartners.map((dp) => (
+                        <option key={dp.id} value={dp.id}>
+                          🤝 {dp.name} ({dp.ownerName}) - Net: Rs. {Math.abs(dp.netBalance).toLocaleString()}
+                        </option>
+                      ))}
+                </select>
+              </div>
+
               {/* Date & Time Selector */}
               <div className="form-group">
                 <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -1481,6 +1735,24 @@ export const LedgersPage: React.FC = () => {
                   required
                   autoFocus
                 />
+              </div>
+
+              {/* Invoice / Bill # Field */}
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Receipt size={14} color="#0284c7" />
+                  Invoice / Bill # (انوائس یا بل نمبر - اختیاری)
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. ROT-INV-1029 / Bill # (اختیاری)"
+                  value={payInvoiceNumber}
+                  onChange={(e) => setPayInvoiceNumber(e.target.value)}
+                />
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '3px' }}>
+                  اگر یہ رقم کسی مخصوص بل یا انوائس کے تحت موصول / ادا ہوئی ہے تو یہاں بل نمبر درج کریں
+                </div>
               </div>
 
               <div className="form-group">
@@ -1519,6 +1791,30 @@ export const LedgersPage: React.FC = () => {
                   onChange={(e) => setPayNotes(e.target.value)}
                   required
                 />
+              </div>
+
+              {/* Auto Generate 80mm POS Receipt Checkbox */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                marginTop: '10px',
+                marginBottom: '16px',
+                padding: '10px 14px',
+                backgroundColor: '#f0fdf4',
+                borderRadius: '8px',
+                border: '1.5px solid #86efac'
+              }}>
+                <input
+                  type="checkbox"
+                  id="autoPrintReceiptCheck"
+                  checked={autoPrintReceipt}
+                  onChange={(e) => setAutoPrintReceipt(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#16a34a' }}
+                />
+                <label htmlFor="autoPrintReceiptCheck" style={{ fontSize: '0.84rem', fontWeight: 800, color: '#166534', cursor: 'pointer', margin: 0 }}>
+                  🖨️ 80mm POS رسید / انوائس خودکار تیار کریں (Auto-generate 80mm POS Invoice)
+                </label>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
@@ -2341,7 +2637,22 @@ export const LedgersPage: React.FC = () => {
 
             {/* Scrollable Printable Thermal Receipt Container */}
             <div style={{ padding: '20px 16px', overflowY: 'auto' }}>
-              <div className="printable-area thermal-receipt" style={{
+              <style>{`
+                @media print {
+                  body * { visibility: hidden !important; }
+                  #ledger-80mm-receipt, #ledger-80mm-receipt * { visibility: visible !important; }
+                  #ledger-80mm-receipt {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    max-width: 80mm !important;
+                    margin: 0 auto !important;
+                    padding: 4mm !important;
+                  }
+                }
+              `}</style>
+              <div id="ledger-80mm-receipt" className="printable-area thermal-receipt" style={{
                 width: '100%',
                 maxWidth: '380px',
                 margin: '0 auto',
@@ -2372,7 +2683,7 @@ export const LedgersPage: React.FC = () => {
                     marginTop: '8px',
                     display: 'inline-block',
                     padding: '3px 12px',
-                    border: '1px solid #000',
+                    border: '1.5px solid #000',
                     borderRadius: '4px',
                     fontWeight: 900,
                     fontSize: '11px',
@@ -2381,19 +2692,25 @@ export const LedgersPage: React.FC = () => {
                     {paymentReceiptData.voucherType === 'CONTRA_VOUCHER'
                       ? '🤝 CONTRA OFFSET / آپسی کٹائی واؤچر'
                       : paymentReceiptData.direction === 'IN'
-                      ? '💵 CASH RECEIPT / وصولی رسید (CASH IN)'
-                      : '💸 PAYMENT VOUCHER / ادائیگی واؤچر (CASH OUT)'}
+                      ? '💵 80mm POS CASH RECEIPT / وصولی انوائس رسید'
+                      : '💸 80mm POS PAYMENT VOUCHER / ادائیگی انوائس واؤچر'}
                   </div>
                 </div>
 
                 {/* Receipt Metadata */}
                 <div style={{ borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px', fontSize: '11px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span><b>REC #:</b> {paymentReceiptData.receiptNumber || '-'}</span>
+                    <span><b>INV / REC #:</b> {paymentReceiptData.invoiceNumber || paymentReceiptData.receiptNumber || '-'}</span>
                     <span>
                       <b>DATE:</b> {paymentReceiptData.paymentDate ? new Date(paymentReceiptData.paymentDate).toLocaleDateString() : new Date().toLocaleDateString()} {paymentReceiptData.paymentDate ? new Date(paymentReceiptData.paymentDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
                     </span>
                   </div>
+                  {paymentReceiptData.invoiceNumber && paymentReceiptData.invoiceNumber !== paymentReceiptData.receiptNumber && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px', color: '#0369a1', fontWeight: 800 }}>
+                      <span><b>BILL / INV REF:</b> {paymentReceiptData.invoiceNumber}</span>
+                      <span><b>VOUCHER #:</b> {paymentReceiptData.receiptNumber}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
                     <span><b>PARTY:</b> {paymentReceiptData.partyName || '-'}</span>
                     <span><b>TYPE:</b> {paymentReceiptData.isDualPartner ? 'مشترکہ کھاتہ' : (paymentReceiptData.partyType === 'CUSTOMER' ? 'گاہک' : 'سپلائر')}</span>
@@ -2552,12 +2869,22 @@ export const LedgersPage: React.FC = () => {
                   <span>Rafiq Auto ERP</span>
                 </div>
 
+                {/* Barcode / Receipt Reference */}
+                <div style={{ textAlign: 'center', marginTop: '14px', marginBottom: '4px' }}>
+                  <div style={{ letterSpacing: '4px', fontSize: '13px', fontWeight: 900, color: '#000000' }}>
+                    ||| | ||||| |||| | |||||| |||||
+                  </div>
+                  <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', marginTop: '2px' }}>
+                    * {paymentReceiptData.invoiceNumber || paymentReceiptData.receiptNumber} *
+                  </div>
+                </div>
+
                 {/* Signature Lines */}
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
                   gap: '14px',
-                  marginTop: '18px',
+                  marginTop: '14px',
                   paddingTop: '10px',
                   borderTop: '1px dashed #000000',
                   textAlign: 'center',
@@ -2577,7 +2904,10 @@ export const LedgersPage: React.FC = () => {
 
                 {/* Bottom Notice */}
                 <div style={{ textAlign: 'center', fontSize: '9px', marginTop: '12px', color: '#334155' }}>
-                  * یہ کمپیوٹرائزڈ رسید رفیق آٹو اینڈ آئل ٹریڈرز اوکاڑہ کے سسٹم سے جاری کی گئی ہے *
+                  <div>* یہ کمپیوٹرائزڈ رسید رفیق آٹو اینڈ آئل ٹریڈرز اوکاڑہ کے سسٹم سے جاری کی گئی ہے *</div>
+                  <div style={{ marginTop: '4px', fontSize: '8px', color: '#64748b' }}>
+                    Thank You For Your Business! | Rafiq Auto ERP
+                  </div>
                 </div>
               </div>
             </div>
@@ -2611,7 +2941,7 @@ export const LedgersPage: React.FC = () => {
                     gap: '6px'
                   }}
                 >
-                  <Printer size={15} /> پرنٹ رسید (Print Slip)
+                  <Printer size={15} /> پرنٹ 80mm رسید (Print 80mm Slip)
                 </button>
                 <button
                   type="button"

@@ -7,6 +7,7 @@ import {
   getDualPartnerLedger,
   recordContraOffset,
   getLedgerEntryDetail,
+  getTodayLedgerSummary,
 } from '../controllers/ledgerController';
 import { authenticate, authorize } from '../middlewares/auth';
 import { Role } from '../types/enums';
@@ -14,6 +15,9 @@ import { Role } from '../types/enums';
 const router = Router();
 
 router.use(authenticate);
+
+// Today Ledger Cash Summary (Cash In / Wasooli & Cash Out / Adaiyigi)
+router.get('/today-summary', getTodayLedgerSummary);
 
 // Dual Partner (Mutual / Contra) Ledger
 router.get('/dual/:id', getDualPartnerLedger);
