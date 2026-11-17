@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../services/api';
 import { Customer, Supplier, LedgerEntry, DualPartner } from '../types';
 import {
@@ -26,10 +26,83 @@ import {
   Plus,
   Minus,
   Receipt,
+  Users,
+  Activity,
+  Filter,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportConsolidatedAllPartyBalancesPDF, exportSingleLedgerStatementPDF } from '../utils/pdfExportUtils';
 import { playPrintSound } from '../utils/soundEffects';
+
+/**
+ * Standard Pakistan Standard Time (PKT, UTC+5) formatters
+ */
+export const formatPakistanDateTime = (dateStrOrObj?: string | Date | null): string => {
+  if (!dateStrOrObj) return '-';
+  try {
+    const d = new Date(dateStrOrObj);
+    if (isNaN(d.getTime())) return '-';
+    const dateFormatted = d.toLocaleDateString('en-GB', {
+      timeZone: 'Asia/Karachi',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const timeFormatted = d.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Karachi',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return `${dateFormatted} ${timeFormatted}`;
+  } catch {
+    return String(dateStrOrObj);
+  }
+};
+
+export const formatPakistanDateOnly = (dateStrOrObj?: string | Date | null): string => {
+  if (!dateStrOrObj) return '-';
+  try {
+    const d = new Date(dateStrOrObj);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString('en-GB', {
+      timeZone: 'Asia/Karachi',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch {
+    return String(dateStrOrObj);
+  }
+};
+
+export const formatPakistanTimeOnly = (dateStrOrObj?: string | Date | null): string => {
+  if (!dateStrOrObj) return '';
+  try {
+    const d = new Date(dateStrOrObj);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Karachi',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return '';
+  }
+};
+
+export const getPakistanNowDatetimeLocal = (): string => {
+  const now = new Date();
+  const pktDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
+  const y = pktDate.getFullYear();
+  const m = String(pktDate.getMonth() + 1).padStart(2, '0');
+  const d = String(pktDate.getDate()).padStart(2, '0');
+  const hh = String(pktDate.getHours()).padStart(2, '0');
+  const mm = String(pktDate.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${hh}:${mm}`;
+};
 
 export const LedgersPage: React.FC = () => {
   const { user } = useAuth();
@@ -38,7 +111,7 @@ export const LedgersPage: React.FC = () => {
   const canEditLedger = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:edit_ledger')) : (user?.role === 'OPERATOR' || user?.role === 'CASHIER'));
   const canDeleteLedger = isAdmin || (hasCustomPerms ? Boolean(user?.permissions?.includes('action:delete_ledger')) : false);
 
-  const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'SUPPLIERS' | 'DUAL_PARTNERS'>('CUSTOMERS');
+  const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'SUPPLIERS' | 'DUAL_PARTNERS' | 'ALL_PARTIES' | 'CASH_FLOW_HISTORY'>('CUSTOMERS');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [dualPartners, setDualPartners] = useState<DualPartner[]>([]);
@@ -65,16 +138,22 @@ export const LedgersPage: React.FC = () => {
   const [payNotes, setPayNotes] = useState('');
   const [payTargetType, setPayTargetType] = useState<'CUSTOMER' | 'SUPPLIER'>('CUSTOMER');
   const [payDirection, setPayDirection] = useState<'IN' | 'OUT'>('IN');
-  const [payDate, setPayDate] = useState(() => {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 16);
-  });
+  const [payChannel, setPayChannel] = useState<'SHOP' | 'VAN'>('SHOP');
+  const [payDate, setPayDate] = useState(() => getPakistanNowDatetimeLocal());
   const [paySubmitting, setPaySubmitting] = useState(false);
 
   // Today's Ledger Financial Summary (Cash In / Wasooli vs Cash Out / Adaiyigi)
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [loadingTodaySummary, setLoadingTodaySummary] = useState(false);
+
+  // All Parties Master View & Filters
+  const [onlyActiveToday, setOnlyActiveToday] = useState(false);
+  const [allPartiesSearch, setAllPartiesSearch] = useState('');
+  const [allPartiesTypeFilter, setAllPartiesTypeFilter] = useState<'ALL' | 'CUSTOMER' | 'SUPPLIER'>('ALL');
+
+  // Cash In & Cash Out History View & Filters
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
+  const [historySearch, setHistorySearch] = useState('');
 
   // Contra settlement modal (Mutual offset)
   const [showContraModal, setShowContraModal] = useState(false);
@@ -152,6 +231,13 @@ export const LedgersPage: React.FC = () => {
         const list = res.data.dualPartners || [];
         setDualPartners(list);
         setSelectedEntityId(list.length > 0 ? list[0].id : '');
+      } else if (activeTab === 'ALL_PARTIES' || activeTab === 'CASH_FLOW_HISTORY') {
+        const [cRes, sRes] = await Promise.all([
+          api.get('/partners/customers'),
+          api.get('/partners/suppliers'),
+        ]);
+        setCustomers(cRes.data.customers || []);
+        setSuppliers(sRes.data.suppliers || []);
       }
       loadTodaySummary();
     } catch (e) {
@@ -202,14 +288,21 @@ export const LedgersPage: React.FC = () => {
     }
     setPaySubmitting(true);
     try {
+      let formattedDate = payDate;
+      if (formattedDate && !formattedDate.includes('Z') && !formattedDate.includes('+')) {
+        if (formattedDate.length === 16) formattedDate += ':00';
+        formattedDate += '+05:00';
+      }
+
       const payload: any = {
         amount: parseFloat(payAmount),
         direction: payDirection,
+        channel: payChannel,
         paymentMethod: payMethod,
         reference: payReference,
         invoiceNumber: payInvoiceNumber.trim() || undefined,
         notes: payNotes,
-        date: payDate,
+        date: formattedDate,
       };
 
       if (activeTab === 'CUSTOMERS') {
@@ -223,6 +316,12 @@ export const LedgersPage: React.FC = () => {
           payload.customerId = dualLedgerData?.partner?.customerId || selectedEntityId;
         } else {
           payload.supplierId = dualLedgerData?.partner?.supplierId;
+        }
+      } else if (activeTab === 'ALL_PARTIES') {
+        if (payTargetType === 'CUSTOMER') {
+          payload.customerId = selectedEntityId;
+        } else {
+          payload.supplierId = selectedEntityId;
         }
       }
 
@@ -244,6 +343,7 @@ export const LedgersPage: React.FC = () => {
         setPayNotes('');
         setPayReference('');
         setPayInvoiceNumber('');
+        setPayChannel('SHOP');
         setShowPaymentModal(false);
         loadLedger(selectedEntityId);
         loadEntities();
@@ -301,6 +401,7 @@ export const LedgersPage: React.FC = () => {
   };
 
   const handleOpenPaymentReceiptFromEntry = async (entry: any) => {
+    let serverReceipt: any = null;
     try {
       const res = await api.get('/ledgers/entry-detail', {
         params: {
@@ -311,49 +412,62 @@ export const LedgersPage: React.FC = () => {
       });
 
       if (res.data?.success && res.data?.receipt) {
-        setPaymentReceiptData(res.data.receipt);
-        setShowReceiptModal(true);
-        return;
+        serverReceipt = res.data.receipt;
       }
     } catch (err) {
       console.warn('Could not load receipt from server, constructing fallback:', err);
     }
 
+    const isCust = activeTab === 'CUSTOMERS' || entry.source === 'CUSTOMER_ACCOUNT' || Boolean(entry.customerId);
+    const amt = Number(serverReceipt?.paidAmount || (Number(entry.credit) > 0 ? entry.credit : entry.debit) || 0);
+    const isCashIn = serverReceipt ? (serverReceipt.direction === 'IN') : (Number(entry.credit) > 0);
+
+    // Extract remaining balance: NEVER allow 0 if entry has a balance
+    const rawRemaining = (serverReceipt?.remainingBalance !== undefined && serverReceipt?.remainingBalance !== null && Number(serverReceipt.remainingBalance) !== 0)
+      ? Number(serverReceipt.remainingBalance)
+      : (entry.runningBalance !== undefined ? Number(entry.runningBalance) : Number(serverReceipt?.remainingBalance || 0));
+
+    const rawPrevious = (serverReceipt?.previousBalance !== undefined && serverReceipt?.previousBalance !== null && Number(serverReceipt.previousBalance) !== 0)
+      ? Number(serverReceipt.previousBalance)
+      : (isCashIn ? rawRemaining + amt : rawRemaining - amt);
+
     const partyName =
-      activeTab === 'CUSTOMERS'
+      serverReceipt?.partyName ||
+      (activeTab === 'CUSTOMERS'
         ? selectedCustomer?.shopName || 'Customer'
         : activeTab === 'SUPPLIERS'
         ? selectedSupplier?.companyName || 'Supplier'
-        : selectedDualPartner?.name || 'Dual Partner';
+        : selectedDualPartner?.name || 'Dual Partner');
 
-    const isCust = activeTab === 'CUSTOMERS' || entry.source === 'CUSTOMER_ACCOUNT';
-    const amt = Number(entry.credit) > 0 ? Number(entry.credit) : Number(entry.debit);
-    const isCashIn = Number(entry.credit) > 0;
+    const isVan = serverReceipt?.channel === 'VAN' || (entry.description || '').includes('[VAN]') || (entry.description || '').includes('وین');
 
-    const fallbackReceipt = {
-      receiptNumber: entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
-      invoiceNumber: entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
-      voucherType: isCust ? (isCashIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT'),
-      partyType: activeTab === 'DUAL_PARTNERS' ? 'DUAL_PARTNER' : (isCust ? 'CUSTOMER' : 'SUPPLIER'),
+    const receiptObj = {
+      receiptNumber: serverReceipt?.receiptNumber || entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
+      invoiceNumber: serverReceipt?.invoiceNumber || entry.referenceId || `VCH-${entry.id?.slice(0, 8) || Date.now()}`,
+      voucherType: serverReceipt?.voucherType || (isCust ? (isCashIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT')),
+      partyType: serverReceipt?.partyType || (activeTab === 'DUAL_PARTNERS' ? 'DUAL_PARTNER' : (isCust ? 'CUSTOMER' : 'SUPPLIER')),
+      channel: isVan ? 'VAN' : 'SHOP',
+      channelLabel: isVan ? '🚐 وین سپلائی وصولی (Van Collection)' : '🏪 دکان کاؤنٹر (Shop Counter)',
       isDualPartner: activeTab === 'DUAL_PARTNERS',
-      partnerName: selectedDualPartner?.name || null,
+      partnerName: serverReceipt?.partnerName || selectedDualPartner?.name || null,
       partyName,
-      contactPerson: isCust ? selectedCustomer?.ownerName : selectedSupplier?.contactPerson,
-      phone: isCust ? selectedCustomer?.phone : selectedSupplier?.phone,
-      address: isCust ? selectedCustomer?.area : selectedSupplier?.address,
-      previousBalance: Number(entry.runningBalance) + (isCashIn ? amt : -amt),
+      contactPerson: serverReceipt?.contactPerson || (isCust ? selectedCustomer?.ownerName : selectedSupplier?.contactPerson),
+      phone: serverReceipt?.phone || (isCust ? selectedCustomer?.phone : selectedSupplier?.phone),
+      address: serverReceipt?.address || (isCust ? selectedCustomer?.area : selectedSupplier?.address),
+      previousBalance: rawPrevious,
       paidAmount: amt,
-      remainingBalance: Number(entry.runningBalance),
+      remainingBalance: rawRemaining,
       direction: isCashIn ? 'IN' : 'OUT',
-      paymentMethod: 'CASH',
-      reference: entry.referenceId || '-',
-      notes: entry.description || '',
-      paymentDate: entry.date,
-      recordedByName: user?.fullName || 'Cashier / Admin',
+      paymentMethod: serverReceipt?.paymentMethod || 'CASH',
+      reference: serverReceipt?.reference || entry.referenceId || '-',
+      notes: serverReceipt?.notes || entry.description || '',
+      paymentDate: serverReceipt?.paymentDate || entry.date,
+      recordedByName: serverReceipt?.recordedByName || user?.fullName || 'Cashier / Admin',
     };
 
-    setPaymentReceiptData(fallbackReceipt);
+    setPaymentReceiptData(receiptObj);
     setShowReceiptModal(true);
+    playPrintSound();
   };
 
   const selectedCustomer = activeTab === 'CUSTOMERS' ? customers.find((c) => c.id === selectedEntityId) : null;
@@ -598,6 +712,99 @@ export const LedgersPage: React.FC = () => {
       sourceStr.includes(term)
     );
   });
+
+  // Combine all accounts (Customers + Suppliers) for ALL_PARTIES tab
+  const allPartiesList = useMemo(() => {
+    const todayCustSet = new Set(todaySummary?.todayActiveCustomerIds || []);
+    const todaySuppSet = new Set(todaySummary?.todayActiveSupplierIds || []);
+    const activityMap = todaySummary?.partyActivityMap || {};
+
+    const list: any[] = [];
+
+    // Customers
+    customers.forEach((c) => {
+      const act = activityMap[c.id] || { debit: 0, credit: 0, count: 0 };
+      const hadActivity = todayCustSet.has(c.id) || act.count > 0;
+      list.push({
+        id: c.id,
+        entityType: 'CUSTOMER' as const,
+        name: c.shopName,
+        ownerName: c.ownerName,
+        phone: c.phone,
+        address: c.area || c.address || '',
+        receivable: Number(c.currentReceivable || 0),
+        payable: 0,
+        netBalance: Number(c.currentReceivable || 0),
+        isDual: Boolean(c.isDualPartner),
+        transactedToday: hadActivity,
+        todayDebit: act.debit,
+        todayCredit: act.credit,
+      });
+    });
+
+    // Suppliers
+    suppliers.forEach((s) => {
+      const act = activityMap[s.id] || { debit: 0, credit: 0, count: 0 };
+      const hadActivity = todaySuppSet.has(s.id) || act.count > 0;
+      list.push({
+        id: s.id,
+        entityType: 'SUPPLIER' as const,
+        name: s.companyName,
+        ownerName: s.contactPerson,
+        phone: s.phone,
+        address: s.address || '',
+        receivable: 0,
+        payable: Number(s.currentPayable || 0),
+        netBalance: -Number(s.currentPayable || 0),
+        isDual: Boolean(s.isDualPartner),
+        transactedToday: hadActivity,
+        todayDebit: act.debit,
+        todayCredit: act.credit,
+      });
+    });
+
+    return list;
+  }, [customers, suppliers, todaySummary]);
+
+  // Filtered All Parties
+  const filteredAllParties = useMemo(() => {
+    return allPartiesList.filter((p) => {
+      if (onlyActiveToday && !p.transactedToday) {
+        return false;
+      }
+      if (allPartiesTypeFilter !== 'ALL' && p.entityType !== allPartiesTypeFilter) {
+        return false;
+      }
+      if (allPartiesSearch.trim()) {
+        const q = allPartiesSearch.toLowerCase().trim();
+        const matchesName = (p.name || '').toLowerCase().includes(q);
+        const matchesOwner = (p.ownerName || '').toLowerCase().includes(q);
+        const matchesPhone = (p.phone || '').includes(q);
+        const matchesAddress = (p.address || '').toLowerCase().includes(q);
+        return matchesName || matchesOwner || matchesPhone || matchesAddress;
+      }
+      return true;
+    });
+  }, [allPartiesList, onlyActiveToday, allPartiesTypeFilter, allPartiesSearch]);
+
+  // Cash In & Cash Out History List (POS Style)
+  const cashFlowHistoryList = useMemo(() => {
+    const list = todaySummary?.recentTransactions || [];
+    return list.filter((t: any) => {
+      if (historyTypeFilter === 'IN' && t.direction !== 'IN') return false;
+      if (historyTypeFilter === 'OUT' && t.direction !== 'OUT') return false;
+      if (historySearch.trim()) {
+        const q = historySearch.toLowerCase().trim();
+        const matchesParty = (t.partyName || '').toLowerCase().includes(q);
+        const matchesReceipt = (t.receiptNumber || '').toLowerCase().includes(q);
+        const matchesInv = (t.invoiceNumber || '').toLowerCase().includes(q);
+        const matchesNote = (t.notes || '').toLowerCase().includes(q);
+        const matchesPhone = (t.phone || '').includes(q);
+        return matchesParty || matchesReceipt || matchesInv || matchesNote || matchesPhone;
+      }
+      return true;
+    });
+  }, [todaySummary, historyTypeFilter, historySearch]);
 
   return (
     <div>
@@ -877,6 +1084,26 @@ export const LedgersPage: React.FC = () => {
               >
                 <Minus size={16} /> 🔴 رقم ادا کریں (Cash Out)
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('CASH_FLOW_HISTORY')}
+                className="btn"
+                style={{
+                  backgroundColor: activeTab === 'CASH_FLOW_HISTORY' ? '#0f172a' : '#f8fafc',
+                  color: activeTab === 'CASH_FLOW_HISTORY' ? '#ffffff' : '#334155',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.84rem',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  padding: '7px 14px',
+                }}
+                title="آج کی تمام وصولیوں اور ادائیگیوں کی تفصیلی ہسٹری دیکھیں"
+              >
+                <Receipt size={16} /> 📜 آج کے واؤچرز ({todaySummary?.recentTransactions?.length || 0})
+              </button>
             </div>
           )}
         </div>
@@ -965,7 +1192,7 @@ export const LedgersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs Navigation */}
       <div className="no-print" style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <button
           type="button"
@@ -973,7 +1200,7 @@ export const LedgersPage: React.FC = () => {
           className={`btn ${activeTab === 'CUSTOMERS' ? 'btn-primary' : 'btn-outline'}`}
           style={{ fontWeight: 700 }}
         >
-          Customer Ledgers (Udhar / Receivables)
+          Customer Ledgers (گاہکوں کے کھاتے)
         </button>
         <button
           type="button"
@@ -981,7 +1208,7 @@ export const LedgersPage: React.FC = () => {
           className={`btn ${activeTab === 'SUPPLIERS' ? 'btn-primary' : 'btn-outline'}`}
           style={{ fontWeight: 700 }}
         >
-          Supplier Ledgers (Company Payables)
+          Supplier Ledgers (سپلائرز کے کھاتے)
         </button>
         <button
           type="button"
@@ -989,96 +1216,719 @@ export const LedgersPage: React.FC = () => {
           className={`btn ${activeTab === 'DUAL_PARTNERS' ? 'btn-warning' : 'btn-outline'}`}
           style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          🤝 Dual Partners (Customer + Supplier Both / مشترکہ کٹائی کھاتے)
+          🤝 Dual Partners (مشترکہ کھاتے)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('ALL_PARTIES')}
+          className={`btn ${activeTab === 'ALL_PARTIES' ? 'btn-success' : 'btn-outline'}`}
+          style={{
+            fontWeight: 800,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: activeTab === 'ALL_PARTIES' ? '#0891b2' : 'transparent',
+            borderColor: '#0891b2',
+            color: activeTab === 'ALL_PARTIES' ? '#ffffff' : '#0891b2'
+          }}
+        >
+          <Users size={16} /> 🏢 تمام پارٹیاں (All Parties / Full Khata)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('CASH_FLOW_HISTORY')}
+          className={`btn ${activeTab === 'CASH_FLOW_HISTORY' ? 'btn-info' : 'btn-outline'}`}
+          style={{
+            fontWeight: 800,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: activeTab === 'CASH_FLOW_HISTORY' ? '#4f46e5' : 'transparent',
+            borderColor: '#4f46e5',
+            color: activeTab === 'CASH_FLOW_HISTORY' ? '#ffffff' : '#4f46e5'
+          }}
+        >
+          <Receipt size={16} /> 📜 کیش ان / آؤٹ واؤچرز ({todaySummary?.recentTransactions?.length || 0})
         </button>
       </div>
 
-      {/* Select Entity Card with Quick Search */}
-      <div className="card no-print" style={{ marginBottom: '20px', padding: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', alignItems: 'end', width: '100%' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Search size={15} style={{ color: '#d97706' }} /> Quick Search Account
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                className="form-control"
-                placeholder={
-                  activeTab === 'CUSTOMERS'
-                    ? 'Search customer by shop, owner, phone...'
-                    : activeTab === 'SUPPLIERS'
-                    ? 'Search supplier by company, person, phone...'
-                    : 'Search dual partner by name, phone...'
-                }
-                value={accountSearch}
-                onChange={(e) => setAccountSearch(e.target.value)}
-                style={{ paddingRight: accountSearch ? '30px' : '12px' }}
-              />
-              {accountSearch && (
+      {activeTab === 'ALL_PARTIES' ? (
+        /* ALL PARTIES MASTER KHATA VIEW */
+        <div className="no-print">
+          {/* Top Metrics Summary */}
+          <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', marginBottom: '20px' }}>
+            <div className="stat-card blue">
+              <div className="stat-label">Total Parties (کل پارٹیاں)</div>
+              <div className="stat-value">{allPartiesList.length}</div>
+              <div className="stat-sub">{customers.length} گاہک + {suppliers.length} سپلائرز</div>
+            </div>
+            <div className="stat-card amber">
+              <div className="stat-label">Active Today (آج لین دین ہوا)</div>
+              <div className="stat-value" style={{ color: '#d97706' }}>
+                {allPartiesList.filter((p) => p.transactedToday).length}
+              </div>
+              <div className="stat-sub">جن کے کھاتے میں آج انٹریز ہوئیں</div>
+            </div>
+            <div className="stat-card green">
+              <div className="stat-label">Total Market Receivable (کل ادھار لینا ہے)</div>
+              <div className="stat-value" style={{ color: '#059669' }}>
+                Rs. {customers.reduce((sum, c) => sum + Number(c.currentReceivable || 0), 0).toLocaleString()}
+              </div>
+              <div className="stat-sub">گاہکوں سے مجموعی واجب الوصول رقم</div>
+            </div>
+            <div className="stat-card red">
+              <div className="stat-label">Total Supplier Payable (کل واجب الادا دینا ہے)</div>
+              <div className="stat-value" style={{ color: '#dc2626' }}>
+                Rs. {suppliers.reduce((sum, s) => sum + Number(s.currentPayable || 0), 0).toLocaleString()}
+              </div>
+              <div className="stat-sub">سپلائر کمپنیوں کو واجب الادا رقم</div>
+            </div>
+          </div>
+
+          {/* Filter & Action Toolbar */}
+          <div className="card" style={{ marginBottom: '20px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, minWidth: '280px', flexWrap: 'wrap' }}>
+                {/* Search */}
+                <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search by name, owner, phone, area..."
+                    value={allPartiesSearch}
+                    onChange={(e) => setAllPartiesSearch(e.target.value)}
+                    style={{ paddingLeft: '34px' }}
+                  />
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  {allPartiesSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setAllPartiesSearch('')}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Type Filter */}
+                <select
+                  className="form-control"
+                  value={allPartiesTypeFilter}
+                  onChange={(e: any) => setAllPartiesTypeFilter(e.target.value)}
+                  style={{ width: 'auto', minWidth: '150px' }}
+                >
+                  <option value="ALL">All Accounts (تمام پارٹیاں)</option>
+                  <option value="CUSTOMER">Customers Only (صرف گاہک)</option>
+                  <option value="SUPPLIER">Suppliers Only (صرف سپلائرز)</option>
+                </select>
+
+                {/* ⚡ Today's Activity Filter Button */}
                 <button
                   type="button"
-                  onClick={() => setAccountSearch('')}
+                  onClick={() => setOnlyActiveToday(!onlyActiveToday)}
+                  className="btn"
                   style={{
-                    position: 'absolute',
-                    right: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: '#94a3b8',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    fontSize: '1rem'
+                    backgroundColor: onlyActiveToday ? '#fef3c7' : '#f8fafc',
+                    color: onlyActiveToday ? '#92400e' : '#475569',
+                    border: onlyActiveToday ? '1.5px solid #d97706' : '1px solid #cbd5e1',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
                   }}
-                  title="Clear filter"
+                  title="صرف وہ کھاتے فلٹر کریں جن میں آج کوئی لین دین یا پیمنٹ ہوئی ہے"
                 >
-                  ✕
+                  <Activity size={16} color={onlyActiveToday ? '#d97706' : '#64748b'} />
+                  ⚡ جن میں آج لین دین ہوا ({allPartiesList.filter((p) => p.transactedToday).length})
+                  {onlyActiveToday && <span style={{ fontSize: '0.74rem', marginLeft: '4px' }}>✕</span>}
                 </button>
+              </div>
+
+              {/* PDF Export */}
+              <button
+                type="button"
+                onClick={handleDownloadAllBalancesPDF}
+                className="btn btn-outline"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 800,
+                  color: '#047857',
+                  borderColor: '#6ee7b7',
+                  backgroundColor: '#ecfdf5',
+                }}
+              >
+                <Download size={15} /> پی ڈی ایف رپورٹ (PDF)
+              </button>
+            </div>
+          </div>
+
+          {/* Parties Master Table */}
+          <div className="table-container" style={{ maxHeight: '680px', overflowY: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                  <th>پارٹی کا نام و تفصیل (Party / Shop Name)</th>
+                  <th>کھاتہ کی قسم (Account Type)</th>
+                  <th>فون و پتہ (Contact & Area)</th>
+                  <th style={{ textAlign: 'center' }}>آج کی سرگرمی (Today's Activity)</th>
+                  <th style={{ textAlign: 'right' }}>موجودہ بقایا بیلنس (Outstanding)</th>
+                  <th style={{ textAlign: 'center', width: '220px' }}>ایکشنز (Actions)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAllParties.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                      کوئی کھاتہ یا پارٹی نہیں ملی۔
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAllParties.map((p, idx) => (
+                    <tr key={`${p.entityType}-${p.id}`} style={{ backgroundColor: p.transactedToday ? '#fffbeb' : undefined }}>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                      <td>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.92rem' }}>
+                          {p.name}
+                        </div>
+                        {p.ownerName && (
+                          <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            مالک / پروپرائٹر: <b>{p.ownerName}</b>
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`badge ${p.entityType === 'CUSTOMER' ? 'badge-info' : 'badge-neutral'}`} style={{ fontWeight: 800 }}>
+                          {p.entityType === 'CUSTOMER' ? '👤 گاہک (Customer)' : '🏭 سپلائر (Supplier)'}
+                        </span>
+                        {p.isDual && (
+                          <span className="badge badge-warning" style={{ marginLeft: '4px', fontSize: '0.68rem', fontWeight: 800 }}>
+                            🤝 مشترکہ
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
+                          {p.phone || '-'}
+                        </div>
+                        {p.address && (
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            {p.address}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {p.transactedToday ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                            <span className="badge badge-warning" style={{ fontSize: '0.72rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Activity size={12} /> آج ٹرانزیکشن ہوئی
+                            </span>
+                            <div style={{ fontSize: '0.72rem', color: '#475569' }}>
+                              {p.todayCredit > 0 && <span style={{ color: '#059669', fontWeight: 700 }}>جمع: Rs. {p.todayCredit.toLocaleString()} </span>}
+                              {p.todayDebit > 0 && <span style={{ color: '#dc2626', fontWeight: 700 }}>نام: Rs. {p.todayDebit.toLocaleString()}</span>}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {p.entityType === 'CUSTOMER' ? (
+                          p.receivable > 0 ? (
+                            <div style={{ color: '#059669', fontWeight: 900, fontSize: '0.94rem' }}>
+                              Rs. {p.receivable.toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#059669' }}>(لینا ہے)</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#64748b', fontWeight: 700 }}>صاف (Rs. 0)</span>
+                          )
+                        ) : (
+                          p.payable > 0 ? (
+                            <div style={{ color: '#dc2626', fontWeight: 900, fontSize: '0.94rem' }}>
+                              Rs. {p.payable.toLocaleString()} <span style={{ fontSize: '0.72rem', color: '#dc2626' }}>(دینا ہے)</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#64748b', fontWeight: 700 }}>صاف (Rs. 0)</span>
+                          )
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', gap: '5px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (p.entityType === 'CUSTOMER') {
+                                setActiveTab('CUSTOMERS');
+                                setSelectedEntityId(p.id);
+                              } else {
+                                setActiveTab('SUPPLIERS');
+                                setSelectedEntityId(p.id);
+                              }
+                            }}
+                            className="btn btn-outline"
+                            style={{
+                              color: '#0284c7',
+                              borderColor: '#bae6fd',
+                              backgroundColor: '#f0f9ff',
+                              padding: '4px 8px',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                            title="اس پارٹی کا مکمل لیجر کھاتہ کھولیں"
+                          >
+                            <Eye size={13} /> کھاتہ
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedEntityId(p.id);
+                              setPayTargetType(p.entityType);
+                              setPayDirection('IN');
+                              setPayAmount('');
+                              setPayNotes('');
+                              setPayInvoiceNumber('');
+                              setShowPaymentModal(true);
+                            }}
+                            className="btn btn-outline"
+                            style={{
+                              color: '#059669',
+                              borderColor: '#a7f3d0',
+                              backgroundColor: '#ecfdf5',
+                              padding: '4px 8px',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              fontWeight: 800,
+                              cursor: 'pointer'
+                            }}
+                            title="اس پارٹی سے رقم وصول کریں (Cash In)"
+                          >
+                            <Plus size={13} /> وصولی
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedEntityId(p.id);
+                              setPayTargetType(p.entityType);
+                              setPayDirection('OUT');
+                              setPayAmount('');
+                              setPayNotes('');
+                              setPayInvoiceNumber('');
+                              setShowPaymentModal(true);
+                            }}
+                            className="btn btn-outline"
+                            style={{
+                              color: '#dc2626',
+                              borderColor: '#fca5a5',
+                              backgroundColor: '#fef2f2',
+                              padding: '4px 8px',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              fontWeight: 800,
+                              cursor: 'pointer'
+                            }}
+                            title="اس پارٹی کو رقم ادا کریں (Cash Out)"
+                          >
+                            <Minus size={13} /> ادائیگی
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : activeTab === 'CASH_FLOW_HISTORY' ? (
+        /* CASH IN & CASH OUT VOUCHERS HISTORY VIEW (POS STYLE) */
+        <div className="no-print">
+          {/* Top KPI Cards */}
+          <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', marginBottom: '20px' }}>
+            <div className="stat-card green">
+              <div className="stat-label">Total Cash In (کل وصولی)</div>
+              <div className="stat-value" style={{ color: '#059669' }}>
+                Rs. {Number(todaySummary?.totalReceived || 0).toLocaleString()}
+              </div>
+              <div className="stat-sub">{todaySummary?.receivedCount || 0} وصولی واؤچرز</div>
+            </div>
+            <div className="stat-card red">
+              <div className="stat-label">Total Cash Out (کل ادائیگی)</div>
+              <div className="stat-value" style={{ color: '#dc2626' }}>
+                Rs. {Number(todaySummary?.totalPaid || 0).toLocaleString()}
+              </div>
+              <div className="stat-sub">{todaySummary?.paidCount || 0} ادائیگی واؤچرز</div>
+            </div>
+            <div className="stat-card blue">
+              <div className="stat-label">Net Cash Flow (خالص کیش بچت)</div>
+              <div className="stat-value" style={{ color: Number(todaySummary?.netCashFlow || 0) >= 0 ? '#0284c7' : '#dc2626' }}>
+                Rs. {Number(todaySummary?.netCashFlow || 0).toLocaleString()}
+              </div>
+              <div className="stat-sub">وصولی منفی ادائیگی</div>
+            </div>
+            <div className="stat-card amber">
+              <div className="stat-label">Total Vouchers Today (کل واؤچرز)</div>
+              <div className="stat-value">{todaySummary?.recentTransactions?.length || 0}</div>
+              <div className="stat-sub">آج کے تمام کیش ٹرانزیکشنز</div>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="card" style={{ marginBottom: '20px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, minWidth: '280px', flexWrap: 'wrap' }}>
+                {/* Search */}
+                <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search voucher by party, receipt #, invoice #, phone..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    style={{ paddingLeft: '34px' }}
+                  />
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  {historySearch && (
+                    <button
+                      type="button"
+                      onClick={() => setHistorySearch('')}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Flow Filter Pills */}
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('ALL')}
+                    className={`btn btn-sm ${historyTypeFilter === 'ALL' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ fontWeight: 700 }}
+                  >
+                    تمام ({todaySummary?.recentTransactions?.length || 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('IN')}
+                    className={`btn btn-sm ${historyTypeFilter === 'IN' ? 'btn-success' : 'btn-outline'}`}
+                    style={{ fontWeight: 800, backgroundColor: historyTypeFilter === 'IN' ? '#16a34a' : 'transparent', color: historyTypeFilter === 'IN' ? '#fff' : '#16a34a', borderColor: '#16a34a' }}
+                  >
+                    🟢 صرف وصولی (Cash In)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('OUT')}
+                    className={`btn btn-sm ${historyTypeFilter === 'OUT' ? 'btn-danger' : 'btn-outline'}`}
+                    style={{ fontWeight: 800, backgroundColor: historyTypeFilter === 'OUT' ? '#dc2626' : 'transparent', color: historyTypeFilter === 'OUT' ? '#fff' : '#dc2626', borderColor: '#dc2626' }}
+                  >
+                    🔴 صرف ادائیگی (Cash Out)
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Record Button */}
+              {canEditLedger && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayDirection('IN');
+                      setPayAmount('');
+                      setPayNotes('');
+                      setPayInvoiceNumber('');
+                      setShowPaymentModal(true);
+                    }}
+                    className="btn btn-success btn-sm"
+                    style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Plus size={15} /> 🟢 نئی وصولی (Cash In)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayDirection('OUT');
+                      setPayAmount('');
+                      setPayNotes('');
+                      setPayInvoiceNumber('');
+                      setShowPaymentModal(true);
+                    }}
+                    className="btn btn-danger btn-sm"
+                    style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Minus size={15} /> 🔴 نئی ادائیگی (Cash Out)
+                  </button>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>
-                Select {activeTab === 'CUSTOMERS' ? 'Customer / Shop' : activeTab === 'SUPPLIERS' ? 'Supplier Company' : '🤝 Dual Trading Partner (مشترکہ پارٹی)'}
-              </span>
-              {accountSearch && (
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#d97706' }}>
-                  ({activeTab === 'CUSTOMERS' ? filteredCustomers.length : activeTab === 'SUPPLIERS' ? filteredSuppliers.length : filteredDualPartners.length} matches found)
-                </span>
-              )}
-            </label>
-            <select
-              className="form-control"
-              value={selectedEntityId}
-              onChange={(e) => setSelectedEntityId(e.target.value)}
-            >
-              <option value="">-- Choose Account to inspect ledger --</option>
-              {activeTab === 'CUSTOMERS'
-                ? filteredCustomers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.shopName} ({c.ownerName}) - Outstanding: Rs. {Number(c.currentReceivable).toLocaleString()}
-                      {c.isDualPartner ? ' [🤝 Dual Partner]' : ''}
-                    </option>
-                  ))
-                : activeTab === 'SUPPLIERS'
-                ? filteredSuppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.companyName} - Outstanding Payable: Rs. {Number(s.currentPayable).toLocaleString()}
-                      {s.isDualPartner ? ' [🤝 Dual Partner]' : ''}
-                    </option>
-                  ))
-                : filteredDualPartners.map((dp) => (
-                    <option key={dp.id} value={dp.id}>
-                      🤝 {dp.name} ({dp.ownerName}) - Net: Rs. {Math.abs(dp.netBalance).toLocaleString()} ({dp.status === 'RECEIVABLE' ? 'لینا ہے' : dp.status === 'PAYABLE' ? 'دینا ہے' : 'صاف ہے'})
-                    </option>
-                  ))}
-            </select>
+          {/* POS Style Vouchers Table */}
+          <div className="table-container" style={{ maxHeight: '680px', overflowY: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                  <th>وقت و تاریخ (Time & Date - PKT)</th>
+                  <th>رسید / واؤچر # (Receipt #)</th>
+                  <th>پارٹی کا نام و تفصیل (Party)</th>
+                  <th>قسم (Type)</th>
+                  <th>ذریعہ (Method)</th>
+                  <th>تفصیل و وجہ (Narration / Reason)</th>
+                  <th style={{ textAlign: 'right' }}>رقم (Amount - Rs.)</th>
+                  <th style={{ textAlign: 'right' }}>باقی بیلنس (Due)</th>
+                  <th style={{ textAlign: 'center', width: '130px' }}>پرنٹ رسید (Slip)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cashFlowHistoryList.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                      آج کوئی کیش واؤچر ریکارڈ نہیں ہوا۔
+                    </td>
+                  </tr>
+                ) : (
+                  cashFlowHistoryList.map((t: any, idx: number) => {
+                    const isIn = t.direction === 'IN';
+                    return (
+                      <tr key={t.id || idx} style={{ backgroundColor: isIn ? '#f0fdf4' : '#fef2f2' }}>
+                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.84rem' }}>
+                            {formatPakistanTimeOnly(t.paymentDate)}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            {formatPakistanDateOnly(t.paymentDate)}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 800, fontFamily: 'monospace', color: '#0369a1', fontSize: '0.84rem' }}>
+                            {t.receiptNumber}
+                          </div>
+                          {t.invoiceNumber && t.invoiceNumber !== t.receiptNumber && (
+                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              بل: #{t.invoiceNumber}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>
+                            {t.partyName}
+                          </div>
+                          {(t.ownerName || t.phone) && (
+                            <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                              {t.ownerName} {t.phone && `(${t.phone})`}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className="badge"
+                            style={{
+                              backgroundColor: isIn ? '#dcfce7' : '#fee2e2',
+                              color: isIn ? '#15803d' : '#b91c1c',
+                              fontWeight: 900,
+                              fontSize: '0.78rem',
+                              border: `1px solid ${isIn ? '#86efac' : '#fca5a5'}`
+                            }}
+                          >
+                            {isIn ? '🟢 وصولی (Cash In)' : '🔴 ادائیگی (Cash Out)'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                            <span className="badge badge-neutral" style={{ fontSize: '0.74rem', fontWeight: 700 }}>
+                              {t.paymentMethod || 'CASH'}
+                            </span>
+                            <span
+                              className="badge"
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                backgroundColor: t.channel === 'VAN' ? '#fef3c7' : '#f1f5f9',
+                                color: t.channel === 'VAN' ? '#92400e' : '#475569',
+                                border: `1px solid ${t.channel === 'VAN' ? '#fde68a' : '#e2e8f0'}`
+                              }}
+                            >
+                              {t.channel === 'VAN' ? '🚐 وین (Van)' : '🏪 دکان (Shop)'}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ maxWidth: '240px' }}>
+                          <div style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 600 }}>
+                            {t.notes || '-'}
+                          </div>
+                          {t.recordedByName && (
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                              بذریعہ: {t.recordedByName}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 900, fontSize: '1rem', color: isIn ? '#15803d' : '#b91c1c' }}>
+                            Rs. {Number(t.amount).toLocaleString()}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '0.88rem' }}>
+                          Rs. {Number(t.remainingBalance || 0).toLocaleString()}
+                        </td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const receiptObj = {
+                                receiptNumber: t.receiptNumber,
+                                invoiceNumber: t.invoiceNumber || t.receiptNumber,
+                                voucherType: t.partyType === 'CUSTOMER' ? (isIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT'),
+                                partyType: t.partyType || 'CUSTOMER',
+                                channel: t.channel || 'SHOP',
+                                channelLabel: t.channel === 'VAN' ? '🚐 وین سپلائی وصولی (Van Collection)' : '🏪 دکان کاؤنٹر (Shop Counter)',
+                                isDualPartner: false,
+                                partnerName: null,
+                                partyName: t.partyName,
+                                contactPerson: t.ownerName,
+                                phone: t.phone,
+                                address: '',
+                                previousBalance: t.previousBalance || (isIn ? Number(t.remainingBalance || 0) + Number(t.amount) : Number(t.remainingBalance || 0) - Number(t.amount)),
+                                paidAmount: Number(t.amount),
+                                remainingBalance: Number(t.remainingBalance || 0),
+                                direction: t.direction,
+                                paymentMethod: t.paymentMethod || 'CASH',
+                                reference: t.reference || t.receiptNumber,
+                                notes: t.notes || '',
+                                paymentDate: t.paymentDate,
+                                recordedByName: t.recordedByName || 'Cashier / Admin',
+                              };
+                              setPaymentReceiptData(receiptObj);
+                              setShowReceiptModal(true);
+                              playPrintSound();
+                            }}
+                            className="btn btn-outline"
+                            style={{
+                              color: '#059669',
+                              borderColor: '#a7f3d0',
+                              backgroundColor: '#ffffff',
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 800,
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                            title="80mm POS تھرمل رسید پرنٹ کریں"
+                          >
+                            <Receipt size={14} /> 🖨️ رسید (80mm)
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
+      ) : (
+        /* SINGLE ACCOUNT LEDGER VIEW (CUSTOMERS / SUPPLIERS / DUAL_PARTNERS) */
+        <>
+          {/* Select Entity Card with Quick Search */}
+          <div className="card no-print" style={{ marginBottom: '20px', padding: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', alignItems: 'end', width: '100%' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Search size={15} style={{ color: '#d97706' }} /> Quick Search Account
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder={
+                      activeTab === 'CUSTOMERS'
+                        ? 'Search customer by shop, owner, phone...'
+                        : activeTab === 'SUPPLIERS'
+                        ? 'Search supplier by company, person, phone...'
+                        : 'Search dual partner by name, phone...'
+                    }
+                    value={accountSearch}
+                    onChange={(e) => setAccountSearch(e.target.value)}
+                    style={{ paddingRight: accountSearch ? '30px' : '12px' }}
+                  />
+                  {accountSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setAccountSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '1rem'
+                      }}
+                      title="Clear filter"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    Select {activeTab === 'CUSTOMERS' ? 'Customer / Shop' : activeTab === 'SUPPLIERS' ? 'Supplier Company' : '🤝 Dual Trading Partner (مشترکہ پارٹی)'}
+                  </span>
+                  {accountSearch && (
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#d97706' }}>
+                      ({activeTab === 'CUSTOMERS' ? filteredCustomers.length : activeTab === 'SUPPLIERS' ? filteredSuppliers.length : filteredDualPartners.length} matches found)
+                    </span>
+                  )}
+                </label>
+                <select
+                  className="form-control"
+                  value={selectedEntityId}
+                  onChange={(e) => setSelectedEntityId(e.target.value)}
+                >
+                  <option value="">-- Choose Account to inspect ledger --</option>
+                  {activeTab === 'CUSTOMERS'
+                    ? filteredCustomers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.shopName} ({c.ownerName}) - Outstanding: Rs. {Number(c.currentReceivable).toLocaleString()}
+                          {c.isDualPartner ? ' [🤝 Dual Partner]' : ''}
+                        </option>
+                      ))
+                    : activeTab === 'SUPPLIERS'
+                    ? filteredSuppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.companyName} - Outstanding Payable: Rs. {Number(s.currentPayable).toLocaleString()}
+                          {s.isDualPartner ? ' [🤝 Dual Partner]' : ''}
+                        </option>
+                      ))
+                    : filteredDualPartners.map((dp) => (
+                        <option key={dp.id} value={dp.id}>
+                          🤝 {dp.name} ({dp.ownerName}) - Net: Rs. {Math.abs(dp.netBalance).toLocaleString()} ({dp.status === 'RECEIVABLE' ? 'لینا ہے' : dp.status === 'PAYABLE' ? 'دینا ہے' : 'صاف ہے'})
+                        </option>
+                      ))}
+                </select>
+              </div>
+            </div>
+          </div>
 
       {/* Account Balance Summary Cards */}
       {entitySummary && (
@@ -1277,11 +2127,11 @@ export const LedgersPage: React.FC = () => {
       )}
 
       {/* Ledger Transactions Table */}
-      <div className="table-container no-print">
+      <div className="table-container no-print" style={{ maxHeight: '650px', overflowY: 'auto' }}>
         <table className="data-table">
           <thead>
             <tr>
-              <th>Date & Time</th>
+              <th>Date & Time (PKT)</th>
               {activeTab === 'DUAL_PARTNERS' && <th>Account Side</th>}
               <th>Transaction Type</th>
               <th>Reference #</th>
@@ -1333,10 +2183,10 @@ export const LedgersPage: React.FC = () => {
                 }}>
                   <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
                     <div style={{ fontWeight: 700, color: '#1e293b' }}>
-                      {new Date(entry.date).toLocaleDateString()}
+                      {formatPakistanDateOnly(entry.date)}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatPakistanTimeOnly(entry.date)}
                     </div>
                   </td>
                   {activeTab === 'DUAL_PARTNERS' && (
@@ -1446,109 +2296,144 @@ export const LedgersPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+    </>
+  )}
 
       {/* Contra Settlement Modal (Mutual Offset) */}
       {showContraModal && dualLedgerData?.partner && (
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
           backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 110, padding: '20px'
+          zIndex: 110, padding: '16px',
+          overflowY: 'auto'
         }}>
           <div style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
             width: '100%',
             maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #cbd5e1'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-              <ArrowLeftRight size={22} color="#d97706" />
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-                Contra Settlement / آپسی کٹائی ایڈجسٹمنٹ
-              </h2>
+            <div style={{
+              padding: '14px 20px',
+              borderBottom: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ArrowLeftRight size={20} color="#d97706" />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                  Contra Settlement / آپسی کٹائی ایڈجسٹمنٹ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowContraModal(false)}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 16px 0' }}>
-              Party: <b>{dualLedgerData.partner.name}</b> ({dualLedgerData.partner.ownerName})
-            </p>
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 16px 0' }}>
+                Party: <b>{dualLedgerData.partner.name}</b> ({dualLedgerData.partner.ownerName})
+              </p>
+
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px',
+                backgroundColor: '#f8fafc', padding: '12px', borderRadius: '10px',
+                border: '1px solid #e2e8f0', marginBottom: '16px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Customer Receivable (لینا ہے)</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#059669', marginTop: '2px' }}>
+                    Rs. {Number(entitySummary?.currentReceivable || 0).toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Supplier Payable (دینا ہے)</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#dc2626', marginTop: '2px' }}>
+                    Rs. {Number(entitySummary?.currentPayable || 0).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <form id="contraOffsetForm" onSubmit={handleRecordContra}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>
+                    Contra Offset Amount (کٹائی کی رقم - Rs.) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="form-control"
+                    placeholder="Enter settlement amount..."
+                    value={contraAmount}
+                    onChange={(e) => setContraAmount(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  <small style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                    یہ رقم کسٹمر کے ادھار سے بھی منہا ہو گی اور سپلائر کے واجب الادا سے بھی۔
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Notes / تفصیل</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={contraNotes}
+                    onChange={(e) => setContraNotes(e.target.value)}
+                    placeholder="e.g. Mutual oil and filter bill clearance"
+                  />
+                </div>
+              </form>
+            </div>
 
             <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px',
-              backgroundColor: '#f8fafc', padding: '12px', borderRadius: '10px',
-              border: '1px solid #e2e8f0', marginBottom: '16px'
+              padding: '12px 20px',
+              borderTop: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              flexShrink: 0
             }}>
-              <div>
-                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Customer Receivable (لینا ہے)</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#059669', marginTop: '2px' }}>
-                  Rs. {Number(entitySummary?.currentReceivable || 0).toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Supplier Payable (دینا ہے)</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#dc2626', marginTop: '2px' }}>
-                  Rs. {Number(entitySummary?.currentPayable || 0).toLocaleString()}
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowContraModal(false)}
+                className="btn btn-outline"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="contraOffsetForm"
+                disabled={contraSubmitting || !contraAmount || parseFloat(contraAmount) <= 0}
+                className="btn btn-warning"
+                style={{ fontWeight: 800 }}
+              >
+                {contraSubmitting ? 'Posting...' : '✓ Confirm Contra Settlement (کٹائی درج کریں)'}
+              </button>
             </div>
-
-            <form onSubmit={handleRecordContra}>
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700 }}>
-                  Contra Offset Amount (کٹائی کی رقم - Rs.) *
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="form-control"
-                  placeholder="Enter settlement amount..."
-                  value={contraAmount}
-                  onChange={(e) => setContraAmount(e.target.value)}
-                  required
-                  autoFocus
-                />
-                <small style={{ color: '#64748b', fontSize: '0.72rem' }}>
-                  یہ رقم کسٹمر کے ادھار سے بھی منہا ہو گی اور سپلائر کے واجب الادا سے بھی۔
-                </small>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Notes / تفصیل</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={contraNotes}
-                  onChange={(e) => setContraNotes(e.target.value)}
-                  placeholder="e.g. Mutual oil and filter bill clearance"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowContraModal(false)}
-                  className="btn btn-outline"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={contraSubmitting || !contraAmount || parseFloat(contraAmount) <= 0}
-                  className="btn btn-warning"
-                  style={{ fontWeight: 800 }}
-                >
-                  {contraSubmitting ? 'Posting...' : '✓ Confirm Contra Settlement (کٹائی درج کریں)'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
 
-      {/* Payment Voucher Modal */}
+      {/* Payment Voucher Modal (100% Scrollable & Responsive) */}
       {showPaymentModal && (
         <div style={{
           position: 'fixed',
@@ -1556,280 +2441,379 @@ export const LedgersPage: React.FC = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 100,
-          padding: '20px'
+          zIndex: 110,
+          padding: '16px',
+          overflowY: 'auto'
         }}>
           <div style={{
             backgroundColor: '#fff',
             borderRadius: '16px',
             width: '100%',
-            maxWidth: '500px',
-            padding: '24px'
+            maxWidth: '520px',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #cbd5e1'
           }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px' }}>
-              Record {activeTab === 'CUSTOMERS' ? 'Customer Payment Receipt' : activeTab === 'SUPPLIERS' ? 'Supplier Disbursement' : 'Payment Voucher'}
-            </h2>
-
-            {/* Cash In / Cash Out Direction Toggle Pills */}
+            {/* Header - Fixed */}
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '10px',
-              marginBottom: '16px',
-              padding: '6px',
-              backgroundColor: '#f1f5f9',
-              borderRadius: '12px'
+              padding: '14px 20px',
+              borderBottom: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
             }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Receipt size={20} color={payDirection === 'IN' ? '#16a34a' : '#dc2626'} />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                  {payDirection === 'IN' ? '🟢 Cash In Voucher (رقم وصولی)' : '🔴 Cash Out Voucher (رقم ادائیگی)'}
+                </h3>
+              </div>
               <button
                 type="button"
-                onClick={() => setPayDirection('IN')}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontWeight: 800,
-                  fontSize: '0.88rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  backgroundColor: payDirection === 'IN' ? '#16a34a' : 'transparent',
-                  color: payDirection === 'IN' ? '#ffffff' : '#475569',
-                  boxShadow: payDirection === 'IN' ? '0 2px 8px rgba(22, 163, 74, 0.35)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
+                onClick={() => setShowPaymentModal(false)}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}
               >
-                <Plus size={16} /> 🟢 Cash In (وصولی / آمد)
-              </button>
-              <button
-                type="button"
-                onClick={() => setPayDirection('OUT')}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontWeight: 800,
-                  fontSize: '0.88rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  backgroundColor: payDirection === 'OUT' ? '#dc2626' : 'transparent',
-                  color: payDirection === 'OUT' ? '#ffffff' : '#475569',
-                  boxShadow: payDirection === 'OUT' ? '0 2px 8px rgba(220, 38, 38, 0.35)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Minus size={16} /> 🔴 Cash Out (ادائیگی / خرچ)
+                <X size={18} />
               </button>
             </div>
 
-            {/* Explanatory banner for chosen direction */}
-            <div style={{
-              backgroundColor: payDirection === 'IN' ? '#f0fdf4' : '#fef2f2',
-              border: `1px solid ${payDirection === 'IN' ? '#86efac' : '#fca5a5'}`,
-              borderRadius: '8px',
-              padding: '10px 14px',
-              marginBottom: '14px',
-              fontSize: '0.82rem',
-              color: payDirection === 'IN' ? '#15803d' : '#b91c1c'
-            }}>
-              {activeTab === 'CUSTOMERS' || (activeTab === 'DUAL_PARTNERS' && payTargetType === 'CUSTOMER') ? (
-                payDirection === 'IN' ? (
-                  <span>✅ <b>Cash In (وصولی):</b> کسٹمر سے رقم وصول ہوئی۔ کسٹمر کا کھاتہ <b>کریڈٹ</b> ہوگا اور سابقہ ادھار کم ہو جائے گا۔</span>
-                ) : (
-                  <span>⚠️ <b>Cash Out (ادائیگی / ریفنڈ):</b> کسٹمر کو نقد رقم ادا / واپس کی گئی۔ کسٹمر کا کھاتہ <b>ڈیبٹ</b> ہوگا اور ادھار بڑھ جائے گا۔</span>
-                )
-              ) : (
-                payDirection === 'OUT' ? (
-                  <span>✅ <b>Cash Out (ادائیگی):</b> سپلائر کو نقد رقم ادا کی گئی۔ سپلائر کا کھاتہ <b>ڈیبٹ</b> ہوگا اور واجب الادا رقم کم ہو جائے گی۔</span>
-                ) : (
-                  <span>⚠️ <b>Cash In (سپلائر سے واپسی):</b> سپلائر سے رقم وصول ہوئی۔ سپلائر کا کھاتہ <b>کریڈٹ</b> ہوگا اور واجب الادا رقم بڑھ جائے گی۔</span>
-                )
-              )}
-            </div>
-
-            {activeTab === 'DUAL_PARTNERS' && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                <button
-                  type="button"
-                  onClick={() => setPayTargetType('CUSTOMER')}
-                  className={`btn btn-sm ${payTargetType === 'CUSTOMER' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ flex: 1, fontWeight: 700 }}
-                >
-                  کسٹمر کھاتہ ({payDirection === 'IN' ? 'وصولی' : 'ادائیگی'})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPayTargetType('SUPPLIER')}
-                  className={`btn btn-sm ${payTargetType === 'SUPPLIER' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ flex: 1, fontWeight: 700 }}
-                >
-                  سپلائر کھاتہ ({payDirection === 'OUT' ? 'ادائیگی' : 'وصولی'})
-                </button>
-              </div>
-            )}
-
-            <form onSubmit={handleRecordPayment}>
-              {/* Party / Account Selector */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700 }}>
-                  Account / Party (کھاتہ / پارٹی) *
-                </label>
-                <select
-                  className="form-control"
-                  value={selectedEntityId}
-                  onChange={(e) => setSelectedEntityId(e.target.value)}
-                  required
-                >
-                  <option value="">-- Choose Account (پارٹی منتخب کریں) --</option>
-                  {activeTab === 'CUSTOMERS'
-                    ? customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.shopName} ({c.ownerName}) - Outstanding Due: Rs. {Number(c.currentReceivable).toLocaleString()}
-                        </option>
-                      ))
-                    : activeTab === 'SUPPLIERS'
-                    ? suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.companyName} - Payable Due: Rs. {Number(s.currentPayable).toLocaleString()}
-                        </option>
-                      ))
-                    : dualPartners.map((dp) => (
-                        <option key={dp.id} value={dp.id}>
-                          🤝 {dp.name} ({dp.ownerName}) - Net: Rs. {Math.abs(dp.netBalance).toLocaleString()}
-                        </option>
-                      ))}
-                </select>
-              </div>
-
-              {/* Date & Time Selector */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Calendar size={14} /> Voucher Date & Time (تاریخ اور وقت)
-                </label>
-                <input
-                  type="datetime-local"
-                  className="form-control"
-                  value={payDate}
-                  onChange={(e) => setPayDate(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700 }}>Payment Amount (رقم - Rs.) *</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="form-control"
-                  placeholder="e.g. 50000"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
-
-              {/* Invoice / Bill # Field */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Receipt size={14} color="#0284c7" />
-                  Invoice / Bill # (انوائس یا بل نمبر - اختیاری)
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. ROT-INV-1029 / Bill # (اختیاری)"
-                  value={payInvoiceNumber}
-                  onChange={(e) => setPayInvoiceNumber(e.target.value)}
-                />
-                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '3px' }}>
-                  اگر یہ رقم کسی مخصوص بل یا انوائس کے تحت موصول / ادا ہوئی ہے تو یہاں بل نمبر درج کریں
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Payment Method</label>
-                <select
-                  className="form-control"
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value)}
-                >
-                  <option value="CASH">Cash (نقد)</option>
-                  <option value="BANK_TRANSFER">Bank Transfer / Online</option>
-                  <option value="CHEQUE">Cheque</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Cheque / Bank Reference #</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Optional bank ref or cheque #"
-                  value={payReference}
-                  onChange={(e) => setPayReference(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700 }}>
-                  Reason / Narration (تفصیل اور وجہ) * <span style={{ color: '#ef4444' }}>(لازمی ہے)</span>
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Wajah likhna lazmi hai (e.g. Purana udhar wasool hua / Naqad adaiyigi)"
-                  value={payNotes}
-                  onChange={(e) => setPayNotes(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Auto Generate 80mm POS Receipt Checkbox */}
+            {/* Scrollable Form Body */}
+            <div style={{ padding: '18px 20px', overflowY: 'auto', flex: 1 }}>
+              {/* Cash In / Cash Out Direction Toggle Pills */}
               <div style={{
-                display: 'flex',
-                alignItems: 'center',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
                 gap: '10px',
-                marginTop: '10px',
-                marginBottom: '16px',
-                padding: '10px 14px',
-                backgroundColor: '#f0fdf4',
-                borderRadius: '8px',
-                border: '1.5px solid #86efac'
+                marginBottom: '14px',
+                padding: '5px',
+                backgroundColor: '#f1f5f9',
+                borderRadius: '10px'
               }}>
-                <input
-                  type="checkbox"
-                  id="autoPrintReceiptCheck"
-                  checked={autoPrintReceipt}
-                  onChange={(e) => setAutoPrintReceipt(e.target.checked)}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#16a34a' }}
-                />
-                <label htmlFor="autoPrintReceiptCheck" style={{ fontSize: '0.84rem', fontWeight: 800, color: '#166534', cursor: 'pointer', margin: 0 }}>
-                  🖨️ 80mm POS رسید / انوائس خودکار تیار کریں (Auto-generate 80mm POS Invoice)
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                 <button
                   type="button"
-                  onClick={() => setShowPaymentModal(false)}
-                  className="btn btn-outline"
+                  onClick={() => setPayDirection('IN')}
+                  style={{
+                    padding: '9px 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    backgroundColor: payDirection === 'IN' ? '#16a34a' : 'transparent',
+                    color: payDirection === 'IN' ? '#ffffff' : '#475569',
+                    boxShadow: payDirection === 'IN' ? '0 2px 6px rgba(22, 163, 74, 0.35)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  Cancel
+                  <Plus size={15} /> 🟢 Cash In (وصولی)
                 </button>
-                <button type="submit" disabled={paySubmitting} className="btn btn-primary" style={{ fontWeight: 700 }}>
-                  {paySubmitting ? 'Posting...' : '✓ Post Voucher (واؤچر درج کریں)'}
+                <button
+                  type="button"
+                  onClick={() => setPayDirection('OUT')}
+                  style={{
+                    padding: '9px 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    backgroundColor: payDirection === 'OUT' ? '#dc2626' : 'transparent',
+                    color: payDirection === 'OUT' ? '#ffffff' : '#475569',
+                    boxShadow: payDirection === 'OUT' ? '0 2px 6px rgba(220, 38, 38, 0.35)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Minus size={15} /> 🔴 Cash Out (ادائیگی)
                 </button>
               </div>
-            </form>
+
+              {/* Explanatory banner for chosen direction */}
+              <div style={{
+                backgroundColor: payDirection === 'IN' ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${payDirection === 'IN' ? '#86efac' : '#fca5a5'}`,
+                borderRadius: '8px',
+                padding: '9px 12px',
+                marginBottom: '14px',
+                fontSize: '0.8rem',
+                color: payDirection === 'IN' ? '#15803d' : '#b91c1c'
+              }}>
+                {payTargetType === 'CUSTOMER' ? (
+                  payDirection === 'IN' ? (
+                    <span>✅ <b>Cash In (وصولی):</b> کسٹمر سے رقم وصول ہوئی۔ کسٹمر کا کھاتہ <b>کریڈٹ</b> ہوگا اور سابقہ ادھار کم ہو جائے گا۔</span>
+                  ) : (
+                    <span>⚠️ <b>Cash Out (ادائیگی / ریفنڈ):</b> کسٹمر کو رقم ادا / واپس کی گئی۔ کسٹمر کا کھاتہ <b>ڈیبٹ</b> ہوگا اور ادھار بڑھ جائے گا۔</span>
+                  )
+                ) : (
+                  payDirection === 'OUT' ? (
+                    <span>✅ <b>Cash Out (ادائیگی):</b> سپلائر کو نقد رقم ادا کی گئی۔ سپلائر کا کھاتہ <b>ڈیبٹ</b> ہوگا اور واجب الادا رقم کم ہو جائے گی۔</span>
+                  ) : (
+                    <span>⚠️ <b>Cash In (سپلائر سے واپسی):</b> سپلائر سے رقم وصول ہوئی۔ سپلائر کا کھاتہ <b>کریڈٹ</b> ہوگا اور واجب الادا رقم بڑھ جائے گا۔</span>
+                  )
+                )}
+              </div>
+
+              {(activeTab === 'DUAL_PARTNERS' || activeTab === 'ALL_PARTIES' || activeTab === 'CASH_FLOW_HISTORY') && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPayTargetType('CUSTOMER')}
+                    className={`btn btn-sm ${payTargetType === 'CUSTOMER' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ flex: 1, fontWeight: 700 }}
+                  >
+                    👤 گاہک کھاتہ (Customer)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayTargetType('SUPPLIER')}
+                    className={`btn btn-sm ${payTargetType === 'SUPPLIER' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ flex: 1, fontWeight: 700 }}
+                  >
+                    🏭 سپلائر کھاتہ (Supplier)
+                  </button>
+                </div>
+              )}
+
+              <form id="paymentVoucherForm" onSubmit={handleRecordPayment}>
+                {/* Payment Source / Channel (Shop Counter vs Delivery Van) */}
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>وصولی / ادائیگی کا ذریعہ (Channel / Source) *</span>
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPayChannel('SHOP')}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: payChannel === 'SHOP' ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                        backgroundColor: payChannel === 'SHOP' ? '#e0f2fe' : '#ffffff',
+                        color: payChannel === 'SHOP' ? '#0369a1' : '#475569',
+                        fontWeight: 800,
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      🏪 دکان کاؤنٹر (Shop)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPayChannel('VAN')}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: payChannel === 'VAN' ? '2px solid #d97706' : '1px solid #cbd5e1',
+                        backgroundColor: payChannel === 'VAN' ? '#fef3c7' : '#ffffff',
+                        color: payChannel === 'VAN' ? '#92400e' : '#475569',
+                        fontWeight: 800,
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      🚐 وین سے وصولی (Delivery Van)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Party / Account Selector */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>
+                    Account / Party (کھاتہ / پارٹی) *
+                  </label>
+                  <select
+                    className="form-control"
+                    value={selectedEntityId}
+                    onChange={(e) => setSelectedEntityId(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Choose Account (پارٹی منتخب کریں) --</option>
+                    {activeTab === 'CUSTOMERS' || ((activeTab === 'ALL_PARTIES' || activeTab === 'CASH_FLOW_HISTORY') && payTargetType === 'CUSTOMER')
+                      ? customers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.shopName} ({c.ownerName}) - Outstanding Due: Rs. {Number(c.currentReceivable).toLocaleString()}
+                          </option>
+                        ))
+                      : activeTab === 'SUPPLIERS' || ((activeTab === 'ALL_PARTIES' || activeTab === 'CASH_FLOW_HISTORY') && payTargetType === 'SUPPLIER')
+                      ? suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.companyName} - Payable Due: Rs. {Number(s.currentPayable).toLocaleString()}
+                          </option>
+                        ))
+                      : dualPartners.map((dp) => (
+                          <option key={dp.id} value={dp.id}>
+                            🤝 {dp.name} ({dp.ownerName}) - Net: Rs. {Math.abs(dp.netBalance).toLocaleString()}
+                          </option>
+                        ))}
+                  </select>
+                </div>
+
+                {/* Date & Time Selector */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Calendar size={14} /> Voucher Date & Time (تاریخ اور وقت - PKT)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    className="form-control"
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Payment Amount (رقم - Rs.) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="form-control"
+                    placeholder="e.g. 50000"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                {/* Invoice / Bill # Field */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Receipt size={14} color="#0284c7" />
+                    Invoice / Bill # (انوائس یا بل نمبر - اختیاری)
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. ROT-INV-1029 / Bill # (اختیاری)"
+                    value={payInvoiceNumber}
+                    onChange={(e) => setPayInvoiceNumber(e.target.value)}
+                  />
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '3px' }}>
+                    اگر یہ رقم کسی مخصوص بل یا انوائس کے تحت موصول / ادا ہوئی ہے تو یہاں بل نمبر درج کریں
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Payment Method</label>
+                  <select
+                    className="form-control"
+                    value={payMethod}
+                    onChange={(e) => setPayMethod(e.target.value)}
+                  >
+                    <option value="CASH">Cash (نقد)</option>
+                    <option value="BANK_TRANSFER">Bank Transfer / Online</option>
+                    <option value="CHEQUE">Cheque</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Cheque / Bank Reference #</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Optional bank ref or cheque #"
+                    value={payReference}
+                    onChange={(e) => setPayReference(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>
+                    Reason / Narration (تفصیل اور وجہ) * <span style={{ color: '#ef4444' }}>(لازمی ہے)</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Wajah likhna lazmi hai (e.g. Purana udhar wasool hua / Naqad adaiyigi)"
+                    value={payNotes}
+                    onChange={(e) => setPayNotes(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* Auto Generate 80mm POS Receipt Checkbox */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginTop: '10px',
+                  marginBottom: '10px',
+                  padding: '10px 14px',
+                  backgroundColor: '#f0fdf4',
+                  borderRadius: '8px',
+                  border: '1.5px solid #86efac'
+                }}>
+                  <input
+                    type="checkbox"
+                    id="autoPrintReceiptCheck"
+                    checked={autoPrintReceipt}
+                    onChange={(e) => setAutoPrintReceipt(e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#16a34a' }}
+                  />
+                  <label htmlFor="autoPrintReceiptCheck" style={{ fontSize: '0.84rem', fontWeight: 800, color: '#166534', cursor: 'pointer', margin: 0 }}>
+                    🖨️ 80mm POS رسید / انوائس خودکار تیار کریں (Auto-generate 80mm POS Invoice)
+                  </label>
+                </div>
+              </form>
+            </div>
+
+            {/* Footer - Fixed */}
+            <div style={{
+              padding: '12px 20px',
+              borderTop: '1px solid #e2e8f0',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              flexShrink: 0
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="btn btn-outline"
+              >
+                Cancel (منسوخ)
+              </button>
+              <button
+                type="submit"
+                form="paymentVoucherForm"
+                disabled={paySubmitting}
+                className="btn btn-primary"
+                style={{
+                  fontWeight: 800,
+                  backgroundColor: payDirection === 'IN' ? '#16a34a' : '#dc2626',
+                  borderColor: payDirection === 'IN' ? '#15803d' : '#b91c1c'
+                }}
+              >
+                {paySubmitting ? 'Posting...' : '✓ Post Voucher (واؤچر درج کریں)'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1936,13 +2920,13 @@ export const LedgersPage: React.FC = () => {
                       <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Date & Time (تاریخ و وقت)</div>
                       <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b' }}>
                         {selectedEntryDetail.sale?.saleDate
-                          ? new Date(selectedEntryDetail.sale.saleDate).toLocaleString()
+                          ? formatPakistanDateTime(selectedEntryDetail.sale.saleDate)
                           : selectedEntryDetail.purchase?.purchaseDate
-                          ? new Date(selectedEntryDetail.purchase.purchaseDate).toLocaleString()
+                          ? formatPakistanDateTime(selectedEntryDetail.purchase.purchaseDate)
                           : selectedEntryDetail.payment?.paymentDate
-                          ? new Date(selectedEntryDetail.payment.paymentDate).toLocaleString()
+                          ? formatPakistanDateTime(selectedEntryDetail.payment.paymentDate)
                           : selectedEntryDetail.rawEntry?.date
-                          ? new Date(selectedEntryDetail.rawEntry.date).toLocaleString()
+                          ? formatPakistanDateTime(selectedEntryDetail.rawEntry.date)
                           : '-'}
                       </div>
                     </div>
@@ -2404,7 +3388,7 @@ export const LedgersPage: React.FC = () => {
                       {activeTab === 'DUAL_PARTNERS' ? 'MUTUAL CLEARANCE STATEMENT' : 'ACCOUNT STATEMENT'}
                     </div>
                     <div style={{ fontSize: '10px', marginTop: '4px', color: '#555555' }}>
-                      Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      Date: {formatPakistanDateTime(new Date())}
                     </div>
                   </div>
                 </div>
@@ -2518,7 +3502,7 @@ export const LedgersPage: React.FC = () => {
                   <tbody>
                     {ledgerEntries.map((e, idx) => (
                       <tr key={e.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                        <td style={{ padding: '5px 6px' }}>{new Date(e.date).toLocaleDateString()}</td>
+                        <td style={{ padding: '5px 6px' }}>{formatPakistanDateTime(e.date)}</td>
                         {activeTab === 'DUAL_PARTNERS' && (
                           <td style={{ padding: '5px 6px', fontWeight: 700 }}>
                             {e.source === 'CUSTOMER_ACCOUNT' ? 'Sale (گاہک)' : 'Purchase (سپلائر)'}
@@ -2702,7 +3686,7 @@ export const LedgersPage: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span><b>INV / REC #:</b> {paymentReceiptData.invoiceNumber || paymentReceiptData.receiptNumber || '-'}</span>
                     <span>
-                      <b>DATE:</b> {paymentReceiptData.paymentDate ? new Date(paymentReceiptData.paymentDate).toLocaleDateString() : new Date().toLocaleDateString()} {paymentReceiptData.paymentDate ? new Date(paymentReceiptData.paymentDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
+                      <b>DATE:</b> {formatPakistanDateTime(paymentReceiptData.paymentDate)}
                     </span>
                   </div>
                   {paymentReceiptData.invoiceNumber && paymentReceiptData.invoiceNumber !== paymentReceiptData.receiptNumber && (
@@ -2723,8 +3707,13 @@ export const LedgersPage: React.FC = () => {
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
                     <span><b>MODE:</b> {paymentReceiptData.paymentMethod || 'CASH'}</span>
-                    <span><b>REF:</b> {paymentReceiptData.reference || '-'}</span>
+                    <span><b>CHANNEL:</b> {paymentReceiptData.channel === 'VAN' ? '🚐 وین سپلائی وصولی' : '🏪 دکان کاؤنٹر'}</span>
                   </div>
+                  {paymentReceiptData.reference && paymentReceiptData.reference !== '-' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                      <span><b>REF:</b> {paymentReceiptData.reference}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Financial Details (Sabqa, Ada/Wasool, and Baqaya) */}

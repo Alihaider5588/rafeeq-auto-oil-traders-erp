@@ -7,10 +7,29 @@ import { PaymentMethod, TransactionType, Role } from '../types/enums';
 import { Prisma } from '@prisma/client';
 import { clearDashboardCache } from './reportController';
 
+/**
+ * Safely parses any date input as Pakistan Standard Time (PKT, UTC+5).
+ * Prevents UTC server offsets from skewing dates by +5 or -5 hours.
+ */
+export function parsePakistanDate(dateInput: string | Date | undefined | null): Date {
+  if (!dateInput) return new Date();
+  if (dateInput instanceof Date) return dateInput;
+  let str = String(dateInput).trim();
+  // If it's a datetime-local without timezone (e.g. "2026-11-16T20:32" or "2026-11-16 20:32")
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+    str = str.replace(' ', 'T');
+    if (str.length === 16) str += ':00';
+    str += '+05:00';
+  }
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 const paymentSchema = z.object({
   customerId: z.string().min(1).optional().nullable(),
   supplierId: z.string().min(1).optional().nullable(),
   direction: z.enum(['IN', 'OUT']).default('IN').optional(),
+  channel: z.enum(['SHOP', 'VAN']).default('SHOP').optional(),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   reference: z.string().optional(),
@@ -145,10 +164,12 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const receiptNumber = `PAY-${Date.now().toString().slice(-8)}`;
-    const paymentDate = data.date ? new Date(data.date) : new Date();
+    const paymentDate = parsePakistanDate(data.date);
 
     const result = await prisma.$transaction(async (tx) => {
       const isCashOut = data.direction === 'OUT';
+      const isVan = data.channel === 'VAN';
+      const channelTag = isVan ? ' [🚐 وین وصولی / Van Collection]' : '';
 
       // 1. Customer Payment (Collection IN or Refund OUT)
       if (data.customerId) {
@@ -174,7 +195,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             date: paymentDate,
             transactionType: isCashOut ? TransactionType.ADJUSTMENT : TransactionType.CUSTOMER_PAYMENT,
             referenceId: data.invoiceNumber || receiptNumber,
-            description: `${isCashOut ? 'Cash Out / Adaiyigi / Refund' : 'Cash In / Wasooli'} #${receiptNumber}${data.invoiceNumber ? ` [Invoice #${data.invoiceNumber}]` : ''} - ${data.notes}`,
+            description: `${isCashOut ? 'Cash Out / Adaiyigi / Refund' : 'Cash In / Wasooli'} #${receiptNumber}${channelTag}${data.invoiceNumber ? ` [Invoice #${data.invoiceNumber}]` : ''} - ${data.notes}`,
             debit: new Prisma.Decimal(isCashOut ? data.amount : 0),
             credit: new Prisma.Decimal(isCashOut ? 0 : data.amount),
             runningBalance: new Prisma.Decimal(newRec),
@@ -189,7 +210,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             paymentMethod: data.paymentMethod,
             paymentDate,
             reference: effectiveRef || data.reference,
-            notes: `${isCashOut ? '[CASH_OUT] ' : '[CASH_IN] '}${data.invoiceNumber ? `[INV:${data.invoiceNumber}] ` : ''}${data.notes}`,
+            notes: `${isCashOut ? '[CASH_OUT] ' : '[CASH_IN] '}${isVan ? '[VAN] ' : ''}${data.invoiceNumber ? `[INV:${data.invoiceNumber}] ` : ''}${data.notes}`,
             recordedById: userId,
           },
         });
@@ -202,6 +223,8 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           partyType: data.isDualPartner ? 'DUAL_PARTNER' : 'CUSTOMER',
           isDualPartner: Boolean(data.isDualPartner),
           partnerName: data.partnerName || null,
+          channel: isVan ? 'VAN' : 'SHOP',
+          channelLabel: isVan ? '🚐 وین سپلائی وصولی (Van Collection)' : '🏪 دکان کاؤنٹر (Shop Counter)',
           partyName: customer.shopName,
           contactPerson: customer.ownerName,
           phone: customer.phone,
@@ -250,7 +273,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             date: paymentDate,
             transactionType: isSupplierCashIn ? TransactionType.ADJUSTMENT : TransactionType.SUPPLIER_PAYMENT,
             referenceId: data.invoiceNumber || receiptNumber,
-            description: `${isSupplierCashIn ? 'Cash In / Refund from Supplier' : 'Cash Out / Payment to Supplier'} #${receiptNumber}${data.invoiceNumber ? ` [Bill #${data.invoiceNumber}]` : ''} - ${data.notes}`,
+            description: `${isSupplierCashIn ? 'Cash In / Refund from Supplier' : 'Cash Out / Payment to Supplier'} #${receiptNumber}${channelTag}${data.invoiceNumber ? ` [Bill #${data.invoiceNumber}]` : ''} - ${data.notes}`,
             debit: new Prisma.Decimal(isSupplierCashIn ? 0 : data.amount),
             credit: new Prisma.Decimal(isSupplierCashIn ? data.amount : 0),
             runningBalance: new Prisma.Decimal(newPay),
@@ -265,7 +288,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
             paymentMethod: data.paymentMethod,
             paymentDate,
             reference: effectiveRef || data.reference,
-            notes: `${isSupplierCashIn ? '[CASH_IN] ' : '[CASH_OUT] '}${data.invoiceNumber ? `[BILL:${data.invoiceNumber}] ` : ''}${data.notes}`,
+            notes: `${isSupplierCashIn ? '[CASH_IN] ' : '[CASH_OUT] '}${isVan ? '[VAN] ' : ''}${data.invoiceNumber ? `[BILL:${data.invoiceNumber}] ` : ''}${data.notes}`,
             recordedById: userId,
           },
         });
@@ -278,6 +301,8 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
           partyType: data.isDualPartner ? 'DUAL_PARTNER' : 'SUPPLIER',
           isDualPartner: Boolean(data.isDualPartner),
           partnerName: data.partnerName || null,
+          channel: isVan ? 'VAN' : 'SHOP',
+          channelLabel: isVan ? '🚐 وین سپلائی وصولی (Van Collection)' : '🏪 دکان کاؤنٹر (Shop Counter)',
           partyName: supplier.companyName,
           contactPerson: supplier.contactPerson,
           phone: supplier.phone,
@@ -818,19 +843,72 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
         const rawAmt = Number(payment.amount);
         const isCashOut = (payment.notes || '').includes('[CASH_OUT]') || (payment.notes || '').toLowerCase().includes('adaiyigi');
 
+        let previousBalance = 0;
+        let remainingBalance = 0;
+
+        if (payment.customerId) {
+          const matchingLedger = await prisma.customerLedger.findFirst({
+            where: {
+              customerId: payment.customerId,
+              OR: [
+                { referenceId: payment.receiptNumber },
+                { description: { contains: payment.receiptNumber } },
+                ...(payment.reference ? [{ referenceId: payment.reference }] : []),
+                ...(entryId ? [{ id: entryId }] : []),
+              ],
+            },
+            orderBy: { date: 'desc' },
+          });
+
+          if (matchingLedger) {
+            remainingBalance = Number(matchingLedger.runningBalance);
+            previousBalance = isCashOut ? remainingBalance - rawAmt : remainingBalance + rawAmt;
+          } else {
+            remainingBalance = Number(payment.customer?.currentReceivable || 0);
+            previousBalance = isCashOut ? remainingBalance - rawAmt : remainingBalance + rawAmt;
+          }
+        } else if (payment.supplierId) {
+          const matchingSupLedger = await prisma.supplierLedger.findFirst({
+            where: {
+              supplierId: payment.supplierId,
+              OR: [
+                { referenceId: payment.receiptNumber },
+                { description: { contains: payment.receiptNumber } },
+                ...(payment.reference ? [{ referenceId: payment.reference }] : []),
+                ...(entryId ? [{ id: entryId }] : []),
+              ],
+            },
+            orderBy: { date: 'desc' },
+          });
+
+          if (matchingSupLedger) {
+            remainingBalance = Number(matchingSupLedger.runningBalance);
+            previousBalance = isCashOut ? remainingBalance + rawAmt : remainingBalance - rawAmt;
+          } else {
+            remainingBalance = Number(payment.supplier?.currentPayable || 0);
+            previousBalance = isCashOut ? remainingBalance + rawAmt : remainingBalance - rawAmt;
+          }
+        }
+
+        const isVan = (payment.notes || '').includes('[VAN]') || (payment.notes || '').toLowerCase().includes('van') || (payment.notes || '').includes('وین');
         const receipt = {
           receiptNumber: payment.receiptNumber,
+          invoiceNumber: payment.reference?.startsWith('INV:') ? payment.reference.split('|')[0].replace('INV:', '').trim() : payment.receiptNumber,
           voucherType: isCustomer ? (isCashOut ? 'CUSTOMER_REFUND' : 'CUSTOMER_PAYMENT') : (isCashOut ? 'SUPPLIER_PAYMENT' : 'SUPPLIER_REFUND'),
           partyType: isCustomer ? 'CUSTOMER' : 'SUPPLIER',
+          channel: isVan ? 'VAN' : 'SHOP',
+          channelLabel: isVan ? '🚐 وین سپلائی وصولی (Van Collection)' : '🏪 دکان کاؤنٹر (Shop Counter)',
           partyName: isCustomer ? (payment.customer?.shopName || 'Customer') : (payment.supplier?.companyName || 'Supplier'),
           contactPerson: isCustomer ? payment.customer?.ownerName : payment.supplier?.contactPerson,
           phone: party?.phone || '',
           address: party?.address || '',
+          previousBalance,
           paidAmount: rawAmt,
+          remainingBalance,
           direction: isCashOut ? 'OUT' : 'IN',
           paymentMethod: payment.paymentMethod,
           reference: payment.reference || '',
-          notes: (payment.notes || '').replace(/\[(CASH_IN|CASH_OUT)\]\s*/g, '').trim(),
+          notes: (payment.notes || '').replace(/\[(CASH_IN|CASH_OUT)\]\s*/g, '').replace(/\[VAN\]\s*/g, '').replace(/\[INV:[^\]]+\]\s*/g, '').trim(),
           paymentDate: payment.paymentDate,
           recordedByName: recordedBy?.fullName || 'Cashier / Admin',
         };
@@ -869,12 +947,15 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
       const amt = Number(ledgerEntry.credit) > 0 ? Number(ledgerEntry.credit) : Number(ledgerEntry.debit);
       const isCashIn = Number(ledgerEntry.credit) > 0;
       const party = isCust ? ledgerEntry.customer : ledgerEntry.supplier;
+      const isVan = (ledgerEntry.description || '').includes('[VAN]') || (ledgerEntry.description || '').includes('وین') || (ledgerEntry.description || '').toLowerCase().includes('van');
 
       const receipt = {
         receiptNumber: ledgerEntry.referenceId || `REC-${ledgerEntry.id.slice(0, 8)}`,
         invoiceNumber: ledgerEntry.referenceId || `REC-${ledgerEntry.id.slice(0, 8)}`,
         voucherType: isCust ? (isCashIn ? 'CUSTOMER_PAYMENT' : 'CUSTOMER_REFUND') : (isCashIn ? 'SUPPLIER_REFUND' : 'SUPPLIER_PAYMENT'),
         partyType: isCust ? 'CUSTOMER' : 'SUPPLIER',
+        channel: isVan ? 'VAN' : 'SHOP',
+        channelLabel: isVan ? '🚐 وین سپلائی وصولی (Van Collection)' : '🏪 دکان کاؤنٹر (Shop Counter)',
         partyName: isCust ? (party?.shopName || 'Customer') : (party?.companyName || 'Supplier'),
         contactPerson: isCust ? party?.ownerName : party?.contactPerson,
         phone: party?.phone || '',
@@ -908,20 +989,61 @@ export const getLedgerEntryDetail = async (req: AuthenticatedRequest, res: Respo
 
 export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    // 1. Calculate Start and End of Today in Pakistan Standard Time (PKT, UTC+5)
+    const now = new Date();
+    const pktMillis = now.getTime() + (5 * 60 * 60 * 1000);
+    const pktDate = new Date(pktMillis);
+    const pktYear = pktDate.getUTCFullYear();
+    const pktMonth = pktDate.getUTCMonth();
+    const pktDay = pktDate.getUTCDate();
 
-    const [todayPayments, custCreditsAgg, custDebitsAdjAgg, suppDebitsAgg, suppCreditsAdjAgg] = await Promise.all([
+    // Start of today in PKT: 00:00:00 PKT
+    const startOfToday = new Date(Date.UTC(pktYear, pktMonth, pktDay, 0, 0, 0) - (5 * 60 * 60 * 1000));
+    // End of today in PKT: 23:59:59.999 PKT
+    const endOfToday = new Date(Date.UTC(pktYear, pktMonth, pktDay, 23, 59, 59, 999) - (5 * 60 * 60 * 1000));
+
+    const [
+      todayPayments,
+      todayCustLedgers,
+      todaySuppLedgers,
+      custCreditsAgg,
+      custDebitsAdjAgg,
+      suppDebitsAgg,
+      suppCreditsAdjAgg
+    ] = await Promise.all([
       prisma.payment.findMany({
         where: {
           paymentDate: { gte: startOfToday, lte: endOfToday },
         },
         include: {
-          customer: { select: { id: true, shopName: true, ownerName: true, phone: true } },
-          supplier: { select: { id: true, companyName: true, contactPerson: true, phone: true } },
+          customer: { select: { id: true, shopName: true, ownerName: true, phone: true, currentReceivable: true } },
+          supplier: { select: { id: true, companyName: true, contactPerson: true, phone: true, currentPayable: true } },
         },
         orderBy: { paymentDate: 'desc' },
+      }),
+      // All Customer ledger entries today (sales, payments, adjustments)
+      prisma.customerLedger.findMany({
+        where: {
+          date: { gte: startOfToday, lte: endOfToday },
+        },
+        select: {
+          customerId: true,
+          debit: true,
+          credit: true,
+          runningBalance: true,
+        },
+      }),
+      // All Supplier ledger entries today (purchases, payments, adjustments)
+      prisma.supplierLedger.findMany({
+        where: {
+          date: { gte: startOfToday, lte: endOfToday },
+        },
+        select: {
+          supplierId: true,
+          debit: true,
+          credit: true,
+          runningBalance: true,
+        },
       }),
       // Customer Ledger Credits today (payments / collections received)
       prisma.customerLedger.aggregate({
@@ -964,6 +1086,31 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
       }),
     ]);
 
+    // Build party activity map for today's filter
+    const partyActivityMap: Record<string, { debit: number; credit: number; count: number }> = {};
+    const todayActiveCustomerIds = new Set<string>();
+    const todayActiveSupplierIds = new Set<string>();
+
+    for (const cl of todayCustLedgers) {
+      todayActiveCustomerIds.add(cl.customerId);
+      if (!partyActivityMap[cl.customerId]) {
+        partyActivityMap[cl.customerId] = { debit: 0, credit: 0, count: 0 };
+      }
+      partyActivityMap[cl.customerId].debit += Number(cl.debit || 0);
+      partyActivityMap[cl.customerId].credit += Number(cl.credit || 0);
+      partyActivityMap[cl.customerId].count += 1;
+    }
+
+    for (const sl of todaySuppLedgers) {
+      todayActiveSupplierIds.add(sl.supplierId);
+      if (!partyActivityMap[sl.supplierId]) {
+        partyActivityMap[sl.supplierId] = { debit: 0, credit: 0, count: 0 };
+      }
+      partyActivityMap[sl.supplierId].debit += Number(sl.debit || 0);
+      partyActivityMap[sl.supplierId].credit += Number(sl.credit || 0);
+      partyActivityMap[sl.supplierId].count += 1;
+    }
+
     let directCashIn = 0;
     let directCashOut = 0;
     let custCollectionsCount = 0;
@@ -976,6 +1123,7 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
       const isCashIn = (p.notes || '').includes('[CASH_IN]') || (p.notes || '').toLowerCase().includes('cash in') || (p.notes || '').toLowerCase().includes('wasooli');
 
       if (isCust) {
+        if (p.customerId) todayActiveCustomerIds.add(p.customerId);
         if (isCashOut) {
           directCashOut += amt;
         } else {
@@ -983,6 +1131,7 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
           custCollectionsCount++;
         }
       } else if (p.supplierId) {
+        if (p.supplierId) todayActiveSupplierIds.add(p.supplierId);
         if (isCashIn) {
           directCashIn += amt;
         } else {
@@ -1005,10 +1154,13 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
       directCashOut
     );
 
+    const allUsers = await prisma.user.findMany({ select: { id: true, fullName: true } });
+    const userMap = new Map(allUsers.map((u) => [u.id, u.fullName]));
+
     res.json({
       success: true,
       data: {
-        date: today.toISOString().slice(0, 10),
+        date: `${pktYear}-${String(pktMonth + 1).padStart(2, '0')}-${String(pktDay).padStart(2, '0')}`,
         totalReceived,
         totalPaid,
         netCashFlow: totalReceived - totalPaid,
@@ -1016,23 +1168,49 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
         supplierDisbursements: Number(suppDebitsAgg._sum.debit || 0) || directCashOut,
         receivedCount: Math.max(Number(custCreditsAgg._count.id || 0) + Number(suppCreditsAdjAgg._count.id || 0), custCollectionsCount),
         paidCount: Math.max(Number(suppDebitsAgg._count.id || 0) + Number(custDebitsAdjAgg._count.id || 0), suppDisbursementsCount),
+        todayActiveCustomerIds: Array.from(todayActiveCustomerIds),
+        todayActiveSupplierIds: Array.from(todayActiveSupplierIds),
+        partyActivityMap,
         recentTransactions: todayPayments.map((p) => {
           const isCust = Boolean(p.customerId);
           const isCashOut = (p.notes || '').includes('[CASH_OUT]') || (p.notes || '').toLowerCase().includes('cash out') || (p.notes || '').toLowerCase().includes('adaiyigi');
           const isCashIn = (p.notes || '').includes('[CASH_IN]') || (p.notes || '').toLowerCase().includes('cash in') || (p.notes || '').toLowerCase().includes('wasooli');
           const dir = isCust ? (isCashOut ? 'OUT' : 'IN') : (isCashIn ? 'IN' : 'OUT');
+          const isVan = (p.notes || '').includes('[VAN]') || (p.notes || '').toLowerCase().includes('van') || (p.notes || '').includes('وین');
+
+          // Extract invoice number from reference or notes
+          let invNumber = '';
+          if (p.reference?.includes('INV:')) {
+            invNumber = p.reference.split('INV:')[1]?.split('|')[0]?.trim() || '';
+          } else if (p.notes?.includes('[INV:')) {
+            invNumber = p.notes.split('[INV:')[1]?.split(']')[0]?.trim() || '';
+          }
+
+          const curBal = isCust
+            ? Number(p.customer?.currentReceivable || 0)
+            : Number(p.supplier?.currentPayable || 0);
 
           return {
             id: p.id,
             receiptNumber: p.receiptNumber,
+            invoiceNumber: invNumber || p.receiptNumber,
             amount: Number(p.amount),
             direction: dir,
+            channel: isVan ? 'VAN' : 'SHOP',
+            channelLabel: isVan ? '🚐 وین وصولی (Van)' : '🏪 دکان (Shop)',
+            customerId: p.customerId,
+            supplierId: p.supplierId,
             partyName: p.customer?.shopName || p.supplier?.companyName || 'Cash Account',
+            ownerName: p.customer?.ownerName || p.supplier?.contactPerson || '',
+            phone: p.customer?.phone || p.supplier?.phone || '',
             partyType: isCust ? 'CUSTOMER' : (p.supplierId ? 'SUPPLIER' : 'GENERAL'),
             paymentMethod: p.paymentMethod,
             paymentDate: p.paymentDate,
             reference: p.reference || '',
-            notes: (p.notes || '').replace(/\[(CASH_IN|CASH_OUT)\]\s*/gi, '').trim(),
+            notes: (p.notes || '').replace(/\[(CASH_IN|CASH_OUT)\]\s*/gi, '').replace(/\[VAN\]\s*/gi, '').replace(/\[INV:[^\]]+\]\s*/gi, '').trim(),
+            remainingBalance: curBal,
+            previousBalance: dir === 'IN' ? curBal + Number(p.amount) : curBal - Number(p.amount),
+            recordedByName: userMap.get(p.recordedById) || 'Cashier / Admin',
           };
         }),
       },
