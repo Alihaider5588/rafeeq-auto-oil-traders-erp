@@ -49,8 +49,9 @@ export const PurchasesPage: React.FC = () => {
     discountType: 'FLAT' | 'PERCENT';
     focQuantity?: number;
     schemeNotes?: string;
+    showFoc?: boolean;
   }>>([
-    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT', focQuantity: 0, schemeNotes: '' },
+    { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT', focQuantity: 0, schemeNotes: '', showFoc: false },
   ]);
   const [billDiscount, setBillDiscount] = useState<number | string>(0);
   const [billDiscountPercent, setBillDiscountPercent] = useState<number | string>(0);
@@ -264,7 +265,7 @@ export const PurchasesPage: React.FC = () => {
   };
 
   const addItemRow = () => {
-    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT', focQuantity: 0, schemeNotes: '' }]);
+    setItems([...items, { productId: '', quantity: 1, unitCost: 0, unitType: 'PRIMARY', discount: 0, discountPercent: 0, discountType: 'FLAT', focQuantity: 0, schemeNotes: '', showFoc: false }]);
   };
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -1040,76 +1041,140 @@ export const PurchasesPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Scheme / FOC (Free of Cost) Option */}
-                      <div style={{
-                        marginTop: '8px',
-                        padding: '8px 10px',
-                        backgroundColor: (it.focQuantity || 0) > 0 ? '#f5f3ff' : '#f8fafc',
-                        borderRadius: '6px',
-                        border: (it.focQuantity || 0) > 0 ? '1.5px solid #c4b5fd' : '1px dashed #cbd5e1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: '8px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (it.focQuantity || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            🎁 Scheme / FOC (مفت مال):
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {/* Scheme / FOC (Free of Cost) Option - Collapsible Toggle */}
+                      {!it.showFoc && (!it.focQuantity || it.focQuantity <= 0) ? (
+                        <div style={{ marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, 'showFoc', true)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              background: '#faf5ff',
+                              border: '1px dashed #c4b5fd',
+                              borderRadius: '4px',
+                              padding: '3px 9px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              color: '#7c3aed',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🎁 + اسکیم / FOC مال (Bonus Scheme)
+                          </button>
+                        </div>
+                      ) : !it.showFoc && (it.focQuantity || 0) > 0 ? (
+                        <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, 'showFoc', true)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              backgroundColor: '#ede9fe',
+                              border: '1px solid #c4b5fd',
+                              borderRadius: '4px',
+                              padding: '3px 9px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              color: '#6d28d9',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🎁 اسکیم FOC فعال: +{it.focQuantity} {isPrimary ? primarySymbol : secSymbol} (کھولیں / تبدیل کریں)
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 10px',
+                          backgroundColor: (it.focQuantity || 0) > 0 ? '#f5f3ff' : '#f8fafc',
+                          borderRadius: '6px',
+                          border: (it.focQuantity || 0) > 0 ? '1.5px solid #c4b5fd' : '1px dashed #cbd5e1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (it.focQuantity || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              🎁 Scheme / FOC (مفت مال):
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                className="form-control"
+                                placeholder="0 (Free)"
+                                value={it.focQuantity === 0 || !it.focQuantity ? '' : it.focQuantity}
+                                onChange={(e) => updateItem(idx, 'focQuantity', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                style={{
+                                  width: '85px',
+                                  height: '28px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 800,
+                                  textAlign: 'center',
+                                  backgroundColor: '#ffffff',
+                                  borderColor: (it.focQuantity || 0) > 0 ? '#7c3aed' : '#cbd5e1',
+                                  color: (it.focQuantity || 0) > 0 ? '#6d28d9' : '#1e293b'
+                                }}
+                              />
+                              <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                                {isPrimary ? primarySymbol : secSymbol}
+                              </span>
+                            </div>
                             <input
-                              type="number"
-                              min="0"
-                              step="any"
+                              type="text"
                               className="form-control"
-                              placeholder="0 (Free)"
-                              value={it.focQuantity === 0 || !it.focQuantity ? '' : it.focQuantity}
-                              onChange={(e) => updateItem(idx, 'focQuantity', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                              placeholder="اسکیم تفصیل / Scheme note (e.g. 1 Free on 12 Pcs carton)"
+                              value={it.schemeNotes || ''}
+                              onChange={(e) => updateItem(idx, 'schemeNotes', e.target.value)}
                               style={{
-                                width: '85px',
+                                width: '260px',
                                 height: '28px',
-                                fontSize: '0.82rem',
-                                fontWeight: 800,
-                                textAlign: 'center',
-                                backgroundColor: '#ffffff',
-                                borderColor: (it.focQuantity || 0) > 0 ? '#7c3aed' : '#cbd5e1',
-                                color: (it.focQuantity || 0) > 0 ? '#6d28d9' : '#1e293b'
+                                fontSize: '0.76rem',
+                                backgroundColor: '#ffffff'
                               }}
                             />
-                            <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
-                              {isPrimary ? primarySymbol : secSymbol}
-                            </span>
                           </div>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="اسکیم تفصیل / Scheme note (e.g. 1 Free on 12 Pcs carton)"
-                            value={it.schemeNotes || ''}
-                            onChange={(e) => updateItem(idx, 'schemeNotes', e.target.value)}
-                            style={{
-                              width: '260px',
-                              height: '28px',
-                              fontSize: '0.76rem',
-                              backgroundColor: '#ffffff'
-                            }}
-                          />
-                        </div>
 
-                        {(it.focQuantity || 0) > 0 && (
-                          <span style={{
-                            backgroundColor: '#ede9fe',
-                            color: '#6d28d9',
-                            border: '1px solid #c4b5fd',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.74rem',
-                            fontWeight: 800
-                          }}>
-                            ✓ +{it.focQuantity} {isPrimary ? primarySymbol : secSymbol} مفت مال اسٹاک میں داخل ہوگا (بل میں Rs. 0 لگے گا)
-                          </span>
-                        )}
-                      </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {(it.focQuantity || 0) > 0 && (
+                              <span style={{
+                                backgroundColor: '#ede9fe',
+                                color: '#6d28d9',
+                                border: '1px solid #c4b5fd',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                fontSize: '0.74rem',
+                                fontWeight: 800
+                              }}>
+                                ✓ +{it.focQuantity} {isPrimary ? primarySymbol : secSymbol} مفت مال اسٹاک میں داخل ہوگا (بل میں Rs. 0 لگے گا)
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => updateItem(idx, 'showFoc', false)}
+                              title="Hide Scheme"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#94a3b8',
+                                fontSize: '0.72rem',
+                                cursor: 'pointer',
+                                padding: '2px 6px',
+                                fontWeight: 600
+                              }}
+                            >
+                              ▲ چھپائیں (Hide)
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Helper conversion info & Cost comparison alert */}
                       {prod && (

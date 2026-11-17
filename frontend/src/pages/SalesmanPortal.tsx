@@ -69,6 +69,7 @@ interface CartItem {
   focQuantity?: number | string;
   focFree?: boolean;
   focNotes?: string;
+  showFoc?: boolean;
   rateInfo?: {
     hasHistory: boolean;
     suggestedRate: number;
@@ -428,6 +429,7 @@ export const SalesmanPortal: React.FC = () => {
         focQuantity: 0,
         focFree: true,
         focNotes: '',
+        showFoc: false,
         deliveryStatus: 'DELIVERED',
         deliveredQuantity: 1,
         pendingQuantity: 0,
@@ -2759,151 +2761,228 @@ export const SalesmanPortal: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Scheme / FOC (Free of Cost) Option */}
-                    <div style={{
-                      marginTop: '8px',
-                      padding: '8px 10px',
-                      backgroundColor: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#f5f3ff' : '#f8fafc',
-                      borderRadius: '8px',
-                      border: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '1.5px solid #c4b5fd' : '1px dashed #cbd5e1',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <Gift size={13} color={(parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#64748b'} />
-                            اسکیم / FOC مال (Bonus):
-                          </span>
-                          {focMeta && Number(focMeta.available) > 0 && (
+                    {/* Scheme / FOC (Free of Cost) Option - Collapsible Toggle */}
+                    {!item.showFoc && (!item.focQuantity || (parseFloat(String(item.focQuantity)) || 0) <= 0) ? (
+                      <div style={{ marginTop: '5px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...cart];
+                            updated[index] = { ...updated[index], showFoc: true };
+                            setCart(updated);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: '#faf5ff',
+                            border: '1px dashed #c4b5fd',
+                            borderRadius: '6px',
+                            padding: '3px 8px',
+                            fontSize: '0.73rem',
+                            fontWeight: 700,
+                            color: '#7c3aed',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Gift size={12} color="#7c3aed" />
+                          + اسکیم / FOC مال (Bonus Scheme)
+                        </button>
+                      </div>
+                    ) : !item.showFoc && (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? (
+                      <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...cart];
+                            updated[index] = { ...updated[index], showFoc: true };
+                            setCart(updated);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            backgroundColor: '#ede9fe',
+                            border: '1px solid #c4b5fd',
+                            borderRadius: '6px',
+                            padding: '3px 8px',
+                            fontSize: '0.73rem',
+                            fontWeight: 700,
+                            color: '#6d28d9',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Gift size={12} color="#6d28d9" />
+                          اسکیم FOC فعال: +{item.focQuantity} {currentUnitSymbol} ({item.focFree !== false ? 'مفت' : 'بل'}) (کھولیں / تبدیل کریں)
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px 10px',
+                        backgroundColor: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#f5f3ff' : '#f8fafc',
+                        borderRadius: '8px',
+                        border: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '1.5px solid #c4b5fd' : '1px dashed #cbd5e1',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <Gift size={13} color={(parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#64748b'} />
+                              اسکیم / FOC مال (Bonus):
+                            </span>
+                            {focMeta && Number(focMeta.available) > 0 && (
+                              <span style={{
+                                backgroundColor: '#ede9fe',
+                                color: '#6d28d9',
+                                border: '1px solid #c4b5fd',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.70rem',
+                                fontWeight: 700
+                              }}>
+                                دستیاب اسکیم اسٹاک: {focMeta.available} {secondarySymbol}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Billed vs Free Toggle & Collapse Button */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...cart];
+                                updated[index] = { ...updated[index], focFree: true };
+                                setCart(updated);
+                              }}
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                backgroundColor: item.focFree !== false ? '#7c3aed' : '#ffffff',
+                                color: item.focFree !== false ? '#ffffff' : '#475569',
+                                borderColor: item.focFree !== false ? '#7c3aed' : '#cbd5e1'
+                              }}
+                            >
+                              مفت (Rs. 0 بل)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...cart];
+                                updated[index] = { ...updated[index], focFree: false };
+                                setCart(updated);
+                              }}
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                backgroundColor: item.focFree === false ? '#2563eb' : '#ffffff',
+                                color: item.focFree === false ? '#ffffff' : '#475569',
+                                borderColor: item.focFree === false ? '#2563eb' : '#cbd5e1'
+                              }}
+                            >
+                              بل میں چارج کریں
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...cart];
+                                updated[index] = { ...updated[index], showFoc: false };
+                                setCart(updated);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#94a3b8',
+                                fontSize: '0.72rem',
+                                cursor: 'pointer',
+                                padding: '2px 6px',
+                                fontWeight: 600,
+                                marginLeft: '4px'
+                              }}
+                              title="Hide Scheme"
+                            >
+                              ▲ چھپائیں (Hide)
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              className="form-control"
+                              placeholder="0 (FOC Qty)"
+                              value={item.focQuantity === 0 || !item.focQuantity ? '' : item.focQuantity}
+                              onChange={(e) => {
+                                const updated = [...cart];
+                                updated[index] = { ...updated[index], focQuantity: e.target.value === '' ? 0 : parseFloat(e.target.value) };
+                                setCart(updated);
+                              }}
+                              style={{
+                                width: '90px',
+                                height: '28px',
+                                fontSize: '0.82rem',
+                                fontWeight: 800,
+                                textAlign: 'center',
+                                backgroundColor: '#ffffff',
+                                borderColor: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#7c3aed' : '#cbd5e1',
+                                color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#1e293b'
+                              }}
+                            />
+                            <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                              {currentUnitSymbol}
+                            </span>
+                          </div>
+
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="اسکیم نوٹ (e.g. 1 Carton Par 1 Free)"
+                            value={item.focNotes || ''}
+                            onChange={(e) => {
+                              const updated = [...cart];
+                              updated[index] = { ...updated[index], focNotes: e.target.value };
+                              setCart(updated);
+                            }}
+                            style={{
+                              flex: 1,
+                              minWidth: '160px',
+                              height: '28px',
+                              fontSize: '0.74rem',
+                              backgroundColor: '#ffffff'
+                            }}
+                          />
+
+                          {(parseFloat(String(item.focQuantity || 0)) || 0) > 0 && (
                             <span style={{
                               backgroundColor: '#ede9fe',
                               color: '#6d28d9',
                               border: '1px solid #c4b5fd',
-                              padding: '1px 6px',
+                              padding: '2px 8px',
                               borderRadius: '4px',
-                              fontSize: '0.70rem',
-                              fontWeight: 700
+                              fontSize: '0.72rem',
+                              fontWeight: 800
                             }}>
-                              دستیاب اسکیم اسٹاک: {focMeta.available} {secondarySymbol}
+                              {item.focFree !== false
+                                ? `بونس مفت: +${item.focQuantity} ${currentUnitSymbol} (Rs. 0)`
+                                : `چارج ایبل: +${item.focQuantity} ${currentUnitSymbol}`}
                             </span>
                           )}
                         </div>
-
-                        {/* Billed vs Free Toggle */}
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = [...cart];
-                              updated[index] = { ...updated[index], focFree: true };
-                              setCart(updated);
-                            }}
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid',
-                              fontSize: '0.72rem',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              backgroundColor: item.focFree !== false ? '#7c3aed' : '#ffffff',
-                              color: item.focFree !== false ? '#ffffff' : '#475569',
-                              borderColor: item.focFree !== false ? '#7c3aed' : '#cbd5e1'
-                            }}
-                          >
-                            مفت (Rs. 0 بل)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = [...cart];
-                              updated[index] = { ...updated[index], focFree: false };
-                              setCart(updated);
-                            }}
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid',
-                              fontSize: '0.72rem',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              backgroundColor: item.focFree === false ? '#2563eb' : '#ffffff',
-                              color: item.focFree === false ? '#ffffff' : '#475569',
-                              borderColor: item.focFree === false ? '#2563eb' : '#cbd5e1'
-                            }}
-                          >
-                            بل میں چارج کریں
-                          </button>
-                        </div>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            className="form-control"
-                            placeholder="0 (FOC Qty)"
-                            value={item.focQuantity === 0 || !item.focQuantity ? '' : item.focQuantity}
-                            onChange={(e) => {
-                              const updated = [...cart];
-                              updated[index] = { ...updated[index], focQuantity: e.target.value === '' ? 0 : parseFloat(e.target.value) };
-                              setCart(updated);
-                            }}
-                            style={{
-                              width: '90px',
-                              height: '28px',
-                              fontSize: '0.82rem',
-                              fontWeight: 800,
-                              textAlign: 'center',
-                              backgroundColor: '#ffffff',
-                              borderColor: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#7c3aed' : '#cbd5e1',
-                              color: (parseFloat(String(item.focQuantity || 0)) || 0) > 0 ? '#6d28d9' : '#1e293b'
-                            }}
-                          />
-                          <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
-                            {currentUnitSymbol}
-                          </span>
-                        </div>
-
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="اسکیم نوٹ (e.g. 1 Carton Par 1 Free)"
-                          value={item.focNotes || ''}
-                          onChange={(e) => {
-                            const updated = [...cart];
-                            updated[index] = { ...updated[index], focNotes: e.target.value };
-                            setCart(updated);
-                          }}
-                          style={{
-                            flex: 1,
-                            minWidth: '160px',
-                            height: '28px',
-                            fontSize: '0.74rem',
-                            backgroundColor: '#ffffff'
-                          }}
-                        />
-
-                        {(parseFloat(String(item.focQuantity || 0)) || 0) > 0 && (
-                          <span style={{
-                            backgroundColor: '#ede9fe',
-                            color: '#6d28d9',
-                            border: '1px solid #c4b5fd',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.72rem',
-                            fontWeight: 800
-                          }}>
-                            {item.focFree !== false
-                              ? `بونس مفت: +${item.focQuantity} ${currentUnitSymbol} (Rs. 0)`
-                              : `چارج ایبل: +${item.focQuantity} ${currentUnitSymbol}`}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    )}
 
                     {/* Item Delivery Status & Partial Pending Split */}
                     {(() => {
