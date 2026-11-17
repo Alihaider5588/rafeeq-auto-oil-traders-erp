@@ -900,54 +900,7 @@ export const LedgersPage: React.FC = () => {
                 <Printer size={16} /> Print View
               </button>
 
-              {canEditLedger && (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
-                      setPayDirection('IN');
-                      setShowPaymentModal(true);
-                    }}
-                    className="btn"
-                    style={{
-                      backgroundColor: '#16a34a',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontWeight: 700,
-                      border: 'none',
-                      boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)'
-                    }}
-                    title="Cash In / Wasooli (کسٹمر یا سپلائر سے رقم وصول کریں)"
-                  >
-                    <Plus size={16} /> 🟢 Cash In (وصولی)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPayTargetType(activeTab === 'SUPPLIERS' ? 'SUPPLIER' : 'CUSTOMER');
-                      setPayDirection('OUT');
-                      setShowPaymentModal(true);
-                    }}
-                    className="btn"
-                    style={{
-                      backgroundColor: '#dc2626',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontWeight: 700,
-                      border: 'none',
-                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)'
-                    }}
-                    title="Cash Out / Adaiyigi (سپلائر یا کسٹمر کو رقم ادا کریں)"
-                  >
-                    <Minus size={16} /> 🔴 Cash Out (ادائیگی)
-                  </button>
-                </div>
-              )}
+
             </>
           )}
         </div>
