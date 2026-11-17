@@ -95,6 +95,8 @@ export const AdminDashboard: React.FC = () => {
       vanCashReceived: 0,
       vanCredit: 0,
       recoveryReceived: 0,
+      supplierDisbursements: 0,
+      netCashInHand: 0,
       cashReceived: 0,
       creditSales: 0,
       grossProfit: 0,
@@ -231,10 +233,15 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="stat-card emerald" style={{ borderLeft: '4px solid #10b981' }}>
-          <div className="stat-label">Total Cash In Hand Today (کُل نقد وصولی)</div>
+          <div className="stat-label">Total Cash Received Today (کُل نقد وصولی)</div>
           <div className="stat-value">Rs. {Number(today?.cashReceived || 0).toLocaleString()}</div>
           <div className="stat-sub" style={{ fontSize: '0.72rem', color: '#475569' }}>
             کاؤنٹر: <b>Rs. {Number(today?.counterCashReceived || 0).toLocaleString()}</b> | وین: <b>Rs. {Number(today?.vanCashReceived || 0).toLocaleString()}</b>
+            {Number((today as any)?.supplierDisbursements || 0) > 0 && (
+              <span style={{ display: 'block', color: '#b91c1c', marginTop: '2px', fontWeight: 600 }}>
+                ادائیگی سپلائرز: Rs. {Number((today as any)?.supplierDisbursements || 0).toLocaleString()} | خالص بچت: Rs. {Number((today as any)?.netCashInHand || 0).toLocaleString()}
+              </span>
+            )}
           </div>
         </div>
 

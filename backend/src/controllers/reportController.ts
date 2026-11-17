@@ -21,11 +21,21 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    // Calculate Start and End of Today in Pakistan Standard Time (PKT, UTC+5)
+    const now = new Date();
+    const pktMillis = now.getTime() + (5 * 60 * 60 * 1000);
+    const pktDate = new Date(pktMillis);
+    const pktYear = pktDate.getUTCFullYear();
+    const pktMonth = pktDate.getUTCMonth();
+    const pktDay = pktDate.getUTCDate();
 
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
+    // Start of today in PKT: 00:00:00 PKT (19:00:00 UTC previous day)
+    const startOfToday = new Date(Date.UTC(pktYear, pktMonth, pktDay, 0, 0, 0) - (5 * 60 * 60 * 1000));
+    // End of today in PKT: 23:59:59.999 PKT (18:59:59 UTC today)
+    const endOfToday = new Date(Date.UTC(pktYear, pktMonth, pktDay, 23, 59, 59, 999) - (5 * 60 * 60 * 1000));
+
+    // Start of month in PKT: 1st of month at 00:00:00 PKT
+    const startOfMonth = new Date(Date.UTC(pktYear, pktMonth, 1, 0, 0, 0) - (5 * 60 * 60 * 1000));
 
     // Run parallel database queries for real data
     const [
@@ -34,6 +44,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       todayVanSales,
       todayPurchases,
       todayPayments,
+      todaySupplierPayments,
       todayExpenses,
       monthSales,
       monthPurchases,
@@ -96,6 +107,15 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           ],
         },
         select: { amount: true, notes: true },
+      }),
+
+      // Today Supplier Payments (disbursements / cash out from ledger)
+      prisma.payment.aggregate({
+        where: {
+          paymentDate: { gte: startOfToday, lte: endOfToday },
+          supplierId: { not: null },
+        },
+        _sum: { amount: true },
       }),
 
       // Today Expenses
@@ -268,6 +288,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           vanCashReceived: totalVanCash,
           vanCredit: Number(todayVanSales._sum.remainingBalance || 0),
           recoveryReceived: totalRecoveryReceived,
+          supplierDisbursements: Number(todaySupplierPayments._sum.amount || 0),
+          netCashInHand: (totalCounterCash + totalVanCash) - Number(todaySupplierPayments._sum.amount || 0) - Number(todayExpenses._sum.amount || 0),
           totalPurchases: Number(todayPurchases._sum.netAmount || 0),
           cashReceived: totalCounterCash + totalVanCash,
           creditSales: Number(todaySales._sum.remainingBalance || 0),
