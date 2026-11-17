@@ -152,7 +152,7 @@ export const LedgersPage: React.FC = () => {
   const [allPartiesTypeFilter, setAllPartiesTypeFilter] = useState<'ALL' | 'CUSTOMER' | 'SUPPLIER'>('ALL');
 
   // Cash In & Cash Out History View & Filters
-  const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'IN' | 'OUT' | 'COUNTER' | 'VAN'>('ALL');
   const [historySearch, setHistorySearch] = useState('');
 
   // Contra settlement modal (Mutual offset)
@@ -797,6 +797,8 @@ export const LedgersPage: React.FC = () => {
     return list.filter((t: any) => {
       if (historyTypeFilter === 'IN' && t.direction !== 'IN') return false;
       if (historyTypeFilter === 'OUT' && t.direction !== 'OUT') return false;
+      if (historyTypeFilter === 'COUNTER' && t.channel === 'VAN') return false;
+      if (historyTypeFilter === 'VAN' && t.channel !== 'VAN') return false;
       if (historySearch.trim()) {
         const q = historySearch.toLowerCase().trim();
         const matchesParty = (t.partyName || '').toLowerCase().includes(q);
@@ -1112,7 +1114,86 @@ export const LedgersPage: React.FC = () => {
           )}
         </div>
 
-        {/* 3 Metric Cards */}
+        {/* Counter Cash vs Van Cash Breakdown Section */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+          {/* Box 1: Counter Cash */}
+          <div style={{
+            backgroundColor: '#f0fdf4',
+            border: '2px solid #86efac',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 900, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🏪 کاؤنٹر کیش (Shop / Counter Cash)
+              </span>
+              <span className="badge" style={{ backgroundColor: '#bbf7d0', color: '#14532d', fontWeight: 800, fontSize: '0.72rem' }}>
+                {(todaySummary?.counter?.receivedCount || 0) + (todaySummary?.counter?.paidCount || 0)} اینٹریز
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700 }}>وصولی (In)</div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#15803d' }}>
+                  Rs. {Number(todaySummary?.counter?.received || 0).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid #fecaca' }}>
+                <div style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 700 }}>ادائیگی (Out)</div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#dc2626' }}>
+                  Rs. {Number(todaySummary?.counter?.paid || 0).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <div style={{ fontSize: '0.72rem', color: '#334155', fontWeight: 700 }}>خالص نیٹ</div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 900, color: (todaySummary?.counter?.net || 0) >= 0 ? '#0369a1' : '#b45309' }}>
+                  Rs. {Number(todaySummary?.counter?.net || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Box 2: Van Cash */}
+          <div style={{
+            backgroundColor: '#fffbeb',
+            border: '2px solid #fde68a',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 900, color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🚐 وین کیش (Delivery Van / Route Cash)
+              </span>
+              <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#78350f', fontWeight: 800, fontSize: '0.72rem' }}>
+                {(todaySummary?.van?.receivedCount || 0) + (todaySummary?.van?.paidCount || 0)} اینٹریز
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700 }}>وصولی (In)</div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#15803d' }}>
+                  Rs. {Number(todaySummary?.van?.received || 0).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid #fecaca' }}>
+                <div style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 700 }}>ادائیگی (Out)</div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#dc2626' }}>
+                  Rs. {Number(todaySummary?.van?.paid || 0).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <div style={{ fontSize: '0.72rem', color: '#334155', fontWeight: 700 }}>خالص نیٹ</div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 900, color: (todaySummary?.van?.net || 0) >= 0 ? '#0369a1' : '#b45309' }}>
+                  Rs. {Number(todaySummary?.van?.net || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 Grand Metric Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
           {/* Card 1: Today Received (Cash In) */}
           <div style={{
@@ -1125,7 +1206,7 @@ export const LedgersPage: React.FC = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#15803d' }}>
-                🟢 آج کی کل وصولی (Cash In)
+                🟢 آج کی کل وصولی (Total Cash In)
               </span>
               <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#166534', fontWeight: 800, fontSize: '0.72rem' }}>
                 {todaySummary?.receivedCount || 0} وصولیاں
@@ -1134,8 +1215,8 @@ export const LedgersPage: React.FC = () => {
             <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#15803d', margin: '4px 0 2px 0' }}>
               Rs. {Number(todaySummary?.totalReceived || 0).toLocaleString()}
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-              کسٹمرز و کھاتوں سے پرانے ادھار کی وصولی
+            <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              کاؤنٹر: <b>Rs. {Number(todaySummary?.counter?.received || 0).toLocaleString()}</b> | وین: <b>Rs. {Number(todaySummary?.van?.received || 0).toLocaleString()}</b>
             </div>
           </div>
 
@@ -1150,7 +1231,7 @@ export const LedgersPage: React.FC = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#b91c1c' }}>
-                🔴 آج کی کل ادائیگی (Cash Out)
+                🔴 آج کی کل ادائیگی (Total Cash Out)
               </span>
               <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#991b1b', fontWeight: 800, fontSize: '0.72rem' }}>
                 {todaySummary?.paidCount || 0} ادائیگیاں
@@ -1159,8 +1240,8 @@ export const LedgersPage: React.FC = () => {
             <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', margin: '4px 0 2px 0' }}>
               Rs. {Number(todaySummary?.totalPaid || 0).toLocaleString()}
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-              سپلائرز و پارٹیوں کو ادا شدہ نقد رقم
+            <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              کاؤنٹر: <b>Rs. {Number(todaySummary?.counter?.paid || 0).toLocaleString()}</b> | وین: <b>Rs. {Number(todaySummary?.van?.paid || 0).toLocaleString()}</b>
             </div>
           </div>
 
@@ -1189,8 +1270,8 @@ export const LedgersPage: React.FC = () => {
             }}>
               Rs. {Number(todaySummary?.netCashFlow || 0).toLocaleString()}
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-              خالص بیلنس (وصولی منفی ادائیگی)
+            <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              کاؤنٹر نیٹ: <b>Rs. {Number(todaySummary?.counter?.net || 0).toLocaleString()}</b> | وین نیٹ: <b>Rs. {Number(todaySummary?.van?.net || 0).toLocaleString()}</b>
             </div>
           </div>
         </div>
@@ -1612,7 +1693,7 @@ export const LedgersPage: React.FC = () => {
                 </div>
 
                 {/* Flow Filter Pills */}
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => setHistoryTypeFilter('ALL')}
@@ -1627,7 +1708,7 @@ export const LedgersPage: React.FC = () => {
                     className={`btn btn-sm ${historyTypeFilter === 'IN' ? 'btn-success' : 'btn-outline'}`}
                     style={{ fontWeight: 800, backgroundColor: historyTypeFilter === 'IN' ? '#16a34a' : 'transparent', color: historyTypeFilter === 'IN' ? '#fff' : '#16a34a', borderColor: '#16a34a' }}
                   >
-                    🟢 صرف وصولی (Cash In)
+                    🟢 صرف وصولی (In)
                   </button>
                   <button
                     type="button"
@@ -1635,7 +1716,23 @@ export const LedgersPage: React.FC = () => {
                     className={`btn btn-sm ${historyTypeFilter === 'OUT' ? 'btn-danger' : 'btn-outline'}`}
                     style={{ fontWeight: 800, backgroundColor: historyTypeFilter === 'OUT' ? '#dc2626' : 'transparent', color: historyTypeFilter === 'OUT' ? '#fff' : '#dc2626', borderColor: '#dc2626' }}
                   >
-                    🔴 صرف ادائیگی (Cash Out)
+                    🔴 صرف ادائیگی (Out)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('COUNTER')}
+                    className={`btn btn-sm ${historyTypeFilter === 'COUNTER' ? 'btn-info' : 'btn-outline'}`}
+                    style={{ fontWeight: 800, backgroundColor: historyTypeFilter === 'COUNTER' ? '#0284c7' : 'transparent', color: historyTypeFilter === 'COUNTER' ? '#fff' : '#0284c7', borderColor: '#0284c7' }}
+                  >
+                    🏪 کاؤنٹر کیش (Counter)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('VAN')}
+                    className={`btn btn-sm ${historyTypeFilter === 'VAN' ? 'btn-warning' : 'btn-outline'}`}
+                    style={{ fontWeight: 800, backgroundColor: historyTypeFilter === 'VAN' ? '#d97706' : 'transparent', color: historyTypeFilter === 'VAN' ? '#fff' : '#d97706', borderColor: '#d97706' }}
+                  >
+                    🚐 وین کیش (Van Route)
                   </button>
                 </div>
               </div>

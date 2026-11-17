@@ -29,7 +29,7 @@ const paymentSchema = z.object({
   customerId: z.string().min(1).optional().nullable(),
   supplierId: z.string().min(1).optional().nullable(),
   direction: z.enum(['IN', 'OUT']).default('IN').optional(),
-  channel: z.enum(['SHOP', 'VAN']).default('SHOP').optional(),
+  channel: z.enum(['SHOP', 'COUNTER', 'VAN']).default('COUNTER').optional(),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   reference: z.string().optional(),
@@ -1113,6 +1113,14 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
 
     let directCashIn = 0;
     let directCashOut = 0;
+    let counterCashIn = 0;
+    let counterCashOut = 0;
+    let vanCashIn = 0;
+    let vanCashOut = 0;
+    let counterInCount = 0;
+    let counterOutCount = 0;
+    let vanInCount = 0;
+    let vanOutCount = 0;
     let custCollectionsCount = 0;
     let suppDisbursementsCount = 0;
 
@@ -1121,27 +1129,34 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
       const isCust = Boolean(p.customerId);
       const isCashOut = (p.notes || '').includes('[CASH_OUT]') || (p.notes || '').toLowerCase().includes('cash out') || (p.notes || '').toLowerCase().includes('adaiyigi');
       const isCashIn = (p.notes || '').includes('[CASH_IN]') || (p.notes || '').toLowerCase().includes('cash in') || (p.notes || '').toLowerCase().includes('wasooli');
+      const isVan = (p.notes || '').includes('[VAN]') || (p.notes || '').toLowerCase().includes('van') || (p.notes || '').includes('وین');
 
-      if (isCust) {
-        if (p.customerId) todayActiveCustomerIds.add(p.customerId);
-        if (isCashOut) {
-          directCashOut += amt;
+      const isDirectionIn = isCust ? !isCashOut : isCashIn;
+
+      if (isDirectionIn) {
+        directCashIn += amt;
+        if (isCust) custCollectionsCount++;
+        if (isVan) {
+          vanCashIn += amt;
+          vanInCount++;
         } else {
-          directCashIn += amt;
-          custCollectionsCount++;
-        }
-      } else if (p.supplierId) {
-        if (p.supplierId) todayActiveSupplierIds.add(p.supplierId);
-        if (isCashIn) {
-          directCashIn += amt;
-        } else {
-          directCashOut += amt;
-          suppDisbursementsCount++;
+          counterCashIn += amt;
+          counterInCount++;
         }
       } else {
-        if (isCashOut) directCashOut += amt;
-        else directCashIn += amt;
+        directCashOut += amt;
+        if (p.supplierId) suppDisbursementsCount++;
+        if (isVan) {
+          vanCashOut += amt;
+          vanOutCount++;
+        } else {
+          counterCashOut += amt;
+          counterOutCount++;
+        }
       }
+
+      if (p.customerId) todayActiveCustomerIds.add(p.customerId);
+      if (p.supplierId) todayActiveSupplierIds.add(p.supplierId);
     }
 
     const totalReceived = Math.max(
@@ -1164,6 +1179,20 @@ export const getTodayLedgerSummary = async (req: AuthenticatedRequest, res: Resp
         totalReceived,
         totalPaid,
         netCashFlow: totalReceived - totalPaid,
+        counter: {
+          received: counterCashIn,
+          paid: counterCashOut,
+          net: counterCashIn - counterCashOut,
+          receivedCount: counterInCount,
+          paidCount: counterOutCount,
+        },
+        van: {
+          received: vanCashIn,
+          paid: vanCashOut,
+          net: vanCashIn - vanCashOut,
+          receivedCount: vanInCount,
+          paidCount: vanOutCount,
+        },
         customerCollections: Number(custCreditsAgg._sum.credit || 0) || directCashIn,
         supplierDisbursements: Number(suppDebitsAgg._sum.debit || 0) || directCashOut,
         receivedCount: Math.max(Number(custCreditsAgg._count.id || 0) + Number(suppCreditsAdjAgg._count.id || 0), custCollectionsCount),

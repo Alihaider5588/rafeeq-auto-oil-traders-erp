@@ -84,10 +84,14 @@ export const AdminDashboard: React.FC = () => {
       salesCount: 0,
       counterSales: 0,
       counterSalesCount: 0,
+      counterSaleCash: 0,
+      counterRecoveryCash: 0,
       counterCashReceived: 0,
       counterCredit: 0,
       vanSales: 0,
       vanSalesCount: 0,
+      vanSaleCash: 0,
+      vanRecoveryCash: 0,
       vanCashReceived: 0,
       vanCredit: 0,
       recoveryReceived: 0,
@@ -205,9 +209,11 @@ export const AdminDashboard: React.FC = () => {
           <div className="stat-value" style={{ color: '#059669' }}>
             Rs. {Number(today?.counterCashReceived || 0).toLocaleString()}
           </div>
-          <div className="stat-sub" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="stat-sub" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
             <span><Store size={14} color="#059669" /> {today?.counterSalesCount || 0} Bills</span>
-            <span style={{ color: '#b91c1c' }}>Udhar: Rs. {Number(today?.counterCredit || 0).toLocaleString()}</span>
+            <span style={{ color: '#047857', fontWeight: 600 }}>
+              Sale: Rs. {Number(today?.counterSaleCash || 0).toLocaleString()} | Khata: Rs. {Number(today?.counterRecoveryCash || 0).toLocaleString()}
+            </span>
           </div>
         </div>
 
@@ -216,9 +222,11 @@ export const AdminDashboard: React.FC = () => {
           <div className="stat-value" style={{ color: '#7c3aed' }}>
             Rs. {Number(today?.vanCashReceived || 0).toLocaleString()}
           </div>
-          <div className="stat-sub" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="stat-sub" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
             <span><Truck size={14} color="#7c3aed" /> {today?.vanSalesCount || 0} Orders</span>
-            <span style={{ color: '#b91c1c' }}>Udhar: Rs. {Number(today?.vanCredit || 0).toLocaleString()}</span>
+            <span style={{ color: '#6d28d9', fontWeight: 600 }}>
+              Sale: Rs. {Number(today?.vanSaleCash || 0).toLocaleString()} | Khata: Rs. {Number(today?.vanRecoveryCash || 0).toLocaleString()}
+            </span>
           </div>
         </div>
 
@@ -226,7 +234,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="stat-label">Total Cash In Hand Today (کُل نقد وصولی)</div>
           <div className="stat-value">Rs. {Number(today?.cashReceived || 0).toLocaleString()}</div>
           <div className="stat-sub" style={{ fontSize: '0.72rem', color: '#475569' }}>
-            Counter: Rs. {Number(today?.counterCashReceived || 0).toLocaleString()} | Van: Rs. {Number(today?.vanCashReceived || 0).toLocaleString()} | Khata: Rs. {Number(today?.recoveryReceived || 0).toLocaleString()}
+            کاؤنٹر: <b>Rs. {Number(today?.counterCashReceived || 0).toLocaleString()}</b> | وین: <b>Rs. {Number(today?.vanCashReceived || 0).toLocaleString()}</b>
           </div>
         </div>
 

@@ -85,8 +85,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         _count: { id: true },
       }),
 
-      // Today Customer Udhar Recovery Payments (collections from ledger - excluding direct POS counter sales to avoid double counting)
-      prisma.payment.aggregate({
+      // Today Customer Udhar Recovery Payments (collections from ledger - separated by Counter vs Van)
+      prisma.payment.findMany({
         where: {
           paymentDate: { gte: startOfToday, lte: endOfToday },
           customerId: { not: null },
@@ -95,7 +95,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
             { notes: { startsWith: 'POS Received' } },
           ],
         },
-        _sum: { amount: true },
+        select: { amount: true, notes: true },
       }),
 
       // Today Expenses
@@ -232,6 +232,23 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       };
     });
 
+    let counterRecoveryReceived = 0;
+    let vanRecoveryReceived = 0;
+    for (const p of (todayPayments as any[])) {
+      const amt = Number(p.amount);
+      const isVan = (p.notes || '').includes('[VAN]') || (p.notes || '').includes('وین');
+      if (isVan) {
+        vanRecoveryReceived += amt;
+      } else {
+        counterRecoveryReceived += amt;
+      }
+    }
+    const totalRecoveryReceived = counterRecoveryReceived + vanRecoveryReceived;
+    const counterSaleCash = Number(todayCounterSales._sum.receivedAmount || 0);
+    const vanSaleCash = Number(todayVanSales._sum.receivedAmount || 0);
+    const totalCounterCash = counterSaleCash + counterRecoveryReceived;
+    const totalVanCash = vanSaleCash + vanRecoveryReceived;
+
     const dashboardResponse = {
       success: true,
       stats: {
@@ -240,15 +257,19 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           salesCount: todaySales._count.id || 0,
           counterSales: Number(todayCounterSales._sum.netAmount || 0),
           counterSalesCount: todayCounterSales._count.id || 0,
-          counterCashReceived: Number(todayCounterSales._sum.receivedAmount || 0),
+          counterSaleCash,
+          counterRecoveryCash: counterRecoveryReceived,
+          counterCashReceived: totalCounterCash,
           counterCredit: Number(todayCounterSales._sum.remainingBalance || 0),
           vanSales: Number(todayVanSales._sum.netAmount || 0),
           vanSalesCount: todayVanSales._count.id || 0,
-          vanCashReceived: Number(todayVanSales._sum.receivedAmount || 0),
+          vanSaleCash,
+          vanRecoveryCash: vanRecoveryReceived,
+          vanCashReceived: totalVanCash,
           vanCredit: Number(todayVanSales._sum.remainingBalance || 0),
-          recoveryReceived: Number(todayPayments._sum.amount || 0),
+          recoveryReceived: totalRecoveryReceived,
           totalPurchases: Number(todayPurchases._sum.netAmount || 0),
-          cashReceived: Number(todaySales._sum.receivedAmount || 0) + Number(todayPayments._sum.amount || 0),
+          cashReceived: totalCounterCash + totalVanCash,
           creditSales: Number(todaySales._sum.remainingBalance || 0),
           grossProfit: Number(todaySales._sum.grossProfit || 0),
           totalExpenses: Number(todayExpenses._sum.amount || 0),

@@ -7,6 +7,7 @@ import { MovementType, OrderStatus, PaymentMethod, Role, TransactionType } from 
 import { Prisma } from '@prisma/client';
 import { clearProductsCache } from './productController';
 import { clearDashboardCache } from './reportController';
+import { recalculateCustomerRunningBalance } from '../utils/ledgerHelper';
 
 export const extractJsonTag = (text: string | undefined | null, tagName: string): any => {
   if (!text) return null;
@@ -1405,7 +1406,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
           });
         }
 
-        // 2. REVERSE OLD CUSTOMER RECEIVABLE
+        // 2. REVERSE OLD CUSTOMER RECEIVABLE & CLEAN UP PREVIOUS LEDGERS
         const oldCust = await tx.customer.findUnique({ where: { id: existingSale.customerId } });
         if (oldCust) {
           const isOldWalkIn = oldCust.phone === '00000000000' || oldCust.shopName.toLowerCase().includes('walk-in');
@@ -1417,20 +1418,16 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
             where: { id: existingSale.customerId },
             data: { currentReceivable: new Prisma.Decimal(reversedReceivable) },
           });
-
-          await tx.customerLedger.create({
-            data: {
-              customerId: existingSale.customerId,
-              date: new Date(),
-              transactionType: TransactionType.ADJUSTMENT,
-              referenceId: existingSale.id,
-              description: `Correction/Edit Adjustment: Inv #${existingSale.invoiceNumber}`,
-              debit: new Prisma.Decimal(0),
-              credit: new Prisma.Decimal(oldRemaining),
-              runningBalance: new Prisma.Decimal(reversedReceivable),
-            },
-          });
         }
+
+        // Clean up previous customer ledger entries and payments for this sale (avoids duplicate ledger clutter)
+        await tx.customerLedger.deleteMany({
+          where: { referenceId: existingSale.id },
+        });
+
+        await tx.payment.deleteMany({
+          where: { reference: existingSale.invoiceNumber },
+        });
       }
 
       // 3. DELETE OLD ITEMS
@@ -1548,7 +1545,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
           });
         }
 
-        // 6. APPLY NEW CUSTOMER RECEIVABLE & LEDGER
+        // 6. APPLY NEW CUSTOMER RECEIVABLE & CLEAN CANONICAL LEDGER
         const freshCust = await tx.customer.findUnique({ where: { id: data.customerId } });
         if (freshCust) {
           const isFreshWalkIn = freshCust.phone === '00000000000' || freshCust.shopName.toLowerCase().includes('walk-in');
@@ -1566,7 +1563,7 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
               date: saleDate,
               transactionType: TransactionType.SALE_INVOICE,
               referenceId: updatedSale.id,
-              description: `Corrected Sale Invoice #${existingSale.invoiceNumber}`,
+              description: `Sale Invoice #${existingSale.invoiceNumber}`,
               debit: new Prisma.Decimal(netAmount),
               credit: new Prisma.Decimal(0),
               runningBalance: new Prisma.Decimal(curReceivable + netAmount),
@@ -1580,12 +1577,31 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
                 date: saleDate,
                 transactionType: TransactionType.CUSTOMER_PAYMENT,
                 referenceId: updatedSale.id,
-                description: `Corrected Payment for Inv #${existingSale.invoiceNumber} (${data.paymentMethod})`,
+                description: `Payment for Inv #${existingSale.invoiceNumber} (${data.paymentMethod})`,
                 debit: new Prisma.Decimal(0),
                 credit: new Prisma.Decimal(data.receivedAmount),
                 runningBalance: new Prisma.Decimal(newReceivable),
               },
             });
+
+            await tx.payment.create({
+              data: {
+                receiptNumber: `REC-POS-${existingSale.invoiceNumber.replace('ROT-INV-', '')}`,
+                customerId: data.customerId,
+                amount: new Prisma.Decimal(data.receivedAmount),
+                paymentMethod: data.paymentMethod,
+                reference: existingSale.invoiceNumber,
+                notes: `Payment for invoice ${existingSale.invoiceNumber}`,
+                paymentDate: saleDate,
+                recordedById: req.user?.id || existingSale.createdById,
+              },
+            });
+          }
+
+          // Recalculate running balance in exact chronological order for perfect accounting accuracy
+          await recalculateCustomerRunningBalance(data.customerId, tx);
+          if (existingSale.customerId !== data.customerId) {
+            await recalculateCustomerRunningBalance(existingSale.customerId, tx);
           }
         }
       }
