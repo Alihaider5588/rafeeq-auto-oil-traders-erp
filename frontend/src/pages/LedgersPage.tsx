@@ -422,14 +422,18 @@ export const LedgersPage: React.FC = () => {
     const amt = Number(serverReceipt?.paidAmount || (Number(entry.credit) > 0 ? entry.credit : entry.debit) || 0);
     const isCashIn = serverReceipt ? (serverReceipt.direction === 'IN') : (Number(entry.credit) > 0);
 
-    // Extract remaining balance: NEVER allow 0 if entry has a balance
-    const rawRemaining = (serverReceipt?.remainingBalance !== undefined && serverReceipt?.remainingBalance !== null && Number(serverReceipt.remainingBalance) !== 0)
-      ? Number(serverReceipt.remainingBalance)
-      : (entry.runningBalance !== undefined ? Number(entry.runningBalance) : Number(serverReceipt?.remainingBalance || 0));
+    // Prefer entry.runningBalance if available (since the ledger table row has the exact running balance at that point in time)
+    const rawRemaining = (entry.runningBalance !== undefined && entry.runningBalance !== null)
+      ? Number(entry.runningBalance)
+      : (serverReceipt?.remainingBalance !== undefined && serverReceipt?.remainingBalance !== null
+          ? Number(serverReceipt.remainingBalance)
+          : Number(entitySummary?.currentReceivable || entitySummary?.currentPayable || 0));
 
-    const rawPrevious = (serverReceipt?.previousBalance !== undefined && serverReceipt?.previousBalance !== null && Number(serverReceipt.previousBalance) !== 0)
-      ? Number(serverReceipt.previousBalance)
-      : (isCashIn ? rawRemaining + amt : rawRemaining - amt);
+    const rawPrevious = (entry.runningBalance !== undefined && entry.runningBalance !== null)
+      ? (isCashIn ? rawRemaining + amt : rawRemaining - amt)
+      : (serverReceipt?.previousBalance !== undefined && serverReceipt?.previousBalance !== null
+          ? Number(serverReceipt.previousBalance)
+          : (isCashIn ? rawRemaining + amt : rawRemaining - amt));
 
     const partyName =
       serverReceipt?.partyName ||
