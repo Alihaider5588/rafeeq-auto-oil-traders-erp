@@ -70,6 +70,7 @@ interface CartItem {
   focFree?: boolean;
   focNotes?: string;
   showFoc?: boolean;
+  showDelivery?: boolean;
   rateInfo?: {
     hasHistory: boolean;
     suggestedRate: number;
@@ -430,6 +431,7 @@ export const SalesmanPortal: React.FC = () => {
         focFree: true,
         focNotes: '',
         showFoc: false,
+        showDelivery: false,
         deliveryStatus: 'DELIVERED',
         deliveredQuantity: 1,
         pendingQuantity: 0,
@@ -2984,11 +2986,73 @@ export const SalesmanPortal: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Item Delivery Status & Partial Pending Split */}
+                    {/* Item Delivery Status & Partial Pending Split - Collapsible Toggle */}
                     {(() => {
                       const itemQty = parseFloat(String(item.quantity)) || 0;
                       const itemPendQty = item.pendingQuantity !== undefined ? (parseFloat(String(item.pendingQuantity)) || 0) : (item.deliveryStatus === 'PENDING_DELIVERY' ? itemQty : 0);
                       const itemDelivQty = item.deliveredQuantity !== undefined ? (parseFloat(String(item.deliveredQuantity)) || 0) : Math.max(0, itemQty - itemPendQty);
+
+                      if (!item.showDelivery && (!itemPendQty || itemPendQty <= 0)) {
+                        return (
+                          <div style={{ marginTop: '5px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...cart];
+                                updated[index] = { ...updated[index], showDelivery: true };
+                                setCart(updated);
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: '#f0fdf4',
+                                border: '1px dashed #86efac',
+                                borderRadius: '6px',
+                                padding: '3px 8px',
+                                fontSize: '0.73rem',
+                                fontWeight: 700,
+                                color: '#15803d',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Package size={12} color="#15803d" />
+                              + امانت / پینڈنگ ڈیلیوری (Pending Delivery)
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      if (!item.showDelivery && itemPendQty > 0) {
+                        return (
+                          <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...cart];
+                                updated[index] = { ...updated[index], showDelivery: true };
+                                setCart(updated);
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                backgroundColor: '#fef3c7',
+                                border: '1px solid #fde68a',
+                                borderRadius: '6px',
+                                padding: '3px 8px',
+                                fontSize: '0.73rem',
+                                fontWeight: 700,
+                                color: '#b45309',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Clock size={12} color="#b45309" />
+                              امانت / پینڈنگ فعال: {itemPendQty} {currentUnitSymbol} (تبدیل کریں)
+                            </button>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div style={{
@@ -3002,7 +3066,7 @@ export const SalesmanPortal: React.FC = () => {
                               <Package size={14} color="#0284c7" />
                               حوالگی و ترسیل سامان (Delivery Status):
                             </span>
-                            <div style={{ display: 'flex', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -3091,6 +3155,27 @@ export const SalesmanPortal: React.FC = () => {
                                 }}
                               >
                                 <Clock size={12} /> امانت / پینڈنگ (Pending)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...cart];
+                                  updated[index] = { ...updated[index], showDelivery: false };
+                                  setCart(updated);
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#94a3b8',
+                                  fontSize: '0.72rem',
+                                  cursor: 'pointer',
+                                  padding: '2px 6px',
+                                  fontWeight: 600,
+                                  marginLeft: '4px'
+                                }}
+                                title="Hide Delivery Options"
+                              >
+                                ▲ چھپائیں (Hide)
                               </button>
                             </div>
                           </div>
@@ -4094,18 +4179,36 @@ export const SalesmanPortal: React.FC = () => {
               }}>
                 {/* Company Header */}
                 <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px' }}>
-                  <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '0.5px' }}>
-                    {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
-                  </h2>
-                  <p style={{ margin: '1px 0', fontSize: '10px', fontWeight: 700 }}>
-                    Prop: {settings?.proprietorNames || 'M. Shafiq & Haji Muhammad Rafiq'}
-                  </p>
-                  <p style={{ margin: '1px 0', fontSize: '10px' }}>
-                    {settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara'}
-                  </p>
-                  <p style={{ margin: '1px 0', fontSize: '10px' }}>
-                    Ph: {settings?.phone || '0306-9258573 / 0327-7497457'}
-                  </p>
+                  {settings?.showCompanyNameOnPrint && (
+                    <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                      {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
+                    </h2>
+                  )}
+                  {settings?.showUrduNameOnPrint !== false && (
+                    <div style={{ fontSize: '13px', fontWeight: 800, margin: '2px 0' }}>
+                      {settings?.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز'}
+                    </div>
+                  )}
+                  {settings?.customReceiptHeader && (
+                    <div style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0', color: '#1e293b' }}>
+                      {settings.customReceiptHeader}
+                    </div>
+                  )}
+                  {settings?.proprietorNames && (
+                    <p style={{ margin: '1px 0', fontSize: '10px', fontWeight: 700 }}>
+                      Prop: {settings.proprietorNames}
+                    </p>
+                  )}
+                  {settings?.showAddressOnPrint !== false && (
+                    <p style={{ margin: '1px 0', fontSize: '10px' }}>
+                      {settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara'}
+                    </p>
+                  )}
+                  {settings?.showPhoneOnPrint !== false && (
+                    <p style={{ margin: '1px 0', fontSize: '10px' }}>
+                      Ph: {settings?.phone || '0306-9258573 / 0327-7497457'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Invoice Meta */}
@@ -4119,8 +4222,14 @@ export const SalesmanPortal: React.FC = () => {
                     <span><b>PHONE:</b> {completedSale.customer?.phone || '-'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                    <span><b>SALESMAN:</b> {completedSale.salesman?.fullName || 'Sales Portal'}</span>
-                    <span><b>MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                    {settings?.showSalesRepOnPrint !== false ? (
+                      <>
+                        <span><b>SALESMAN:</b> {completedSale.salesman?.fullName || 'Sales Portal'}</span>
+                        <span><b>MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                      </>
+                    ) : (
+                      <span><b>PAYMENT MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
                     <span><b>TYPE:</b> <b>{completedSale.saleType === 'COUNTER' ? 'COUNTER SALE (SHOP)' : 'VAN SALE (FIELD)'}</b></span>
@@ -4362,12 +4471,14 @@ export const SalesmanPortal: React.FC = () => {
                       </div>
 
                       {/* 2. PREVIOUS UDHAAR */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                        <span>PREVIOUS UDHAAR:</span>
-                        <span style={{ fontWeight: 600 }}>
-                          {isWalkIn || previousUdhar <= 0 ? 'Rs. 0' : `Rs. ${previousUdhar.toLocaleString()}`}
-                        </span>
-                      </div>
+                      {settings?.showPreviousDueOnPrint !== false && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                          <span>PREVIOUS UDHAAR:</span>
+                          <span style={{ fontWeight: 600 }}>
+                            {isWalkIn || previousUdhar <= 0 ? 'Rs. 0' : `Rs. ${previousUdhar.toLocaleString()}`}
+                          </span>
+                        </div>
+                      )}
 
                       {/* 3. GRAND TOTAL */}
                       <div style={{

@@ -119,6 +119,7 @@ export const LedgersPage: React.FC = () => {
   const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
   const [entitySummary, setEntitySummary] = useState<any>(null);
   const [dualLedgerData, setDualLedgerData] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -212,6 +213,9 @@ export const LedgersPage: React.FC = () => {
 
   useEffect(() => {
     loadTodaySummary();
+    api.get('/settings').then(res => {
+      if (res.data?.settings) setSettings(res.data.settings);
+    }).catch(() => {});
   }, []);
 
   const loadEntities = async () => {
@@ -3417,14 +3421,25 @@ export const LedgersPage: React.FC = () => {
                   alignItems: 'flex-start'
                 }}>
                   <div>
-                    <h1 style={{ fontSize: '20px', fontWeight: 900, margin: 0, letterSpacing: '0.5px' }}>
-                      RAFIQ AUTO & OIL TRADERS
-                    </h1>
-                    <div style={{ fontSize: '15px', fontWeight: 800, margin: '2px 0' }}>
-                      رفیق آٹو اینڈ آئل ٹریڈرز
-                    </div>
+                    {settings?.showCompanyNameOnPrint && (
+                      <h1 style={{ fontSize: '20px', fontWeight: 900, margin: 0, letterSpacing: '0.5px' }}>
+                        {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
+                      </h1>
+                    )}
+                    {settings?.showUrduNameOnPrint !== false && (
+                      <div style={{ fontSize: '15px', fontWeight: 800, margin: '2px 0' }}>
+                        {settings?.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز'}
+                      </div>
+                    )}
+                    {settings?.customReceiptHeader && (
+                      <div style={{ fontSize: '12px', fontWeight: 600, margin: '2px 0', color: '#1e293b' }}>
+                        {settings.customReceiptHeader}
+                      </div>
+                    )}
                     <div style={{ fontSize: '11px', color: '#333333' }}>
-                      54-Stop Near MCB Bank, Dipalpur Road, Okara | Ph: 0306-9258573, 0327-7497457
+                      {settings?.showAddressOnPrint !== false && (settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara')}
+                      {settings?.showAddressOnPrint !== false && settings?.showPhoneOnPrint !== false && ' | '}
+                      {settings?.showPhoneOnPrint !== false && `Ph: ${settings?.phone || '0306-9258573, 0327-7497457'}`}
                     </div>
                   </div>
 
@@ -3705,18 +3720,31 @@ export const LedgersPage: React.FC = () => {
               }}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '10px', marginBottom: '10px' }}>
-                  <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                    RAFIQ AUTO & OIL TRADERS
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, margin: '2px 0' }}>
-                    رفیق آٹو اینڈ آئل ٹریڈرز
-                  </div>
-                  <div style={{ fontSize: '10px', margin: '2px 0' }}>
-                    54-Stop Near MCB Bank, Dipalpur Road, Okara
-                  </div>
-                  <div style={{ fontSize: '10px' }}>
-                    Ph: 0306-9258573 | 0327-7497457
-                  </div>
+                  {settings?.showCompanyNameOnPrint && (
+                    <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                      {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
+                    </div>
+                  )}
+                  {settings?.showUrduNameOnPrint !== false && (
+                    <div style={{ fontSize: '13px', fontWeight: 700, margin: '2px 0' }}>
+                      {settings?.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز'}
+                    </div>
+                  )}
+                  {settings?.customReceiptHeader && (
+                    <div style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0', color: '#1e293b' }}>
+                      {settings.customReceiptHeader}
+                    </div>
+                  )}
+                  {settings?.showAddressOnPrint !== false && (
+                    <div style={{ fontSize: '10px', margin: '2px 0' }}>
+                      {settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara'}
+                    </div>
+                  )}
+                  {settings?.showPhoneOnPrint !== false && (
+                    <div style={{ fontSize: '10px' }}>
+                      Ph: {settings?.phone || '0306-9258573 | 0327-7497457'}
+                    </div>
+                  )}
                   <div style={{
                     marginTop: '8px',
                     display: 'inline-block',

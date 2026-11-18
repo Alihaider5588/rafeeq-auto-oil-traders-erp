@@ -713,6 +713,14 @@ model SystemSetting {
   showCompanyLogoOnPrint Boolean  @default(true)
   showTermsOnInvoice     Boolean  @default(true)
   invoiceFooterNote      String?  @default("Goods once sold will only be replaced within 3 days with original bill.")
+  showCompanyNameOnPrint Boolean  @default(false)
+  urduCompanyName        String?  @default("رفیق آٹو اینڈ آئل ٹریڈرز")
+  showUrduNameOnPrint    Boolean  @default(true)
+  showAddressOnPrint     Boolean  @default(true)
+  showPhoneOnPrint       Boolean  @default(true)
+  showPreviousDueOnPrint Boolean  @default(true)
+  showSalesRepOnPrint    Boolean  @default(true)
+  customReceiptHeader    String?  @default("")
 
   // 3. Taxes
   taxEnabled             Boolean  @default(false)

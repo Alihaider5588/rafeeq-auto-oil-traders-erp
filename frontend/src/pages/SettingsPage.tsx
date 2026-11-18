@@ -57,6 +57,14 @@ export const SettingsPage: React.FC = () => {
 
     printFormat: 'THERMAL_80MM',
     showCompanyLogoOnPrint: true,
+    showCompanyNameOnPrint: false,
+    urduCompanyName: 'رفیق آٹو اینڈ آئل ٹریڈرز',
+    showUrduNameOnPrint: true,
+    showAddressOnPrint: true,
+    showPhoneOnPrint: true,
+    showPreviousDueOnPrint: true,
+    showSalesRepOnPrint: true,
+    customReceiptHeader: '',
     showTermsOnInvoice: true,
     invoiceFooterNote: 'Goods once sold will only be replaced within 3 days with original bill.',
 
@@ -659,12 +667,217 @@ export const SettingsPage: React.FC = () => {
           {activeTab === 'PRINT' && (
             <div>
               <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '14px', marginBottom: '20px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>Thermal & Paper Receipt Configuration</h3>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>Thermal & Paper Receipt Configuration (رسید اور انوائس کی سیٹنگز)</h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-                  Fine-tune POS bill design for 80mm/58mm thermal printers and full A4 sheets.
+                  انوائس اور رسید سے اشیاء کو شامل یا ڈیلیٹ کریں (Show/Hide Header & Invoice Elements).
                 </p>
               </div>
 
+              {/* RECEIPT HEADER CUSTOMIZATION SECTION */}
+              <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', border: '1.5px solid #e2e8f0', padding: '18px', marginBottom: '22px' }}>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Receipt size={18} color="#2563eb" /> رسید ہیڈر کسٹمائزیشن (Invoice Header & Content Control)
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: '#64748b' }}>
+                  یہاں سے آپ رسید کے اوپر نام، پتہ، فون نمبر یا سابقہ ادھار کو اپنی مرضی سے آن یا آف (Remove / Add) کر سکتے ہیں۔
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+                  {/* 1. English Business Name */}
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.showCompanyNameOnPrint ?? false}
+                        onChange={(e) => setSettings({ ...settings, showCompanyNameOnPrint: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: settings.showCompanyNameOnPrint ? '#1e293b' : '#94a3b8' }}>
+                        رسید پر انگریزی نام دکھائیں (English Name)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={settings.companyName || ''}
+                      onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                      placeholder="e.g. RAFIQ AUTO & OIL TRADERS"
+                      disabled={!settings.showCompanyNameOnPrint}
+                      style={{ fontSize: '0.85rem', fontWeight: 600, opacity: settings.showCompanyNameOnPrint ? 1 : 0.5 }}
+                    />
+                    <small style={{ color: '#64748b', fontSize: '0.74rem' }}>اگر رسید سے نام ہٹانا ہو تو چیک باکس کو ان چیک کر دیں۔</small>
+                  </div>
+
+                  {/* 2. Urdu Business Name */}
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.showUrduNameOnPrint !== false}
+                        onChange={(e) => setSettings({ ...settings, showUrduNameOnPrint: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: settings.showUrduNameOnPrint !== false ? '#1e293b' : '#94a3b8' }}>
+                        رسید پر اردو نام دکھائیں (Urdu Name)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={settings.urduCompanyName || ''}
+                      onChange={(e) => setSettings({ ...settings, urduCompanyName: e.target.value })}
+                      placeholder="مثلاً: رفیق آٹو اینڈ آئل ٹریڈرز"
+                      disabled={settings.showUrduNameOnPrint === false}
+                      style={{ fontSize: '0.85rem', fontWeight: 600, opacity: settings.showUrduNameOnPrint !== false ? 1 : 0.5 }}
+                    />
+                  </div>
+
+                  {/* 3. Address */}
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.showAddressOnPrint !== false}
+                        onChange={(e) => setSettings({ ...settings, showAddressOnPrint: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: settings.showAddressOnPrint !== false ? '#1e293b' : '#94a3b8' }}>
+                        رسید پر پتہ دکھائیں (Address)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={settings.address || ''}
+                      onChange={(e) => setSettings({ ...settings, address: e.target.value })}
+                      placeholder="54-Stop Near MCB Bank, Dipalpur Road, Okara"
+                      disabled={settings.showAddressOnPrint === false}
+                      style={{ fontSize: '0.82rem', opacity: settings.showAddressOnPrint !== false ? 1 : 0.5 }}
+                    />
+                  </div>
+
+                  {/* 4. Phone */}
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.showPhoneOnPrint !== false}
+                        onChange={(e) => setSettings({ ...settings, showPhoneOnPrint: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: settings.showPhoneOnPrint !== false ? '#1e293b' : '#94a3b8' }}>
+                        رسید پر فون نمبر دکھائیں (Phone Numbers)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={settings.phone || ''}
+                      onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
+                      placeholder="0306-9258573 | 0327-7497457"
+                      disabled={settings.showPhoneOnPrint === false}
+                      style={{ fontSize: '0.82rem', opacity: settings.showPhoneOnPrint !== false ? 1 : 0.5 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Additional Toggles */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.showPreviousDueOnPrint !== false}
+                        onChange={(e) => setSettings({ ...settings, showPreviousDueOnPrint: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <div>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700 }}>سابقہ بقایا رقم دکھائیں (Previous Due)</div>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>کسٹمر کا پرانا ادھار بل پر پرنٹ ہو گا۔</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={settings.showSalesRepOnPrint !== false}
+                        onChange={(e) => setSettings({ ...settings, showSalesRepOnPrint: e.target.checked })}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <div>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700 }}>سیلزمین / کاؤنٹر REP دکھائیں</div>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>بلنگ کرنے والے آپریٹر / سیلزمین کا نام۔</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Custom Receipt Slogan / Tagline */}
+                <div style={{ marginTop: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem' }}>اختیاری اضافی سب ہیڈر / میسج (Optional Custom Header Tagline)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={settings.customReceiptHeader || ''}
+                    onChange={(e) => setSettings({ ...settings, customReceiptHeader: e.target.value })}
+                    placeholder="مثلاً: ہول سیلر و ڈسٹری بیوٹر آف کوالٹی لبریکنٹس"
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* LIVE 80MM RECEIPT PREVIEW */}
+              <div style={{ marginBottom: '22px', padding: '16px', backgroundColor: '#f1f5f9', borderRadius: '12px', border: '1.5px dashed #94a3b8' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#475569', marginBottom: '10px', textTransform: 'uppercase' }}>
+                  👁️ لائیو رسید ہیڈر پریویو (Live 80mm Header Preview):
+                </div>
+                <div style={{
+                  maxWidth: '320px',
+                  margin: '0 auto',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  padding: '12px 14px',
+                  textAlign: 'center',
+                  fontFamily: 'Courier New, Courier, monospace',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}>
+                  {settings.showCompanyNameOnPrint && (settings.companyName || '').trim() && (
+                    <div style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}>
+                      {settings.companyName}
+                    </div>
+                  )}
+                  {settings.showUrduNameOnPrint !== false && (settings.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز').trim() && (
+                    <div style={{ fontSize: '13px', fontWeight: 800, margin: '2px 0' }}>
+                      {settings.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز'}
+                    </div>
+                  )}
+                  {settings.customReceiptHeader && (
+                    <div style={{ fontSize: '10px', fontWeight: 600, color: '#334155', margin: '2px 0' }}>
+                      {settings.customReceiptHeader}
+                    </div>
+                  )}
+                  {settings.showAddressOnPrint !== false && (settings.address || '').trim() && (
+                    <div style={{ fontSize: '9px', color: '#475569' }}>
+                      {settings.address}
+                    </div>
+                  )}
+                  {settings.showPhoneOnPrint !== false && (settings.phone || '').trim() && (
+                    <div style={{ fontSize: '9.5px', color: '#475569' }}>
+                      Ph: {settings.phone}
+                    </div>
+                  )}
+                  <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }} />
+                  <div style={{ fontSize: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>INV #: ROT-INV-1001</span>
+                    <span>18/11/2026</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* FORMAT & PREFIX */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
                 <div className="form-group">
                   <label className="form-label" style={{ fontWeight: 700 }}>Default Bill Print Format</label>
@@ -691,17 +904,8 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* FOOTER & POLICY */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.showCompanyLogoOnPrint}
-                    onChange={(e) => setSettings({ ...settings, showCompanyLogoOnPrint: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Print Rafiq Auto Monogram / Logo on top of Receipt</span>
-                </label>
-
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
                   <input
                     type="checkbox"

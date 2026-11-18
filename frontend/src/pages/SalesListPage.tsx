@@ -1596,18 +1596,31 @@ export const SalesListPage: React.FC = () => {
             }}>
               {/* Header */}
               <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '10px', marginBottom: '10px' }}>
-                <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                  RAFIQ AUTO & OIL TRADERS
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, margin: '2px 0' }}>
-                  رفیق آٹو اینڈ آئل ٹریڈرز
-                </div>
-                <div style={{ fontSize: '10px', margin: '2px 0' }}>
-                  54-Stop Near MCB Bank, Dipalpur Road, Okara
-                </div>
-                <div style={{ fontSize: '10px' }}>
-                  Ph: 0306-9258573 | 0327-7497457
-                </div>
+                {settings?.showCompanyNameOnPrint && (
+                  <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                    {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
+                  </div>
+                )}
+                {settings?.showUrduNameOnPrint !== false && (
+                  <div style={{ fontSize: '13px', fontWeight: 700, margin: '2px 0' }}>
+                    {settings?.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز'}
+                  </div>
+                )}
+                {settings?.customReceiptHeader && (
+                  <div style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0', color: '#1e293b' }}>
+                    {settings.customReceiptHeader}
+                  </div>
+                )}
+                {settings?.showAddressOnPrint !== false && (
+                  <div style={{ fontSize: '10px', margin: '2px 0' }}>
+                    {settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara'}
+                  </div>
+                )}
+                {settings?.showPhoneOnPrint !== false && (
+                  <div style={{ fontSize: '10px' }}>
+                    Ph: {settings?.phone || '0306-9258573 | 0327-7497457'}
+                  </div>
+                )}
               </div>
 
               {/* Bill Details */}
@@ -1621,8 +1634,14 @@ export const SalesListPage: React.FC = () => {
                   <span><b>PH:</b> {selectedSale.customer?.phone || 'N/A'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                  <span><b>REP:</b> {selectedSale.salesman?.fullName || 'Desk POS'}</span>
-                  <span><b>MODE:</b> {selectedSale.paymentMethod}</span>
+                  {settings?.showSalesRepOnPrint !== false ? (
+                    <>
+                      <span><b>REP:</b> {selectedSale.salesman?.fullName || 'Desk POS'}</span>
+                      <span><b>MODE:</b> {selectedSale.paymentMethod}</span>
+                    </>
+                  ) : (
+                    <span><b>PAYMENT MODE:</b> {selectedSale.paymentMethod}</span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
                   <span><b>TYPE:</b> <b>{selectedSale.saleType === 'COUNTER' ? 'COUNTER SALE (SHOP)' : 'VAN SALE (FIELD)'}</b></span>
@@ -1851,12 +1870,14 @@ export const SalesListPage: React.FC = () => {
                     </div>
 
                     {/* 2. PREVIOUS UDHAAR */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                      <span>PREVIOUS UDHAAR:</span>
-                      <span style={{ fontWeight: 600 }}>
-                        {isWalkIn || previousUdhar <= 0 ? 'Rs. 0' : `Rs. ${previousUdhar.toLocaleString()}`}
-                      </span>
-                    </div>
+                    {settings?.showPreviousDueOnPrint !== false && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                        <span>PREVIOUS UDHAAR:</span>
+                        <span style={{ fontWeight: 600 }}>
+                          {isWalkIn || previousUdhar <= 0 ? 'Rs. 0' : `Rs. ${previousUdhar.toLocaleString()}`}
+                        </span>
+                      </div>
+                    )}
 
                     {/* 3. GRAND TOTAL */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '13px', borderTop: '1px solid #000000', borderBottom: '1px solid #000000', padding: '4px 0', margin: '4px 0' }}>

@@ -973,6 +973,7 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
               paymentMethod: data.paymentMethod,
               reference: invoiceNumber,
               notes: `POS Received on sale #${invoiceNumber}`,
+              paymentDate: sale.saleDate,
               recordedById: userId,
             },
           });
@@ -1124,7 +1125,7 @@ export const approveSale = async (req: AuthenticatedRequest, res: Response): Pro
       await tx.customerLedger.create({
         data: {
           customerId: sale.customerId,
-          date: new Date(),
+          date: sale.saleDate,
           transactionType: TransactionType.SALE_INVOICE,
           referenceId: sale.id,
           description: `Approved Sale Inv #${sale.invoiceNumber}`,
@@ -1138,13 +1139,26 @@ export const approveSale = async (req: AuthenticatedRequest, res: Response): Pro
         await tx.customerLedger.create({
           data: {
             customerId: sale.customerId,
-            date: new Date(),
+            date: sale.saleDate,
             transactionType: TransactionType.CUSTOMER_PAYMENT,
             referenceId: sale.id,
             description: `Order payment for #${sale.invoiceNumber}`,
             debit: new Prisma.Decimal(0),
             credit: sale.receivedAmount,
             runningBalance: new Prisma.Decimal(newRec),
+          },
+        });
+
+        await tx.payment.create({
+          data: {
+            receiptNumber: `REC-ORD-${Date.now().toString().slice(-8)}`,
+            customerId: sale.customerId,
+            amount: sale.receivedAmount,
+            paymentMethod: sale.paymentMethod || 'CASH',
+            reference: sale.invoiceNumber,
+            notes: `Payment for approved order #${sale.invoiceNumber}`,
+            paymentDate: sale.saleDate,
+            recordedById: req.user?.id || sale.createdById,
           },
         });
       }
