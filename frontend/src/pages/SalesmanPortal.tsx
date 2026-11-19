@@ -42,7 +42,10 @@ export interface PosDraftOrder {
   customer: Customer | null;
   cart: CartItem[];
   receivedPayment: number | string;
-  paymentMethod: 'CASH' | 'ONLINE' | 'CHEQUE';
+  paymentMethod: 'CASH' | 'ONLINE' | 'CHEQUE' | 'SPLIT';
+  splitCashAmount?: string;
+  splitBankAmount?: string;
+  splitBankRef?: string;
   isCounterSale?: boolean;
   notes: string;
   totalBill: number;
@@ -112,7 +115,10 @@ export const SalesmanPortal: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [receivedPayment, setReceivedPayment] = useState<number | string>(0);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'CHEQUE'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'CHEQUE' | 'SPLIT'>('CASH');
+  const [splitCashAmount, setSplitCashAmount] = useState<string>('');
+  const [splitBankAmount, setSplitBankAmount] = useState<string>('');
+  const [splitBankRef, setSplitBankRef] = useState<string>('');
   const [isCounterSale, setIsCounterSale] = useState<boolean>(false);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -220,6 +226,9 @@ export const SalesmanPortal: React.FC = () => {
           if (backup.customer) setSelectedCustomer(backup.customer);
           if (backup.receivedPayment !== undefined) setReceivedPayment(backup.receivedPayment);
           if (backup.paymentMethod) setPaymentMethod(backup.paymentMethod);
+          if (backup.splitCashAmount !== undefined) setSplitCashAmount(backup.splitCashAmount);
+          if (backup.splitBankAmount !== undefined) setSplitBankAmount(backup.splitBankAmount);
+          if (backup.splitBankRef !== undefined) setSplitBankRef(backup.splitBankRef);
           if (backup.isCounterSale !== undefined) setIsCounterSale(backup.isCounterSale);
           if (backup.notes) setNotes(backup.notes);
           if (backup.activeDraftId) setActiveDraftId(backup.activeDraftId);
@@ -239,6 +248,9 @@ export const SalesmanPortal: React.FC = () => {
           customer: selectedCustomer,
           receivedPayment,
           paymentMethod,
+          splitCashAmount,
+          splitBankAmount,
+          splitBankRef,
           isCounterSale,
           notes,
           activeDraftId,
@@ -250,7 +262,7 @@ export const SalesmanPortal: React.FC = () => {
         localStorage.removeItem('rot_pos_active_cart_backup');
       } catch (e) {}
     }
-  }, [cart, selectedCustomer, receivedPayment, paymentMethod, isCounterSale, notes, activeDraftId]);
+  }, [cart, selectedCustomer, receivedPayment, paymentMethod, splitCashAmount, splitBankAmount, splitBankRef, isCounterSale, notes, activeDraftId]);
 
   const sanitizeCustomerList = (list: any[]): Customer[] => {
     if (!Array.isArray(list)) return [];
@@ -620,6 +632,9 @@ export const SalesmanPortal: React.FC = () => {
       cart: [...cart],
       receivedPayment,
       paymentMethod,
+      splitCashAmount,
+      splitBankAmount,
+      splitBankRef,
       isCounterSale,
       notes,
       totalBill,
@@ -638,6 +653,10 @@ export const SalesmanPortal: React.FC = () => {
     setCart([]);
     setSelectedCustomer(null);
     setReceivedPayment(0);
+    setPaymentMethod('CASH');
+    setSplitCashAmount('');
+    setSplitBankAmount('');
+    setSplitBankRef('');
     setIsCounterSale(false);
     setNotes('');
     setActiveDraftId(null);
@@ -657,6 +676,9 @@ export const SalesmanPortal: React.FC = () => {
     setCart(draft.cart || []);
     setReceivedPayment(draft.receivedPayment || 0);
     setPaymentMethod(draft.paymentMethod || 'CASH');
+    setSplitCashAmount(draft.splitCashAmount || '');
+    setSplitBankAmount(draft.splitBankAmount || '');
+    setSplitBankRef(draft.splitBankRef || '');
     setIsCounterSale(Boolean(draft.isCounterSale));
     setNotes(draft.notes || '');
     setActiveDraftId(draft.id);
@@ -960,7 +982,12 @@ export const SalesmanPortal: React.FC = () => {
         return pendQ > 0;
       });
 
-      const payload = {
+      const isSplit = paymentMethod === 'SPLIT';
+      const sCash = isSplit ? (parseFloat(splitCashAmount) || 0) : 0;
+      const sBank = isSplit ? (parseFloat(splitBankAmount) || 0) : 0;
+      const finalReceived = isSplit ? (sCash + sBank) : (parseFloat(String(receivedPayment)) || 0);
+
+      const payload: any = {
         customerId: targetCustomerId,
         saleType: isCounterSale ? 'COUNTER' : 'VAN',
         saleDate: posSaleDate ? new Date(posSaleDate).toISOString() : new Date().toISOString(),
@@ -989,8 +1016,11 @@ export const SalesmanPortal: React.FC = () => {
             focNotes: it.focNotes || '',
           };
         }),
-        receivedAmount: parseFloat(String(receivedPayment)) || 0,
+        receivedAmount: finalReceived,
         paymentMethod,
+        splitCashAmount: isSplit ? sCash : undefined,
+        splitBankAmount: isSplit ? sBank : undefined,
+        bankRef: isSplit ? splitBankRef.trim() : undefined,
         notes: appliedDiscountSummary ? `${notes ? `${notes} | ` : ''}[DISCOUNT: ${appliedDiscountSummary}]` : notes,
       };
 
@@ -1094,6 +1124,10 @@ export const SalesmanPortal: React.FC = () => {
 
         setCart([]);
         setReceivedPayment(0);
+        setPaymentMethod('CASH');
+        setSplitCashAmount('');
+        setSplitBankAmount('');
+        setSplitBankRef('');
         setIsCounterSale(false);
         setNotes('');
         setSelectedCustomer(null);
@@ -3379,14 +3413,22 @@ export const SalesmanPortal: React.FC = () => {
               {/* Payment Input Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px', marginTop: '10px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Payment Received / Wasool (Rs.) *</label>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Payment Received / Wasool (Rs.) *</span>
+                    {paymentMethod === 'SPLIT' && (
+                      <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 800 }}>مخلوط کیش + بینک</span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     step="any"
                     min="0"
                     className="form-control"
                     placeholder="0"
-                    value={receivedPayment === 0 || receivedPayment === '0' ? '' : receivedPayment}
+                    disabled={paymentMethod === 'SPLIT'}
+                    value={paymentMethod === 'SPLIT' 
+                      ? (((parseFloat(splitCashAmount) || 0) + (parseFloat(splitBankAmount) || 0)) || '')
+                      : (receivedPayment === 0 || receivedPayment === '0' ? '' : receivedPayment)}
                     onChange={(e) => {
                       if (fieldErrors.receivedPayment) {
                         setFieldErrors(prev => ({ ...prev, receivedPayment: '' }));
@@ -3397,6 +3439,7 @@ export const SalesmanPortal: React.FC = () => {
                       fontSize: '1.15rem',
                       fontWeight: 800,
                       color: '#059669',
+                      backgroundColor: paymentMethod === 'SPLIT' ? '#f0fdf4' : '#ffffff',
                       ...(fieldErrors.receivedPayment ? { border: '2px solid #ef4444', backgroundColor: '#fef2f2' } : {})
                     }}
                   />
@@ -3404,18 +3447,155 @@ export const SalesmanPortal: React.FC = () => {
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Payment Mode</label>
+                  <label className="form-label">طریقہ ادائیگی (Payment Mode)</label>
                   <select
                     className="form-control"
                     value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as any)}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setPaymentMethod(val);
+                      if (val === 'SPLIT') {
+                        const total = parseFloat(String(receivedPayment)) || totalBill;
+                        if (!splitCashAmount && !splitBankAmount) {
+                          setSplitCashAmount('');
+                          setSplitBankAmount(String(total));
+                        }
+                      }
+                    }}
+                    style={{ fontWeight: 700 }}
                   >
-                    <option value="CASH">Cash Drawer / Counter</option>
-                    <option value="ONLINE">Bank / Online Transfer</option>
-                    <option value="CHEQUE">Cheque</option>
+                    <option value="CASH">💵 Cash Drawer / Counter (نقد کاؤنٹر)</option>
+                    <option value="ONLINE">🏦 Bank / Online Transfer (بینک / آن لائن)</option>
+                    <option value="CHEQUE">📑 Cheque (چیک)</option>
+                    <option value="SPLIT">🔀 مخلوط ادائیگی (Split: Cash + Bank)</option>
                   </select>
                 </div>
               </div>
+
+              {/* SPLIT PAYMENT BREAKDOWN CARD */}
+              {paymentMethod === 'SPLIT' && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '14px',
+                  borderRadius: '10px',
+                  backgroundColor: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Layers size={15} color="#16a34a" /> مخلوط ادائیگی (Split Cash & Bank Breakdown)
+                    </span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#15803d', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>
+                      کل وصولی: Rs. {((parseFloat(splitCashAmount) || 0) + (parseFloat(splitBankAmount) || 0)).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                    {/* Cash Portion */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#15803d', marginBottom: '4px' }}>
+                        💵 نقد رقم (Cash in Hand) *
+                      </label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        placeholder="0"
+                        value={splitCashAmount}
+                        onChange={(e) => {
+                          const cVal = e.target.value;
+                          setSplitCashAmount(cVal);
+                          const cNum = parseFloat(cVal) || 0;
+                          const bNum = parseFloat(splitBankAmount) || 0;
+                          setReceivedPayment(cNum + bNum);
+                        }}
+                        style={{ fontWeight: 800, color: '#15803d', backgroundColor: '#ffffff', fontSize: '1rem' }}
+                      />
+                    </div>
+
+                    {/* Bank Portion */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', marginBottom: '4px' }}>
+                        🏦 بینک / آن لائن رقم (Online / Bank) *
+                      </label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        placeholder="0"
+                        value={splitBankAmount}
+                        onChange={(e) => {
+                          const bVal = e.target.value;
+                          setSplitBankAmount(bVal);
+                          const bNum = parseFloat(bVal) || 0;
+                          const cNum = parseFloat(splitCashAmount) || 0;
+                          setReceivedPayment(cNum + bNum);
+                        }}
+                        style={{ fontWeight: 800, color: '#0284c7', backgroundColor: '#ffffff', fontSize: '1rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bank Reference */}
+                  <div style={{ marginTop: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                      📝 بینک کا نام / ٹرانزیکشن ID (Bank Name / Ref)
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="مثلاً: Meezan Bank, HBL, JazzCash, Trx #12345"
+                      value={splitBankRef}
+                      onChange={(e) => setSplitBankRef(e.target.value)}
+                      style={{ fontSize: '0.85rem', backgroundColor: '#ffffff' }}
+                    />
+                  </div>
+
+                  {/* Quick Auto-Fill Helpers */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cash = parseFloat(splitCashAmount) || 0;
+                        const remToBank = Math.max(0, totalBill - cash);
+                        setSplitBankAmount(String(remToBank));
+                        setReceivedPayment(cash + remToBank);
+                      }}
+                      style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #93c5fd',
+                        backgroundColor: '#eff6ff',
+                        color: '#1d4ed8',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⚡ باقی رقم بینک میں ڈالیں (Remaining to Bank)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const bank = parseFloat(splitBankAmount) || 0;
+                        const remToCash = Math.max(0, totalBill - bank);
+                        setSplitCashAmount(String(remToCash));
+                        setReceivedPayment(bank + remToCash);
+                      }}
+                      style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #86efac',
+                        backgroundColor: '#f0fdf4',
+                        color: '#15803d',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⚡ باقی رقم نقد میں ڈالیں (Remaining to Cash)
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* SALE TYPE CHECK OPTION: Checkin = Counter Sale (Shop), Checkout/Unchecked = Van Sale */}
               <div 
@@ -4150,6 +4330,17 @@ export const SalesmanPortal: React.FC = () => {
             <div style={{ padding: '20px', overflowY: 'auto', backgroundColor: '#f8fafc' }}>
               <style>{`
                 @media print {
+                  @page {
+                    margin: 0mm !important;
+                    size: auto;
+                  }
+                  html, body {
+                    margin: 0mm !important;
+                    padding: 0mm !important;
+                    background: #ffffff !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                  }
                   body * { visibility: hidden !important; }
                   #salesman-receipt-container, #salesman-receipt-container * { visibility: visible !important; }
                   #salesman-receipt-container {
@@ -4157,9 +4348,9 @@ export const SalesmanPortal: React.FC = () => {
                     left: 0 !important;
                     top: 0 !important;
                     width: 100% !important;
-                    max-width: 80mm !important;
+                    max-width: 78mm !important;
                     margin: 0 !important;
-                    padding: 0 !important;
+                    padding: 0mm 2mm 0mm 2mm !important;
                     box-shadow: none !important;
                     border: none !important;
                     color: #000000 !important;
@@ -4167,9 +4358,9 @@ export const SalesmanPortal: React.FC = () => {
                 }
               `}</style>
 
-              <div id="salesman-receipt-container" style={{
+              <div id="salesman-receipt-container" className="printable-area thermal-receipt" style={{
                 backgroundColor: '#ffffff',
-                padding: '16px',
+                padding: '12px',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
@@ -4178,7 +4369,7 @@ export const SalesmanPortal: React.FC = () => {
                 fontSize: '11px'
               }}>
                 {/* Company Header */}
-                <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '8px', marginBottom: '8px' }}>
+                <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingTop: '0px', paddingBottom: '6px', marginBottom: '6px' }}>
                   {settings?.showCompanyNameOnPrint && (
                     <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
@@ -4225,10 +4416,10 @@ export const SalesmanPortal: React.FC = () => {
                     {settings?.showSalesRepOnPrint !== false ? (
                       <>
                         <span><b>SALESMAN:</b> {completedSale.salesman?.fullName || 'Sales Portal'}</span>
-                        <span><b>MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                        <span><b>MODE:</b> <b>{completedSale.paymentMethod === 'SPLIT' ? 'SPLIT (CASH+BANK)' : (completedSale.paymentMethod || 'CASH')}</b></span>
                       </>
                     ) : (
-                      <span><b>PAYMENT MODE:</b> {completedSale.paymentMethod || 'CASH'}</span>
+                      <span><b>PAYMENT MODE:</b> <b>{completedSale.paymentMethod === 'SPLIT' ? 'SPLIT (CASH+BANK)' : (completedSale.paymentMethod || 'CASH')}</b></span>
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
@@ -4500,6 +4691,37 @@ export const SalesmanPortal: React.FC = () => {
                         <span>PAID AMOUNT:</span>
                         <span style={{ fontWeight: 700 }}>Rs. {paidAmount.toLocaleString()}</span>
                       </div>
+                      {(() => {
+                        const splitData = extractJsonTag(completedSale.notes, 'SPLIT_PAYMENT');
+                        if (splitData && (Number(splitData.cash) > 0 || Number(splitData.bank) > 0)) {
+                          return (
+                            <div style={{
+                              margin: '2px 0 3px 0',
+                              padding: '2px 4px',
+                              backgroundColor: '#f8fafc',
+                              border: '1px dashed #94a3b8',
+                              borderRadius: '3px',
+                              fontSize: '9px',
+                              lineHeight: '1.25'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>• Cash (نقد):</span>
+                                <span style={{ fontWeight: 700 }}>Rs. {Number(splitData.cash || 0).toLocaleString()}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>• Bank (بینک / آن لائن):</span>
+                                <span style={{ fontWeight: 700 }}>Rs. {Number(splitData.bank || 0).toLocaleString()}</span>
+                              </div>
+                              {splitData.bankRef && (
+                                <div style={{ fontSize: '8.5px', color: '#475569', marginTop: '1px' }}>
+                                  Ref: {splitData.bankRef}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       {/* 5. REMAINING BALANCE */}
                       <div style={{
@@ -4689,16 +4911,16 @@ export const SalesmanPortal: React.FC = () => {
                 })()}
 
                 {/* Footer Barcode / Receipt Message */}
-                <div style={{ textAlign: 'center', fontSize: '10px' }}>
-                  <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '6px 0 4px 0' }}>
+                <div style={{ textAlign: 'center', fontSize: '10px', paddingBottom: '0px', marginBottom: '0px' }}>
+                  <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '4px 0 2px 0' }}>
                     * {completedSale.invoiceNumber} *
                   </div>
                   {settings?.showTermsOnInvoice !== false && (
-                    <p style={{ margin: '3px 0', fontSize: '9px', lineHeight: '1.3' }}>
+                    <p style={{ margin: '2px 0', fontSize: '9px', lineHeight: '1.25' }}>
                       {settings?.invoiceFooterNote || 'Goods once sold will only be replaced within 3 days with original bill.'}
                     </p>
                   )}
-                  <div style={{ margin: '6px 0 0 0', paddingTop: '6px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a' }}>
+                  <div style={{ margin: '4px 0 0 0', paddingTop: '4px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a', paddingBottom: '0px' }}>
                     Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000000', fontWeight: 900, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000000', fontWeight: 900, textDecoration: 'none' }}>03147816393</a>
                   </div>
                 </div>

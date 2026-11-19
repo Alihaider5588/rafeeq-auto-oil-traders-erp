@@ -109,6 +109,9 @@ const saleSchema = z.object({
   discountPercent: z.number().min(0).max(100).default(0).optional(),
   receivedAmount: z.number().min(0).default(0),
   paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
+  splitCashAmount: z.number().min(0).optional(),
+  splitBankAmount: z.number().min(0).optional(),
+  bankRef: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   clientReferenceId: z.string().optional(), // Idempotency key from salesman mobile
   deliveryStatus: z.enum(['DELIVERED', 'PENDING_DELIVERY']).default('DELIVERED').optional(),
@@ -780,6 +783,16 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
     if (hasPendingDelivery) {
       notesStr = `[DELIVERY_META:${JSON.stringify(deliveryMeta)}] ${notesStr}`.trim();
     }
+
+    const isSplit = data.paymentMethod === PaymentMethod.SPLIT;
+    const splitCash = isSplit ? Number(data.splitCashAmount || 0) : 0;
+    const splitBank = isSplit ? Number(data.splitBankAmount || 0) : 0;
+    const splitBankRef = isSplit ? (data.bankRef?.trim() || '') : '';
+
+    if (isSplit && (splitCash > 0 || splitBank > 0)) {
+      const splitMeta = { cash: splitCash, bank: splitBank, bankRef: splitBankRef };
+      notesStr = `[SPLIT_PAYMENT:${JSON.stringify(splitMeta)}] ${notesStr}`.trim();
+    }
     finalNotes = notesStr.trim() ? notesStr.trim() : null;
 
     const result = await prisma.$transaction(async (tx) => {
@@ -952,31 +965,77 @@ export const createSale = async (req: AuthenticatedRequest, res: Response): Prom
 
         // If payment received at counter:
         if (data.receivedAmount > 0) {
-          await tx.customerLedger.create({
-            data: {
-              customerId: customer.id,
-              date: sale.saleDate,
-              transactionType: TransactionType.CUSTOMER_PAYMENT,
-              referenceId: sale.id,
-              description: `Payment for Inv #${invoiceNumber} (${data.paymentMethod})`,
-              debit: new Prisma.Decimal(0),
-              credit: new Prisma.Decimal(data.receivedAmount),
-              runningBalance: new Prisma.Decimal(newReceivable),
-            },
-          });
+          if (isSplit && (splitCash > 0 || splitBank > 0)) {
+            const splitDesc = `Payment for Inv #${invoiceNumber} (SPLIT: Cash Rs. ${splitCash.toLocaleString()} + Bank Rs. ${splitBank.toLocaleString()}${splitBankRef ? ` [${splitBankRef}]` : ''})`;
+            await tx.customerLedger.create({
+              data: {
+                customerId: customer.id,
+                date: sale.saleDate,
+                transactionType: TransactionType.CUSTOMER_PAYMENT,
+                referenceId: sale.id,
+                description: splitDesc,
+                debit: new Prisma.Decimal(0),
+                credit: new Prisma.Decimal(data.receivedAmount),
+                runningBalance: new Prisma.Decimal(newReceivable),
+              },
+            });
 
-          await tx.payment.create({
-            data: {
-              receiptNumber: `REC-POS-${Date.now().toString().slice(-8)}`,
-              customerId: customer.id,
-              amount: new Prisma.Decimal(data.receivedAmount),
-              paymentMethod: data.paymentMethod,
-              reference: invoiceNumber,
-              notes: `POS Received on sale #${invoiceNumber}`,
-              paymentDate: sale.saleDate,
-              recordedById: userId,
-            },
-          });
+            if (splitCash > 0) {
+              await tx.payment.create({
+                data: {
+                  receiptNumber: `REC-POS-${Date.now().toString().slice(-7)}-C`,
+                  customerId: customer.id,
+                  amount: new Prisma.Decimal(splitCash),
+                  paymentMethod: 'CASH',
+                  reference: invoiceNumber,
+                  notes: `POS Split Payment (Cash portion) on sale #${invoiceNumber}`,
+                  paymentDate: sale.saleDate,
+                  recordedById: userId,
+                },
+              });
+            }
+
+            if (splitBank > 0) {
+              await tx.payment.create({
+                data: {
+                  receiptNumber: `REC-POS-${Date.now().toString().slice(-7)}-B`,
+                  customerId: customer.id,
+                  amount: new Prisma.Decimal(splitBank),
+                  paymentMethod: 'ONLINE',
+                  reference: invoiceNumber,
+                  notes: `POS Split Payment (Bank portion) on sale #${invoiceNumber}${splitBankRef ? ` [${splitBankRef}]` : ''}`,
+                  paymentDate: sale.saleDate,
+                  recordedById: userId,
+                },
+              });
+            }
+          } else {
+            await tx.customerLedger.create({
+              data: {
+                customerId: customer.id,
+                date: sale.saleDate,
+                transactionType: TransactionType.CUSTOMER_PAYMENT,
+                referenceId: sale.id,
+                description: `Payment for Inv #${invoiceNumber} (${data.paymentMethod})`,
+                debit: new Prisma.Decimal(0),
+                credit: new Prisma.Decimal(data.receivedAmount),
+                runningBalance: new Prisma.Decimal(newReceivable),
+              },
+            });
+
+            await tx.payment.create({
+              data: {
+                receiptNumber: `REC-POS-${Date.now().toString().slice(-8)}`,
+                customerId: customer.id,
+                amount: new Prisma.Decimal(data.receivedAmount),
+                paymentMethod: data.paymentMethod,
+                reference: invoiceNumber,
+                notes: `POS Received on sale #${invoiceNumber}`,
+                paymentDate: sale.saleDate,
+                recordedById: userId,
+              },
+            });
+          }
         }
       }
 
@@ -1136,31 +1195,83 @@ export const approveSale = async (req: AuthenticatedRequest, res: Response): Pro
       });
 
       if (Number(sale.receivedAmount) > 0) {
-        await tx.customerLedger.create({
-          data: {
-            customerId: sale.customerId,
-            date: sale.saleDate,
-            transactionType: TransactionType.CUSTOMER_PAYMENT,
-            referenceId: sale.id,
-            description: `Order payment for #${sale.invoiceNumber}`,
-            debit: new Prisma.Decimal(0),
-            credit: sale.receivedAmount,
-            runningBalance: new Prisma.Decimal(newRec),
-          },
-        });
+        const splitMeta = extractJsonTag(sale.notes, 'SPLIT_PAYMENT');
+        const isSplit = sale.paymentMethod === 'SPLIT' || Boolean(splitMeta);
+        const splitCash = isSplit && splitMeta ? Number(splitMeta.cash || 0) : 0;
+        const splitBank = isSplit && splitMeta ? Number(splitMeta.bank || 0) : 0;
+        const splitBankRef = isSplit && splitMeta ? (splitMeta.bankRef || '') : '';
 
-        await tx.payment.create({
-          data: {
-            receiptNumber: `REC-ORD-${Date.now().toString().slice(-8)}`,
-            customerId: sale.customerId,
-            amount: sale.receivedAmount,
-            paymentMethod: sale.paymentMethod || 'CASH',
-            reference: sale.invoiceNumber,
-            notes: `Payment for approved order #${sale.invoiceNumber}`,
-            paymentDate: sale.saleDate,
-            recordedById: req.user?.id || sale.createdById,
-          },
-        });
+        if (isSplit && (splitCash > 0 || splitBank > 0)) {
+          const splitDesc = `Order payment for #${sale.invoiceNumber} (SPLIT: Cash Rs. ${splitCash.toLocaleString()} + Bank Rs. ${splitBank.toLocaleString()}${splitBankRef ? ` [${splitBankRef}]` : ''})`;
+          await tx.customerLedger.create({
+            data: {
+              customerId: sale.customerId,
+              date: sale.saleDate,
+              transactionType: TransactionType.CUSTOMER_PAYMENT,
+              referenceId: sale.id,
+              description: splitDesc,
+              debit: new Prisma.Decimal(0),
+              credit: sale.receivedAmount,
+              runningBalance: new Prisma.Decimal(newRec),
+            },
+          });
+
+          if (splitCash > 0) {
+            await tx.payment.create({
+              data: {
+                receiptNumber: `REC-ORD-${Date.now().toString().slice(-7)}-C`,
+                customerId: sale.customerId,
+                amount: new Prisma.Decimal(splitCash),
+                paymentMethod: 'CASH',
+                reference: sale.invoiceNumber,
+                notes: `Payment for approved order #${sale.invoiceNumber} (Cash portion)`,
+                paymentDate: sale.saleDate,
+                recordedById: req.user?.id || sale.createdById,
+              },
+            });
+          }
+
+          if (splitBank > 0) {
+            await tx.payment.create({
+              data: {
+                receiptNumber: `REC-ORD-${Date.now().toString().slice(-7)}-B`,
+                customerId: sale.customerId,
+                amount: new Prisma.Decimal(splitBank),
+                paymentMethod: 'ONLINE',
+                reference: sale.invoiceNumber,
+                notes: `Payment for approved order #${sale.invoiceNumber} (Bank portion)${splitBankRef ? ` [${splitBankRef}]` : ''}`,
+                paymentDate: sale.saleDate,
+                recordedById: req.user?.id || sale.createdById,
+              },
+            });
+          }
+        } else {
+          await tx.customerLedger.create({
+            data: {
+              customerId: sale.customerId,
+              date: sale.saleDate,
+              transactionType: TransactionType.CUSTOMER_PAYMENT,
+              referenceId: sale.id,
+              description: `Order payment for #${sale.invoiceNumber}`,
+              debit: new Prisma.Decimal(0),
+              credit: sale.receivedAmount,
+              runningBalance: new Prisma.Decimal(newRec),
+            },
+          });
+
+          await tx.payment.create({
+            data: {
+              receiptNumber: `REC-ORD-${Date.now().toString().slice(-8)}`,
+              customerId: sale.customerId,
+              amount: sale.receivedAmount,
+              paymentMethod: sale.paymentMethod || 'CASH',
+              reference: sale.invoiceNumber,
+              notes: `Payment for approved order #${sale.invoiceNumber}`,
+              paymentDate: sale.saleDate,
+              recordedById: req.user?.id || sale.createdById,
+            },
+          });
+        }
       }
 
       await tx.sale.update({
@@ -1455,6 +1566,17 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
 
       let editNotesStr = (data.notes !== undefined ? (data.notes || '') : (existingSale.notes || '')).trim();
       editNotesStr = removeJsonTag(editNotesStr, 'DELIVERY_META');
+      editNotesStr = removeJsonTag(editNotesStr, 'SPLIT_PAYMENT');
+
+      const isSplit = data.paymentMethod === PaymentMethod.SPLIT;
+      const splitCash = isSplit ? Number(data.splitCashAmount || 0) : 0;
+      const splitBank = isSplit ? Number(data.splitBankAmount || 0) : 0;
+      const splitBankRef = isSplit ? (data.bankRef?.trim() || '') : '';
+
+      if (isSplit && (splitCash > 0 || splitBank > 0)) {
+        const splitMeta = { cash: splitCash, bank: splitBank, bankRef: splitBankRef };
+        editNotesStr = `[SPLIT_PAYMENT:${JSON.stringify(splitMeta)}] ${editNotesStr}`.trim();
+      }
 
       if (hasPendingDelivery) {
         const deliveryMeta = {
@@ -1585,31 +1707,77 @@ export const editSaleInvoice = async (req: AuthenticatedRequest, res: Response):
           });
 
           if (data.receivedAmount > 0) {
-            await tx.customerLedger.create({
-              data: {
-                customerId: data.customerId,
-                date: saleDate,
-                transactionType: TransactionType.CUSTOMER_PAYMENT,
-                referenceId: updatedSale.id,
-                description: `Payment for Inv #${existingSale.invoiceNumber} (${data.paymentMethod})`,
-                debit: new Prisma.Decimal(0),
-                credit: new Prisma.Decimal(data.receivedAmount),
-                runningBalance: new Prisma.Decimal(newReceivable),
-              },
-            });
+            if (isSplit && (splitCash > 0 || splitBank > 0)) {
+              const splitDesc = `Payment for Inv #${existingSale.invoiceNumber} (SPLIT: Cash Rs. ${splitCash.toLocaleString()} + Bank Rs. ${splitBank.toLocaleString()}${splitBankRef ? ` [${splitBankRef}]` : ''})`;
+              await tx.customerLedger.create({
+                data: {
+                  customerId: data.customerId,
+                  date: saleDate,
+                  transactionType: TransactionType.CUSTOMER_PAYMENT,
+                  referenceId: updatedSale.id,
+                  description: splitDesc,
+                  debit: new Prisma.Decimal(0),
+                  credit: new Prisma.Decimal(data.receivedAmount),
+                  runningBalance: new Prisma.Decimal(newReceivable),
+                },
+              });
 
-            await tx.payment.create({
-              data: {
-                receiptNumber: `REC-POS-${existingSale.invoiceNumber.replace('ROT-INV-', '')}`,
-                customerId: data.customerId,
-                amount: new Prisma.Decimal(data.receivedAmount),
-                paymentMethod: data.paymentMethod,
-                reference: existingSale.invoiceNumber,
-                notes: `Payment for invoice ${existingSale.invoiceNumber}`,
-                paymentDate: saleDate,
-                recordedById: req.user?.id || existingSale.createdById,
-              },
-            });
+              if (splitCash > 0) {
+                await tx.payment.create({
+                  data: {
+                    receiptNumber: `REC-POS-${existingSale.invoiceNumber.replace('ROT-INV-', '')}-C`,
+                    customerId: data.customerId,
+                    amount: new Prisma.Decimal(splitCash),
+                    paymentMethod: 'CASH',
+                    reference: existingSale.invoiceNumber,
+                    notes: `POS Split Payment (Cash portion) on sale #${existingSale.invoiceNumber}`,
+                    paymentDate: saleDate,
+                    recordedById: req.user?.id || existingSale.createdById,
+                  },
+                });
+              }
+
+              if (splitBank > 0) {
+                await tx.payment.create({
+                  data: {
+                    receiptNumber: `REC-POS-${existingSale.invoiceNumber.replace('ROT-INV-', '')}-B`,
+                    customerId: data.customerId,
+                    amount: new Prisma.Decimal(splitBank),
+                    paymentMethod: 'ONLINE',
+                    reference: existingSale.invoiceNumber,
+                    notes: `POS Split Payment (Bank portion) on sale #${existingSale.invoiceNumber}${splitBankRef ? ` [${splitBankRef}]` : ''}`,
+                    paymentDate: saleDate,
+                    recordedById: req.user?.id || existingSale.createdById,
+                  },
+                });
+              }
+            } else {
+              await tx.customerLedger.create({
+                data: {
+                  customerId: data.customerId,
+                  date: saleDate,
+                  transactionType: TransactionType.CUSTOMER_PAYMENT,
+                  referenceId: updatedSale.id,
+                  description: `Payment for Inv #${existingSale.invoiceNumber} (${data.paymentMethod})`,
+                  debit: new Prisma.Decimal(0),
+                  credit: new Prisma.Decimal(data.receivedAmount),
+                  runningBalance: new Prisma.Decimal(newReceivable),
+                },
+              });
+
+              await tx.payment.create({
+                data: {
+                  receiptNumber: `REC-POS-${existingSale.invoiceNumber.replace('ROT-INV-', '')}`,
+                  customerId: data.customerId,
+                  amount: new Prisma.Decimal(data.receivedAmount),
+                  paymentMethod: data.paymentMethod,
+                  reference: existingSale.invoiceNumber,
+                  notes: `Payment for invoice ${existingSale.invoiceNumber}`,
+                  paymentDate: saleDate,
+                  recordedById: req.user?.id || existingSale.createdById,
+                },
+              });
+            }
           }
 
           // Recalculate running balance in exact chronological order for perfect accounting accuracy

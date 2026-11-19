@@ -10,6 +10,7 @@ export enum PaymentMethod {
   BANK_TRANSFER = 'BANK_TRANSFER',
   CHEQUE = 'CHEQUE',
   ONLINE = 'ONLINE',
+  SPLIT = 'SPLIT',
 }
 
 export enum OrderStatus {

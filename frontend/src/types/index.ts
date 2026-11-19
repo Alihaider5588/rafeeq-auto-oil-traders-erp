@@ -128,7 +128,7 @@ export interface Sale {
   receivedAmount: string | number;
   remainingBalance: string | number;
   grossProfit?: string | number;
-  paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE';
+  paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE' | 'SPLIT';
   status: 'COMPLETED' | 'PENDING_APPROVAL' | 'CANCELLED';
   saleType?: 'COUNTER' | 'VAN';
   deliveryStatus?: string;

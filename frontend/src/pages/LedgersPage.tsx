@@ -3692,6 +3692,17 @@ export const LedgersPage: React.FC = () => {
             <div style={{ padding: '20px 16px', overflowY: 'auto' }}>
               <style>{`
                 @media print {
+                  @page {
+                    margin: 0mm !important;
+                    size: auto;
+                  }
+                  html, body {
+                    margin: 0mm !important;
+                    padding: 0mm !important;
+                    background: #ffffff !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                  }
                   body * { visibility: hidden !important; }
                   #ledger-80mm-receipt, #ledger-80mm-receipt * { visibility: visible !important; }
                   #ledger-80mm-receipt {
@@ -3699,9 +3710,12 @@ export const LedgersPage: React.FC = () => {
                     left: 0 !important;
                     top: 0 !important;
                     width: 100% !important;
-                    max-width: 80mm !important;
-                    margin: 0 auto !important;
-                    padding: 4mm !important;
+                    max-width: 78mm !important;
+                    margin: 0 !important;
+                    padding: 0mm 2mm 0mm 2mm !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    color: #000000 !important;
                   }
                 }
               `}</style>

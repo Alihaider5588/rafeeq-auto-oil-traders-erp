@@ -1202,7 +1202,25 @@ export const SalesListPage: React.FC = () => {
                     Rs. {Number(s.netAmount).toLocaleString()}
                   </td>
                   <td style={{ textAlign: 'right', color: '#059669', fontWeight: 700 }}>
-                    Rs. {Number(s.receivedAmount).toLocaleString()}
+                    <div>Rs. {Number(s.receivedAmount).toLocaleString()}</div>
+                    {(() => {
+                      const splitMeta = extractJsonTag(s.notes, 'SPLIT_PAYMENT');
+                      if (s.paymentMethod === 'SPLIT' || splitMeta) {
+                        return (
+                          <div style={{ fontSize: '0.68rem', color: '#0284c7', fontWeight: 600, marginTop: '2px' }} title={splitMeta?.bankRef ? `Bank Ref: ${splitMeta.bankRef}` : 'Split Payment (Cash + Bank)'}>
+                            🔀 Cash: {splitMeta?.cash !== undefined ? Number(splitMeta.cash).toLocaleString() : 0} | Bank: {splitMeta?.bank !== undefined ? Number(splitMeta.bank).toLocaleString() : 0}
+                          </div>
+                        );
+                      }
+                      if (s.paymentMethod === 'ONLINE') {
+                        return (
+                          <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>
+                            🏦 Bank / Online
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </td>
                   <td style={{ textAlign: 'right', color: Number(s.remainingBalance) > 0 ? '#dc2626' : '#059669', fontWeight: 700 }}>
                     Rs. {Number(s.remainingBalance).toLocaleString()}
@@ -1581,13 +1599,42 @@ export const SalesListPage: React.FC = () => {
             </div>
 
             {/* Printable Invoice Template - Retail Thermal POS Slip Design */}
-            <div className="printable-area thermal-receipt" style={{
+            <style>{`
+              @media print {
+                @page {
+                  margin: 0mm !important;
+                  size: auto;
+                }
+                html, body {
+                  margin: 0mm !important;
+                  padding: 0mm !important;
+                  background: #ffffff !important;
+                  height: auto !important;
+                  overflow: visible !important;
+                }
+                body * { visibility: hidden !important; }
+                #saleslist-receipt-container, #saleslist-receipt-container * { visibility: visible !important; }
+                #saleslist-receipt-container {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  max-width: 78mm !important;
+                  margin: 0 !important;
+                  padding: 0mm 2mm 0mm 2mm !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                  color: #000000 !important;
+                }
+              }
+            `}</style>
+            <div id="saleslist-receipt-container" className="printable-area thermal-receipt" style={{
               width: '100%',
               maxWidth: '380px',
               margin: '0 auto',
               backgroundColor: '#ffffff',
               border: '1px dashed #cbd5e1',
-              padding: '16px 14px',
+              padding: '12px 14px',
               borderRadius: '8px',
               fontSize: '12px',
               lineHeight: 1.4,
@@ -1595,7 +1642,7 @@ export const SalesListPage: React.FC = () => {
               fontFamily: 'Courier New, Courier, monospace'
             }}>
               {/* Header */}
-              <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingBottom: '10px', marginBottom: '10px' }}>
+              <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingTop: '0px', paddingBottom: '6px', marginBottom: '6px' }}>
                 {settings?.showCompanyNameOnPrint && (
                   <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                     {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
@@ -1637,10 +1684,10 @@ export const SalesListPage: React.FC = () => {
                   {settings?.showSalesRepOnPrint !== false ? (
                     <>
                       <span><b>REP:</b> {selectedSale.salesman?.fullName || 'Desk POS'}</span>
-                      <span><b>MODE:</b> {selectedSale.paymentMethod}</span>
+                      <span><b>MODE:</b> <b>{selectedSale.paymentMethod === 'SPLIT' ? 'SPLIT (CASH+BANK)' : (selectedSale.paymentMethod || 'CASH')}</b></span>
                     </>
                   ) : (
-                    <span><b>PAYMENT MODE:</b> {selectedSale.paymentMethod}</span>
+                    <span><b>PAYMENT MODE:</b> <b>{selectedSale.paymentMethod === 'SPLIT' ? 'SPLIT (CASH+BANK)' : (selectedSale.paymentMethod || 'CASH')}</b></span>
                   )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
@@ -1890,6 +1937,37 @@ export const SalesListPage: React.FC = () => {
                       <span>PAID AMOUNT:</span>
                       <span style={{ fontWeight: 700 }}>Rs. {paidAmount.toLocaleString()}</span>
                     </div>
+                    {(() => {
+                      const splitData = extractJsonTag(selectedSale.notes, 'SPLIT_PAYMENT');
+                      if (splitData && (Number(splitData.cash) > 0 || Number(splitData.bank) > 0)) {
+                        return (
+                          <div style={{
+                            margin: '2px 0 3px 0',
+                            padding: '2px 4px',
+                            backgroundColor: '#f8fafc',
+                            border: '1px dashed #94a3b8',
+                            borderRadius: '3px',
+                            fontSize: '9px',
+                            lineHeight: '1.25'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>• Cash (نقد):</span>
+                              <span style={{ fontWeight: 700 }}>Rs. {Number(splitData.cash || 0).toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>• Bank (بینک / آن لائن):</span>
+                              <span style={{ fontWeight: 700 }}>Rs. {Number(splitData.bank || 0).toLocaleString()}</span>
+                            </div>
+                            {splitData.bankRef && (
+                              <div style={{ fontSize: '8.5px', color: '#475569', marginTop: '1px' }}>
+                                Ref: {splitData.bankRef}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {/* 5. REMAINING BALANCE */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '12px', marginTop: '4px', paddingTop: '3px', borderTop: '1px dashed #000000' }}>
@@ -2071,16 +2149,16 @@ export const SalesListPage: React.FC = () => {
               })()}
 
               {/* Footer Barcode / Receipt Message */}
-              <div style={{ textAlign: 'center', fontSize: '10px' }}>
-                <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '6px 0 4px 0' }}>
+              <div style={{ textAlign: 'center', fontSize: '10px', paddingBottom: '0px', marginBottom: '0px' }}>
+                <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '4px 0 2px 0' }}>
                   * {selectedSale.invoiceNumber} *
                 </div>
                 {settings?.showTermsOnInvoice !== false && (
-                  <p style={{ margin: '3px 0', fontSize: '9px', lineHeight: '1.3' }}>
+                  <p style={{ margin: '2px 0', fontSize: '9px', lineHeight: '1.25' }}>
                     {settings?.invoiceFooterNote || 'Goods once sold will only be replaced within 3 days with original bill.'}
                   </p>
                 )}
-                <div style={{ margin: '6px 0 0 0', paddingTop: '6px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a' }}>
+                <div style={{ margin: '4px 0 0 0', paddingTop: '4px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a', paddingBottom: '0px' }}>
                   Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000000', fontWeight: 900, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000000', fontWeight: 900, textDecoration: 'none' }}>03147816393</a>
                 </div>
               </div>

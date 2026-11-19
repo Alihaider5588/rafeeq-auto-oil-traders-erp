@@ -533,15 +533,15 @@ table.data-table tbody tr:hover {
 
 @media print {
   @page {
-    margin: 8mm;
+    margin: 0mm !important;
     size: auto;
   }
   
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    margin: 0mm !important;
+    padding: 0mm !important;
     height: auto !important;
     overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
@@ -572,9 +572,9 @@ table.data-table tbody tr:hover {
 
   /* Thermal POS Receipt Format (80mm width) */
   .printable-area.thermal-receipt {
-    max-width: 80mm !important;
-    margin: 0 auto !important;
-    padding: 4mm !important;
+    max-width: 78mm !important;
+    margin: 0 !important;
+    padding: 0mm 2mm 0mm 2mm !important;
     font-family: 'Courier New', Courier, monospace !important;
   }
 
