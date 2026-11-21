@@ -874,4 +874,177 @@ button.btn:hover {
   transform: translateY(-1px);
 }
 
+/* ==========================================================================
+   PREMIUM PUBLIC WEBSITE ENHANCEMENTS & MICRO-ANIMATIONS (جدید دلکش اینیمیشنز)
+   ========================================================================== */
+
+@keyframes pulseRadar {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes pulseGoldRadar {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(245, 158, 11, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+@keyframes floatSubtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes shimmerGold {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes oilDropGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(245, 158, 11, 0.8));
+  }
+}
+
+.radar-live-badge {
+  animation: pulseRadar 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+.radar-gold-badge {
+  animation: pulseGoldRadar 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+.float-animation {
+  animation: floatSubtle 4s ease-in-out infinite;
+}
+
+.oil-glow-animation {
+  animation: oilDropGlow 3s ease-in-out infinite;
+}
+
+.gold-gradient-text {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.shimmer-badge {
+  background: linear-gradient(90deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.35) 50%, rgba(245,158,11,0.15) 100%);
+  background-size: 200% 100%;
+  animation: shimmerGold 3.5s infinite linear;
+}
+
+/* Premium Card Hover Effects */
+.premium-hover-card {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease !important;
+}
+
+.premium-hover-card:hover {
+  transform: translateY(-5px) !important;
+  box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(217, 119, 6, 0.25) !important;
+}
+
+.premium-hover-card-dark {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease !important;
+}
+
+.premium-hover-card-dark:hover {
+  transform: translateY(-5px) !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6), 0 0 20px rgba(245, 158, 11, 0.2) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+
+/* Interactive Brand Pills */
+.brand-showcase-pill {
+  transition: all 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.brand-showcase-pill:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  transform: scale(1.05);
+  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.2);
+}
+
+/* Interactive Oil Selector Tab */
+.oil-selector-tab {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.oil-selector-tab:hover {
+  transform: translateY(-2px);
+}
+
+.oil-selector-tab.active {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  color: #ffffff !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 8px 20px rgba(217, 119, 6, 0.35) !important;
+}
+
+/* Enhanced Animated FAQ Details */
+details.animated-faq {
+  transition: all 0.25s ease;
+}
+
+details.animated-faq[open] {
+  border-color: #d97706 !important;
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.1) !important;
+}
+
+details.animated-faq summary {
+  list-style: none;
+}
+
+details.animated-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+details.animated-faq[open] .faq-chevron {
+  transform: rotate(180deg);
+}
+
+.faq-chevron {
+  transition: transform 0.25s ease;
+}
+
+/* WhatsApp Floating Radar Button */
+.wa-floating-btn {
+  animation: pulseRadar 2.2s infinite;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.wa-floating-btn:hover {
+  transform: scale(1.08) !important;
+}
+
+
 

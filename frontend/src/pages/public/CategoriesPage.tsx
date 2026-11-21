@@ -55,10 +55,10 @@ export const CategoriesPage: React.FC = () => {
           <span style={{ color: '#0f172a', fontWeight: 600 }}>Product Categories</span>
         </div>
         <h1 style={{ fontSize: '2.2rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
-          Product Lines & Categories
+          پروڈکٹ کیٹیگریز و اقسام (Categories)
         </h1>
         <p style={{ color: '#64748b', fontSize: '0.95rem', margin: '6px 0 0 0' }}>
-          Explore our complete inventory segments — from high-viscosity commercial diesel oils to passenger car lubricants and filters.
+          پیٹرول کار لبریکنٹس، ہیوی کمرشل ڈیزل آئل، ٹریکٹر و ایگریکلچر لبریکنٹس، موٹر سائیکل 4T آئلز اور گارڈ فلٹرز۔
         </p>
       </div>
 
@@ -73,26 +73,16 @@ export const CategoriesPage: React.FC = () => {
             return (
               <div
                 key={c.id}
+                className="premium-hover-card"
                 style={{
                   backgroundColor: '#ffffff',
                   border: '1px solid #e2e8f0',
-                  borderRadius: '14px',
+                  borderRadius: '16px',
                   padding: '28px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#d97706';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(217,119,6,0.12)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e2e8f0';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
-                  e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
                 <div>
