@@ -844,9 +844,6 @@ export const SettingsPage: React.FC = () => {
                   fontFamily: 'Courier New, Courier, monospace',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', marginBottom: '3px', color: '#000000' }}>
-                    بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ
-                  </div>
                   {settings.showCompanyNameOnPrint !== false && (settings.companyName || '').trim() && (
                     <div style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}>
                       {settings.companyName}

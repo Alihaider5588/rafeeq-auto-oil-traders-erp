@@ -4370,9 +4370,6 @@ export const SalesmanPortal: React.FC = () => {
               }}>
                 {/* Company Header */}
                 <div style={{ textAlign: 'center', borderBottom: '1.5px dashed #000000', margin: '0', padding: '0 0 4px 0' }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px', margin: '0 0 1px 0', color: '#000000' }}>
-                    بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ
-                  </div>
                   {settings?.showCompanyNameOnPrint !== false && (
                     <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0', letterSpacing: '0.5px', textTransform: 'uppercase', lineHeight: 1.15, color: '#000000' }}>
                       {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
