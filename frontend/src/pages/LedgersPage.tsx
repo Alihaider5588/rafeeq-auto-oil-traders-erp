@@ -34,6 +34,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { exportConsolidatedAllPartyBalancesPDF, exportSingleLedgerStatementPDF } from '../utils/pdfExportUtils';
 import { playPrintSound } from '../utils/soundEffects';
+import { printReceiptElement } from '../utils/printReceiptHelper';
 
 /**
  * Standard Pakistan Standard Time (PKT, UTC+5) formatters
@@ -3659,8 +3660,7 @@ export const LedgersPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    playPrintSound();
-                    window.print();
+                    printReceiptElement('ledger-80mm-receipt');
                   }}
                   className="btn btn-primary btn-sm"
                   style={{
@@ -4013,8 +4013,7 @@ export const LedgersPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    playPrintSound();
-                    window.print();
+                    printReceiptElement('ledger-80mm-receipt');
                   }}
                   className="btn btn-primary btn-sm"
                   style={{

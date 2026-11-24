@@ -11,6 +11,7 @@ import {
 import { exportSalesPDF } from '../utils/pdfExportUtils';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { playPrintSound } from '../utils/soundEffects';
+import { printReceiptElement } from '../utils/printReceiptHelper';
 import { extractJsonTag, removeJsonTag } from '../utils/tagUtils';
 
 export const SalesListPage: React.FC = () => {
@@ -241,9 +242,22 @@ export const SalesListPage: React.FC = () => {
   };
 
   const handlePrint = () => {
-    playPrintSound();
-    window.print();
+    printReceiptElement('saleslist-receipt-container');
   };
+
+  // Intercept Ctrl+P while receipt modal is open to ensure single-sheet thermal printing
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        if (selectedSale) {
+          e.preventDefault();
+          handlePrint();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSale]);
 
   const handleCancelSale = async (saleId: string) => {
     if (!canDeleteInvoice && !canEditInvoice) {

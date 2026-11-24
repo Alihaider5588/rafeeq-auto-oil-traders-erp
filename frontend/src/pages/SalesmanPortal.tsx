@@ -34,6 +34,7 @@ import {
   Package
 } from 'lucide-react';
 import { playPrintSound } from '../utils/soundEffects';
+import { printReceiptElement } from '../utils/printReceiptHelper';
 import { extractJsonTag, removeJsonTag } from '../utils/tagUtils';
 
 export interface PosDraftOrder {
@@ -145,6 +146,20 @@ export const SalesmanPortal: React.FC = () => {
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
   const [settings, setSettings] = useState<any>(null);
+
+  // Intercept Ctrl+P while receipt modal is open to ensure single-sheet thermal printing
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        if (showInvoiceModal) {
+          e.preventDefault();
+          printReceiptElement('salesman-receipt-container');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showInvoiceModal]);
 
   // Reclaimed Loose Oil Drum (ڈرم کا کھلا آئل)
   const [reclaimedDrum, setReclaimedDrum] = useState<any>(null);
@@ -4292,8 +4307,7 @@ export const SalesmanPortal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    playPrintSound();
-                    window.print();
+                    printReceiptElement('salesman-receipt-container');
                   }}
                   className="btn btn-primary btn-sm"
                   style={{
