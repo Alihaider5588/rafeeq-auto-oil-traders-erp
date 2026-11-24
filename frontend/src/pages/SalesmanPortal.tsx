@@ -4349,8 +4349,8 @@ export const SalesmanPortal: React.FC = () => {
                     top: 0 !important;
                     width: 100% !important;
                     max-width: 78mm !important;
-                    margin: 0 !important;
-                    padding: 0mm 2mm 0mm 2mm !important;
+                    margin: 0mm !important;
+                    padding: 0mm 1mm 0mm 1mm !important;
                     box-shadow: none !important;
                     border: none !important;
                     color: #000000 !important;
@@ -4369,35 +4369,41 @@ export const SalesmanPortal: React.FC = () => {
                 fontSize: '11px'
               }}>
                 {/* Company Header */}
-                <div style={{ textAlign: 'center', borderBottom: '1px dashed #000000', paddingTop: '0px', paddingBottom: '6px', marginBottom: '6px' }}>
-                  {settings?.showCompanyNameOnPrint && (
-                    <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                <div style={{ textAlign: 'center', borderBottom: '1.5px dashed #000000', margin: '0', padding: '0 0 4px 0' }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px', margin: '0 0 1px 0', color: '#000000' }}>
+                    بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ
+                  </div>
+                  {settings?.showCompanyNameOnPrint !== false && (
+                    <h2 style={{ fontSize: '15px', fontWeight: 900, margin: '0', letterSpacing: '0.5px', textTransform: 'uppercase', lineHeight: 1.15, color: '#000000' }}>
                       {settings?.companyName || 'RAFIQ AUTO & OIL TRADERS'}
                     </h2>
                   )}
                   {settings?.showUrduNameOnPrint !== false && (
-                    <div style={{ fontSize: '13px', fontWeight: 800, margin: '2px 0' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, margin: '1px 0', color: '#000000' }}>
                       {settings?.urduCompanyName || 'رفیق آٹو اینڈ آئل ٹریڈرز'}
                     </div>
                   )}
+                  <div style={{ fontSize: '8.5px', fontWeight: 600, color: '#1e293b', margin: '0' }}>
+                    Wholesale & Retail Engine Oil, Lubricants & Auto Parts
+                  </div>
                   {settings?.customReceiptHeader && (
-                    <div style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0', color: '#1e293b' }}>
+                    <div style={{ fontSize: '9px', fontWeight: 700, margin: '1px 0', color: '#000000' }}>
                       {settings.customReceiptHeader}
                     </div>
                   )}
-                  {settings?.proprietorNames && (
-                    <p style={{ margin: '1px 0', fontSize: '10px', fontWeight: 700 }}>
-                      Prop: {settings.proprietorNames}
+                  {(settings?.proprietorNames || 'حاجی محمد رفیق / محمد شفیق') && (
+                    <p style={{ margin: '0', fontSize: '8.5px', fontWeight: 700, color: '#000000' }}>
+                      پروپرائٹر: {settings?.proprietorNames || 'حاجی محمد رفیق / محمد شفیق'}
                     </p>
                   )}
                   {settings?.showAddressOnPrint !== false && (
-                    <p style={{ margin: '1px 0', fontSize: '10px' }}>
+                    <p style={{ margin: '1px 0', fontSize: '8.5px', lineHeight: 1.2, color: '#000000' }}>
                       {settings?.address || '54-Stop Near MCB Bank, Dipalpur Road, Okara'}
                     </p>
                   )}
                   {settings?.showPhoneOnPrint !== false && (
-                    <p style={{ margin: '1px 0', fontSize: '10px' }}>
-                      Ph: {settings?.phone || '0306-9258573 / 0327-7497457'}
+                    <p style={{ margin: '0', fontSize: '9px', fontWeight: 700, color: '#000000' }}>
+                      📞 Ph / WhatsApp: {settings?.phone || '0306-9258573 | 0327-7497457'}
                     </p>
                   )}
                 </div>
@@ -4797,7 +4803,7 @@ export const SalesmanPortal: React.FC = () => {
                     }
                   });
 
-                  if (deliveredList.length === 0 && pendingList.length === 0) return null;
+                  if (pendingList.length === 0) return null;
 
                   return (
                     <div style={{ marginBottom: '10px' }}>
@@ -4910,17 +4916,22 @@ export const SalesmanPortal: React.FC = () => {
                   );
                 })()}
 
-                {/* Footer Barcode / Receipt Message */}
-                <div style={{ textAlign: 'center', fontSize: '10px', paddingBottom: '0px', marginBottom: '0px' }}>
-                  <div style={{ letterSpacing: '2px', fontWeight: 700, margin: '4px 0 2px 0' }}>
-                    * {completedSale.invoiceNumber} *
-                  </div>
+                {/* Footer immediately where invoice ends with zero margin */}
+                <div style={{
+                  textAlign: 'center',
+                  margin: '0',
+                  padding: '3px 0 0 0',
+                  borderTop: '1px dashed #000000',
+                  fontSize: '9px',
+                  lineHeight: 1.25,
+                  color: '#000000'
+                }}>
                   {settings?.showTermsOnInvoice !== false && (
-                    <p style={{ margin: '2px 0', fontSize: '9px', lineHeight: '1.25' }}>
+                    <div style={{ fontSize: '8px', margin: '0 0 2px 0', color: '#1e293b' }}>
                       {settings?.invoiceFooterNote || 'Goods once sold will only be replaced within 3 days with original bill.'}
-                    </p>
+                    </div>
                   )}
-                  <div style={{ margin: '4px 0 0 0', paddingTop: '4px', borderTop: '1px dashed #475569', fontSize: '9px', color: '#0f172a', paddingBottom: '0px' }}>
+                  <div style={{ margin: '0', padding: '0', fontSize: '9px', color: '#000000' }}>
                     Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000000', fontWeight: 900, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000000', fontWeight: 900, textDecoration: 'none' }}>03147816393</a>
                   </div>
                 </div>

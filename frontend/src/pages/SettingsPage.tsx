@@ -688,11 +688,11 @@ export const SettingsPage: React.FC = () => {
                     <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' }}>
                       <input
                         type="checkbox"
-                        checked={settings.showCompanyNameOnPrint ?? false}
+                        checked={settings.showCompanyNameOnPrint !== false}
                         onChange={(e) => setSettings({ ...settings, showCompanyNameOnPrint: e.target.checked })}
                         style={{ width: '18px', height: '18px' }}
                       />
-                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: settings.showCompanyNameOnPrint ? '#1e293b' : '#94a3b8' }}>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: settings.showCompanyNameOnPrint !== false ? '#1e293b' : '#94a3b8' }}>
                         رسید پر انگریزی نام دکھائیں (English Name)
                       </span>
                     </label>
@@ -702,8 +702,8 @@ export const SettingsPage: React.FC = () => {
                       value={settings.companyName || ''}
                       onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
                       placeholder="e.g. RAFIQ AUTO & OIL TRADERS"
-                      disabled={!settings.showCompanyNameOnPrint}
-                      style={{ fontSize: '0.85rem', fontWeight: 600, opacity: settings.showCompanyNameOnPrint ? 1 : 0.5 }}
+                      disabled={settings.showCompanyNameOnPrint === false}
+                      style={{ fontSize: '0.85rem', fontWeight: 600, opacity: settings.showCompanyNameOnPrint !== false ? 1 : 0.5 }}
                     />
                     <small style={{ color: '#64748b', fontSize: '0.74rem' }}>اگر رسید سے نام ہٹانا ہو تو چیک باکس کو ان چیک کر دیں۔</small>
                   </div>
@@ -844,7 +844,10 @@ export const SettingsPage: React.FC = () => {
                   fontFamily: 'Courier New, Courier, monospace',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}>
-                  {settings.showCompanyNameOnPrint && (settings.companyName || '').trim() && (
+                  <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', marginBottom: '3px', color: '#000000' }}>
+                    بِسْمِ اللهِ الرَّحْمٰنِ الرَّحِيْمِ
+                  </div>
+                  {settings.showCompanyNameOnPrint !== false && (settings.companyName || '').trim() && (
                     <div style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}>
                       {settings.companyName}
                     </div>

@@ -1902,8 +1902,8 @@ export const DeliveryManagementPage: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ textAlign: 'center', marginTop: '20px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', fontSize: '0.75rem', color: '#64748b' }}>
-                Rafiq Auto & Oil Traders ERP | Developed by <a href="https://nexuradigi.site/" target="_blank" rel="noopener noreferrer" style={{ color: '#000', fontWeight: 800, textDecoration: 'underline' }}>Nexura Digital</a> | Contact: <a href="tel:03147816393" style={{ color: '#000', fontWeight: 800, textDecoration: 'none' }}>03147816393</a>
+              <div style={{ textAlign: 'center', marginTop: '16px', paddingTop: '8px', borderTop: '1px solid #e2e8f0', fontSize: '0.75rem', color: '#64748b' }}>
+                Rafiq Auto & Oil Traders — Official Dispatch Voucher
               </div>
             </div>
           </div>
