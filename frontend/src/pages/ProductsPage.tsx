@@ -775,6 +775,167 @@ export const ProductsPage: React.FC = () => {
 
   return (
     <div>
+      {/* 100% Mobile Responsive Styles for Products Catalog & Add/Edit Modals */}
+      <style>{`
+        .prod-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.65);
+          backdrop-filter: blur(2px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1050;
+          padding: 20px;
+        }
+        .prod-modal-box {
+          background-color: #ffffff;
+          border-radius: 16px;
+          width: 100%;
+          max-width: 760px;
+          padding: 22px 26px;
+          max-height: 92vh;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        .prod-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 14px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid #f1f5f9;
+        }
+        .prod-modal-body {
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          flex: 1 1 auto;
+          padding-right: 4px;
+        }
+        .prod-modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          margin-top: 18px;
+          padding-top: 12px;
+          border-top: 1px solid #e2e8f0;
+          background: #ffffff;
+        }
+        .prod-grid-2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .prod-grid-name-sku {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .prod-grid-3 {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .prod-grid-stock-main {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr;
+          gap: 14px;
+          margin-bottom: 10px;
+        }
+        .prod-grid-stock-3 {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1.1fr;
+          gap: 8px;
+        }
+        .prod-packaging-hdr {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        /* 📱 100% Mobile Responsive Breakpoint (Tablets & Phones <= 768px) */
+        @media (max-width: 768px) {
+          .prod-modal-overlay {
+            padding: 0 !important;
+            align-items: flex-end !important;
+          }
+          .prod-modal-box {
+            max-height: 96vh !important;
+            border-radius: 20px 20px 0 0 !important;
+            padding: 16px 14px 14px 14px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.2) !important;
+          }
+          .prod-modal-header {
+            margin-bottom: 12px !important;
+            padding-bottom: 8px !important;
+          }
+          .prod-modal-header h2,
+          .prod-modal-header h3 {
+            font-size: 1.1rem !important;
+          }
+          .prod-modal-body {
+            padding-right: 0 !important;
+          }
+          .prod-grid-2,
+          .prod-grid-name-sku,
+          .prod-grid-3,
+          .prod-grid-stock-main {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+            margin-bottom: 12px !important;
+          }
+          .prod-grid-stock-3 {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .prod-grid-stock-3 > div:last-child {
+            grid-column: span 2 !important;
+          }
+          .prod-modal-footer {
+            position: sticky !important;
+            bottom: 0 !important;
+            background: #ffffff !important;
+            padding: 10px 0 4px 0 !important;
+            margin-top: 12px !important;
+            z-index: 30 !important;
+            gap: 8px !important;
+          }
+          .prod-modal-footer button {
+            flex: 1 !important;
+            padding: 12px 14px !important;
+            font-size: 0.95rem !important;
+            font-weight: 800 !important;
+            min-height: 46px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          /* Prevent mobile browsers from jarringly auto-zooming input fields */
+          .prod-modal-box input,
+          .prod-modal-box select,
+          .prod-modal-box textarea {
+            font-size: 16px !important;
+          }
+          .prod-packaging-hdr {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 6px !important;
+          }
+        }
+      `}</style>
+
       {/* Top Operation Failure / Success Banners */}
       {operationError && (
         <div style={{
@@ -847,7 +1008,7 @@ export const ProductsPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {canEditProduct && (
             <button onClick={() => setShowUnitModal(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Layers size={16} /> Packaging Units
@@ -1386,10 +1547,10 @@ export const ProductsPage: React.FC = () => {
                           <button
                             onClick={() => handleOpenEdit(p)}
                             className="btn btn-outline"
-                            style={{ padding: '5px 8px' }}
+                            style={{ padding: '6px 10px', minWidth: '36px', minHeight: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                             title="Edit Product"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={16} />
                           </button>
                         )}
                         {canEditProduct && (
@@ -1400,20 +1561,20 @@ export const ProductsPage: React.FC = () => {
                               setShowAdjustStockModal(true);
                             }}
                             className="btn btn-outline"
-                            style={{ padding: '5px 8px' }}
+                            style={{ padding: '6px 10px', minWidth: '36px', minHeight: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                             title="Audit Stock Adjustment"
                           >
-                            <Sliders size={14} />
+                            <Sliders size={16} />
                           </button>
                         )}
                         {canDeleteProduct && (
                           <button
                             onClick={() => handleDeleteProduct(p)}
                             className="btn btn-outline"
-                            style={{ padding: '5px 8px', color: '#ef4444', borderColor: '#fca5a5' }}
+                            style={{ padding: '6px 10px', minWidth: '36px', minHeight: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', borderColor: '#fca5a5' }}
                             title="Permanently Delete Product from POS & DB"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={16} />
                           </button>
                         )}
                         {!canEditProduct && !canDeleteProduct && (
@@ -1433,56 +1594,38 @@ export const ProductsPage: React.FC = () => {
 
       {/* Modal Add / Edit Product */}
       {showAddEditModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: '20px'
-        }}>
-          <div style={{
-            backgroundColor: '#fff',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '750px',
-            padding: '28px',
-            maxHeight: '92vh',
-            overflowY: 'auto'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-box">
+            <div className="prod-modal-header">
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
                 {isEditing ? 'Edit Lubricant / Product' : 'Add New Product to Catalog'}
               </h2>
               <button
+                type="button"
                 onClick={() => setShowAddEditModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', fontSize: '1.6rem', lineHeight: '1', cursor: 'pointer', padding: '4px 8px', color: '#64748b' }}
               >
                 ×
               </button>
             </div>
 
-            {modalError && (
-              <div style={{
-                backgroundColor: '#fee2e2',
-                color: '#991b1b',
-                padding: '10px 14px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '0.85rem'
-              }}>
-                {modalError}
-              </div>
-            )}
+            <div className="prod-modal-body">
+              {modalError && (
+                <div style={{
+                  backgroundColor: '#fee2e2',
+                  color: '#991b1b',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  fontSize: '0.85rem'
+                }}>
+                  {modalError}
+                </div>
+              )}
 
-            <form onSubmit={handleSaveProduct}>
-              {/* Product Basic Info */}
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <form onSubmit={handleSaveProduct}>
+                {/* Product Basic Info */}
+                <div className="prod-grid-name-sku">
                 <div>
                   <label className="form-label">Product Name *</label>
                   <input
@@ -1518,7 +1661,7 @@ export const ProductsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div className="prod-grid-2">
                 <div>
                   <label className="form-label">Brand / Company *</label>
                   <input
@@ -1560,11 +1703,11 @@ export const ProductsPage: React.FC = () => {
               {/* Unit & Packaging Section */}
               {/* Unit & Packaging Section - Modeled after user screenshot */}
               <div style={{ backgroundColor: '#f0f9ff', padding: '16px', borderRadius: '12px', border: '1px solid #bae6fd', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div className="prod-packaging-hdr">
                   <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Layers size={17} color="#0284c7" /> Packaging & Unit Conversion (Primary & Secondary Units)
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => setShowUnitModal(true)}
@@ -1573,8 +1716,8 @@ export const ProductsPage: React.FC = () => {
                         border: '1px solid #7dd3fc',
                         color: '#0284c7',
                         borderRadius: '6px',
-                        padding: '3px 8px',
-                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
                         cursor: 'pointer'
                       }}
@@ -1589,7 +1732,7 @@ export const ProductsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '12px' }}>
+                <div className="prod-grid-2" style={{ marginBottom: '12px' }}>
                   {/* Primary Unit First (e.g. CARTONS) */}
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, color: '#0c4a6e' }}>
@@ -1638,11 +1781,11 @@ export const ProductsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Conversion Rate Setup (1 to 500) */}
+                {/* Conversion Rate Setup */}
                 {formData.primaryUnitId && (
-                  <div style={{ backgroundColor: '#ffffff', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e0f2fe' }}>
+                  <div style={{ backgroundColor: '#ffffff', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e0f2fe', marginTop: '10px' }}>
                     <label className="form-label" style={{ fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>
-                      Select Conversion Rate (1 to 500)
+                      Conversion Rate (پیکنگ ریشو)
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
@@ -1651,12 +1794,12 @@ export const ProductsPage: React.FC = () => {
                       <input
                         type="number"
                         min="1"
-                        max="500"
                         step="any"
                         className="form-control"
-                        placeholder="e.g. 25"
+                        placeholder="e.g. 24 or 1000"
                         style={{
                           width: '130px',
+                          minWidth: '100px',
                           fontWeight: 800,
                           fontSize: '1rem',
                           color: '#0369a1',
@@ -1670,7 +1813,7 @@ export const ProductsPage: React.FC = () => {
                         {units.find(u => u.id === formData.unitId)?.symbol || 'SECONDARY'}
                       </span>
                       <small style={{ color: '#64748b', fontSize: '0.75rem', marginLeft: 'auto' }}>
-                        (Enter 1 to 500 items per carton/box)
+                        (e.g. 1 Carton = 24 Pcs, or 1 Liter = 1000 ml)
                       </small>
                     </div>
                     {renderFieldErrorTag('conversionFactor')}
@@ -1688,7 +1831,7 @@ export const ProductsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+                  <div className="prod-grid-3">
                     {/* Purchase / Cost Price */}
                     <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: fieldErrors.purchasePrice ? '2px solid #ef4444' : '1px solid #cbd5e1' }}>
                       <label className="form-label" style={{ fontWeight: 700, fontSize: '0.84rem' }}>
@@ -1816,7 +1959,7 @@ export const ProductsPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="prod-grid-3">
                   <div>
                     <label className="form-label" style={{ fontWeight: 700 }}>
                       Purchase / Cost Price (Rs.) * <span style={{ color: '#dc2626', fontSize: '0.72rem' }}>(🔒 Private)</span>
@@ -1897,14 +2040,14 @@ export const ProductsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px', marginBottom: '10px' }}>
+                  <div className="prod-grid-stock-main">
                     {/* Available Stock Dual Box */}
                     <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '10px', border: '1.5px solid #bbf7d0' }}>
                       <label className="form-label" style={{ color: '#0f172a', fontWeight: 800, fontSize: '0.86rem', marginBottom: '8px', display: 'block' }}>
                         {isEditing ? 'Available Physical Stock (موجودہ مال اسٹاک)' : 'Opening / Available Stock * (دکان میں موجود اسٹاک)'}
                       </label>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.1fr', gap: '8px' }}>
+                      <div className="prod-grid-stock-3">
                         <div>
                           <label style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
                             {units.find(u => u.id === formData.primaryUnitId)?.name || 'Cartons'} (کارٹن):
@@ -1965,7 +2108,7 @@ export const ProductsPage: React.FC = () => {
                         ⚠️ Low Stock Alert (کم از کم اسٹاک وارننگ)
                       </label>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div className="prod-grid-2" style={{ gap: '8px', marginBottom: '0' }}>
                         <div>
                           <label style={{ fontSize: '0.72rem', color: '#9a3412', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
                             Alert in {units.find(u => u.id === formData.primaryUnitId)?.symbol || 'Ctn'} (کارٹن):
@@ -2010,7 +2153,7 @@ export const ProductsPage: React.FC = () => {
                   </small>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="prod-grid-2">
                   <div>
                     <label className="form-label">Minimum Stock Alert</label>
                     <input
@@ -2045,7 +2188,7 @@ export const ProductsPage: React.FC = () => {
               )}
 
               {/* Specs & Description */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div className="prod-grid-2">
                 <div>
                   <label className="form-label">Specifications (Viscosity / Standards)</label>
                   <input
@@ -2074,7 +2217,7 @@ export const ProductsPage: React.FC = () => {
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Upload size={16} /> Product Image (Local / Object Persistent Storage)
                 </label>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
                     type="file"
                     accept="image/*"
@@ -2101,7 +2244,7 @@ export const ProductsPage: React.FC = () => {
               </div>
 
               {/* Visibility Switches */}
-              <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
@@ -2130,7 +2273,7 @@ export const ProductsPage: React.FC = () => {
                 </label>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="prod-modal-footer">
                 <button
                   type="button"
                   onClick={() => setShowAddEditModal(false)}
@@ -2145,233 +2288,235 @@ export const ProductsPage: React.FC = () => {
             </form>
           </div>
         </div>
+      </div>
       )}
 
       {/* Modal Adjust Stock */}
       {showAdjustStockModal && selectedProductForStock && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: '20px'
-        }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '14px', width: '460px', maxWidth: '90%', padding: '24px' }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem', fontWeight: 800 }}>
-              Adjust Inventory Count
-            </h3>
-            {(() => {
-              const pConv = Number(selectedProductForStock.conversionFactor) || 1;
-              const pStock = Number(selectedProductForStock.currentStock) || 0;
-              const pHasPack = pConv > 1 && Boolean(selectedProductForStock.primaryUnit);
-              const pCartons = pHasPack ? Math.floor(pStock / pConv) : 0;
-              const pRem = pHasPack ? pStock % pConv : pStock;
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-box" style={{ maxWidth: '500px' }}>
+            <div className="prod-modal-header">
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>
+                Adjust Inventory Count
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAdjustStockModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.6rem', lineHeight: '1', cursor: 'pointer', padding: '4px 8px', color: '#64748b' }}
+              >
+                ×
+              </button>
+            </div>
+            <div className="prod-modal-body">
+              {(() => {
+                const pConv = Number(selectedProductForStock.conversionFactor) || 1;
+                const pStock = Number(selectedProductForStock.currentStock) || 0;
+                const pHasPack = pConv > 1 && Boolean(selectedProductForStock.primaryUnit);
+                const pCartons = pHasPack ? Math.floor(pStock / pConv) : 0;
+                const pRem = pHasPack ? pStock % pConv : pStock;
 
-              return (
-                <div style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div>Product: <b style={{ color: '#0f172a' }}>{selectedProductForStock.name}</b></div>
-                  <div style={{ marginTop: '4px' }}>
-                    Current Count:{' '}
-                    {pHasPack ? (
-                      <>
-                        <b style={{ color: '#047857', fontSize: '0.96rem' }}>
-                          {pCartons} {selectedProductForStock.primaryUnit?.symbol || 'Ctn'} {pRem > 0 ? `+ ${pRem} ${selectedProductForStock.unit?.symbol || 'Pcs'}` : ''}
-                        </b>{' '}
-                        <span style={{ color: '#64748b' }}>(Total: {pStock} {selectedProductForStock.unit?.symbol || 'Pcs'})</span>
-                      </>
-                    ) : (
-                      <b style={{ color: '#047857' }}>{pStock} {selectedProductForStock.unit?.symbol || 'Pcs'}</b>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <form onSubmit={handleAdjustStock}>
-              <div style={{ marginBottom: '14px' }}>
-                <label className="form-label">Adjustment Mode</label>
-                <select
-                  className="form-control"
-                  value={stockAdjustData.type}
-                  onChange={(e) => setStockAdjustData({ ...stockAdjustData, type: e.target.value })}
-                >
-                  <option value="ADD">Add Found Stock (+)</option>
-                  <option value="SUBTRACT">Deduct Damaged / Leakage (-)</option>
-                  <option value="SET">Set Exact Physical Count (=)</option>
-                </select>
-              </div>
-
-              {Number(selectedProductForStock.conversionFactor) > 1 && selectedProductForStock.primaryUnit ? (
-                <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1.5px solid #86efac', marginBottom: '14px' }}>
-                  <label className="form-label" style={{ fontWeight: 700, color: '#166534', marginBottom: '6px', fontSize: '0.84rem' }}>
-                    Adjustment Quantity (Cartons & Loose Pieces)
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.1fr', gap: '8px' }}>
-                    <div>
-                      <label style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                        {selectedProductForStock.primaryUnit?.symbol || 'Ctn'} (کارٹن):
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        className="form-control"
-                        placeholder="0"
-                        style={{ fontWeight: 800, color: '#15803d' }}
-                        value={adjustCartons}
-                        onChange={(e) => handleAdjustStockCartonPieceChange(e.target.value, adjustLoosePieces)}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
-                        Loose {selectedProductForStock.unit?.symbol || 'Pcs'} (کھلے):
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        className="form-control"
-                        placeholder="0"
-                        style={{ fontWeight: 800, color: '#334155' }}
-                        value={adjustLoosePieces}
-                        onChange={(e) => handleAdjustStockCartonPieceChange(adjustCartons, e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 800, display: 'block', marginBottom: '3px' }}>
-                        Total {selectedProductForStock.unit?.symbol || 'Pcs'} (ٹوٹل):
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        required
-                        className="form-control"
-                        placeholder="Total"
-                        style={{ fontWeight: 800, color: '#0284c7', backgroundColor: '#f0f9ff' }}
-                        value={stockAdjustData.quantity}
-                        onChange={(e) => handleAdjustTotalQtyChange(e.target.value)}
-                      />
+                return (
+                  <div style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div>Product: <b style={{ color: '#0f172a' }}>{selectedProductForStock.name}</b></div>
+                    <div style={{ marginTop: '4px' }}>
+                      Current Count:{' '}
+                      {pHasPack ? (
+                        <>
+                          <b style={{ color: '#047857', fontSize: '0.96rem' }}>
+                            {pCartons} {selectedProductForStock.primaryUnit?.symbol || 'Ctn'} {pRem > 0 ? `+ ${pRem} ${selectedProductForStock.unit?.symbol || 'Pcs'}` : ''}
+                          </b>{' '}
+                          <span style={{ color: '#64748b' }}>(Total: {pStock} {selectedProductForStock.unit?.symbol || 'Pcs'})</span>
+                        </>
+                      ) : (
+                        <b style={{ color: '#047857' }}>{pStock} {selectedProductForStock.unit?.symbol || 'Pcs'}</b>
+                      )}
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#166534', marginTop: '6px' }}>
-                    = {adjustCartons || 0} Ctn ({(Number(adjustCartons) || 0) * (Number(selectedProductForStock.conversionFactor) || 1)} Pcs) + {adjustLoosePieces || 0} Loose = <b>{stockAdjustData.quantity || 0} Total Pieces</b>
-                  </div>
-                </div>
-              ) : (
+                );
+              })()}
+
+              <form onSubmit={handleAdjustStock}>
                 <div style={{ marginBottom: '14px' }}>
-                  <label className="form-label">Quantity in {selectedProductForStock.unit?.symbol || 'Base Units'} *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
+                  <label className="form-label">Adjustment Mode</label>
+                  <select
                     className="form-control"
-                    placeholder="Quantity in base units"
-                    value={stockAdjustData.quantity}
-                    onChange={(e) => setStockAdjustData({ ...stockAdjustData, quantity: e.target.value })}
+                    value={stockAdjustData.type}
+                    onChange={(e) => setStockAdjustData({ ...stockAdjustData, type: e.target.value })}
+                  >
+                    <option value="ADD">Add Found Stock (+)</option>
+                    <option value="SUBTRACT">Deduct Damaged / Leakage (-)</option>
+                    <option value="SET">Set Exact Physical Count (=)</option>
+                  </select>
+                </div>
+
+                {Number(selectedProductForStock.conversionFactor) > 1 && selectedProductForStock.primaryUnit ? (
+                  <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1.5px solid #86efac', marginBottom: '14px' }}>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#166534', marginBottom: '6px', fontSize: '0.84rem' }}>
+                      Adjustment Quantity (Cartons & Loose Pieces)
+                    </label>
+                    <div className="prod-grid-stock-3">
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                          {selectedProductForStock.primaryUnit?.symbol || 'Ctn'} (کارٹن):
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          className="form-control"
+                          placeholder="0"
+                          style={{ fontWeight: 800, color: '#15803d' }}
+                          value={adjustCartons}
+                          onChange={(e) => handleAdjustStockCartonPieceChange(e.target.value, adjustLoosePieces)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                          Loose {selectedProductForStock.unit?.symbol || 'Pcs'} (کھلے):
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          className="form-control"
+                          placeholder="0"
+                          style={{ fontWeight: 800, color: '#334155' }}
+                          value={adjustLoosePieces}
+                          onChange={(e) => handleAdjustStockCartonPieceChange(adjustCartons, e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 800, display: 'block', marginBottom: '3px' }}>
+                          Total {selectedProductForStock.unit?.symbol || 'Pcs'} (ٹوٹل):
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          className="form-control"
+                          placeholder="Total"
+                          style={{ fontWeight: 800, color: '#0284c7', backgroundColor: '#f0f9ff' }}
+                          value={stockAdjustData.quantity}
+                          onChange={(e) => handleAdjustTotalQtyChange(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#166534', marginTop: '6px' }}>
+                      = {adjustCartons || 0} Ctn ({(Number(adjustCartons) || 0) * (Number(selectedProductForStock.conversionFactor) || 1)} Pcs) + {adjustLoosePieces || 0} Loose = <b>{stockAdjustData.quantity || 0} Total Pieces</b>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: '14px' }}>
+                    <label className="form-label">Quantity in {selectedProductForStock.unit?.symbol || 'Base Units'} *</label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      className="form-control"
+                      placeholder="Quantity in base units"
+                      value={stockAdjustData.quantity}
+                      onChange={(e) => setStockAdjustData({ ...stockAdjustData, quantity: e.target.value })}
+                    />
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '18px' }}>
+                  <label className="form-label">Reason / Notes</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Physical godown recount / damaged bottle"
+                    value={stockAdjustData.notes}
+                    onChange={(e) => setStockAdjustData({ ...stockAdjustData, notes: e.target.value })}
                   />
                 </div>
-              )}
 
-              <div style={{ marginBottom: '18px' }}>
-                <label className="form-label">Reason / Notes</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. Physical godown recount / damaged bottle"
-                  value={stockAdjustData.notes}
-                  onChange={(e) => setStockAdjustData({ ...stockAdjustData, notes: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAdjustStockModal(false)}
-                  className="btn btn-outline"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Apply Adjustment
-                </button>
-              </div>
-            </form>
+                <div className="prod-modal-footer">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdjustStockModal(false)}
+                    className="btn btn-outline"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Apply Adjustment
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Modal Manage Categories */}
       {showCategoryModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: '20px'
-        }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '14px', width: '500px', maxWidth: '90%', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-box" style={{ maxWidth: '520px' }}>
+            <div className="prod-modal-header">
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Manage Categories</h3>
               <button
+                type="button"
                 onClick={() => setShowCategoryModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', fontSize: '1.6rem', lineHeight: '1', cursor: 'pointer', padding: '4px 8px', color: '#64748b' }}
               >
                 ×
               </button>
             </div>
-
-            <form onSubmit={handleCreateCategory} style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px' }}>Add Custom Category</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                <input
-                  type="text"
-                  required
-                  placeholder="Category Name"
-                  className="form-control"
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="Description (optional)"
-                  className="form-control"
-                  value={newCatDesc}
-                  onChange={(e) => setNewCatDesc(e.target.value)}
-                />
-              </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                + Add Category
-              </button>
-            </form>
-
-            <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>
-                  Existing Categories ({categories.length})
+            <div className="prod-modal-body">
+              <form onSubmit={handleCreateCategory} style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px' }}>Add Custom Category</div>
+                <div className="prod-grid-2" style={{ gap: '10px', marginBottom: '10px' }}>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Category Name"
+                    className="form-control"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    className="form-control"
+                    value={newCatDesc}
+                    onChange={(e) => setNewCatDesc(e.target.value)}
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search categories..."
-                  value={searchCategoryModal}
-                  onChange={(e) => setSearchCategoryModal(e.target.value)}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.78rem',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '4px',
-                    width: '150px'
-                  }}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {categories
-                  .filter(c => !searchCategoryModal || c.name.toLowerCase().includes(searchCategoryModal.toLowerCase()))
-                  .map((c) => (
-                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>{c.name}</span>
-                      <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.description || 'Active'}</span>
-                    </div>
-                  ))}
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', minHeight: '44px', fontWeight: 700 }}>
+                  + Add Category
+                </button>
+              </form>
+
+              <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>
+                    Existing Categories ({categories.length})
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search categories..."
+                    value={searchCategoryModal}
+                    onChange={(e) => setSearchCategoryModal(e.target.value)}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.85rem',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '4px',
+                      width: '150px'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {categories
+                    .filter(c => !searchCategoryModal || c.name.toLowerCase().includes(searchCategoryModal.toLowerCase()))
+                    .map((c) => (
+                      <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
+                        <span style={{ fontWeight: 600 }}>{c.name}</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.description || 'Active'}</span>
+                      </div>
+                    ))}
+                </div>
               </div>
             </div>
           </div>
@@ -2380,78 +2525,75 @@ export const ProductsPage: React.FC = () => {
 
       {/* Unit Management Modal */}
       {showUnitModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 110, padding: '20px'
-        }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '14px', width: '500px', maxWidth: '90%', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-box" style={{ maxWidth: '520px' }}>
+            <div className="prod-modal-header">
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Manage Packaging / Units</h3>
               <button
+                type="button"
                 onClick={() => setShowUnitModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', fontSize: '1.6rem', lineHeight: '1', cursor: 'pointer', padding: '4px 8px', color: '#64748b' }}
               >
                 ×
               </button>
             </div>
-
-            <form onSubmit={handleCreateUnit} style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#0369a1' }}>
-                + Add Custom Unit (e.g. Dozen, Bundle, Balti, Pouch)
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                <input
-                  type="text"
-                  required
-                  placeholder="Unit Name (e.g. Dozen)"
-                  className="form-control"
-                  value={newUnitName}
-                  onChange={(e) => setNewUnitName(e.target.value)}
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="Symbol (e.g. Dzn)"
-                  className="form-control"
-                  value={newUnitSymbol}
-                  onChange={(e) => setNewUnitSymbol(e.target.value)}
-                />
-              </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                + Save Unit
-              </button>
-            </form>
-
-            <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>
-                  Existing Units ({units.length})
+            <div className="prod-modal-body">
+              <form onSubmit={handleCreateUnit} style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#0369a1' }}>
+                  + Add Custom Unit (e.g. Dozen, Bundle, Balti, Pouch)
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search units..."
-                  value={searchUnitModal}
-                  onChange={(e) => setSearchUnitModal(e.target.value)}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: '0.78rem',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '4px',
-                    width: '140px'
-                  }}
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                {units
-                  .filter(u => !searchUnitModal || u.name.toLowerCase().includes(searchUnitModal.toLowerCase()) || u.symbol.toLowerCase().includes(searchUnitModal.toLowerCase()))
-                  .map((u) => (
-                    <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem' }}>
-                      <span style={{ fontWeight: 600 }}>{u.name}</span>
-                      <span style={{ color: '#0284c7', fontWeight: 700 }}>({u.symbol})</span>
-                    </div>
-                  ))}
+                <div className="prod-grid-2" style={{ gap: '10px', marginBottom: '10px' }}>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Unit Name (e.g. Dozen)"
+                    className="form-control"
+                    value={newUnitName}
+                    onChange={(e) => setNewUnitName(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Symbol (e.g. Dzn)"
+                    className="form-control"
+                    value={newUnitSymbol}
+                    onChange={(e) => setNewUnitSymbol(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', minHeight: '44px', fontWeight: 700 }}>
+                  + Save Unit
+                </button>
+              </form>
+
+              <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#64748b' }}>
+                    Existing Units ({units.length})
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search units..."
+                    value={searchUnitModal}
+                    onChange={(e) => setSearchUnitModal(e.target.value)}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.85rem',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '4px',
+                      width: '140px'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '6px' }}>
+                  {units
+                    .filter(u => !searchUnitModal || u.name.toLowerCase().includes(searchUnitModal.toLowerCase()) || u.symbol.toLowerCase().includes(searchUnitModal.toLowerCase()))
+                    .map((u) => (
+                      <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem' }}>
+                        <span style={{ fontWeight: 600 }}>{u.name}</span>
+                        <span style={{ color: '#0284c7', fontWeight: 700 }}>({u.symbol})</span>
+                      </div>
+                    ))}
+                </div>
               </div>
             </div>
           </div>
