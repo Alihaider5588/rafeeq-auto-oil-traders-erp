@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { Customer, Supplier, User } from '../types';
 import { Users, Building2, Plus, Phone, MapPin, Trash2, Search, Edit2, ShieldAlert, Download, RefreshCw } from 'lucide-react';
@@ -729,19 +730,20 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
       </div>
 
       {/* Modal Add Partner */}
-      {showModal && (
+      {showModal && typeof document !== 'undefined' && createPortal(
         <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(3px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 100,
-          padding: '20px'
+          zIndex: 99999,
+          padding: '16px'
         }}>
           <div style={{
             backgroundColor: '#fff',
@@ -750,11 +752,22 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
             maxWidth: '580px',
             maxHeight: '92vh',
             overflowY: 'auto',
-            padding: '24px'
+            padding: '24px 20px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            boxSizing: 'border-box'
           }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '14px' }}>
-              Add New {type === 'CUSTOMERS' ? 'Customer / Shop' : 'Supplier Company'}
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                Add New {type === 'CUSTOMERS' ? 'Customer / Shop' : 'Supplier Company'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#64748b', fontWeight: 700 }}
+              >
+                ✕
+              </button>
+            </div>
 
             {/* Partner Mode Switcher: Standard vs Dual (Both) */}
             <div style={{
@@ -830,7 +843,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label">Owner / Contact Person *</label>
                     <input
@@ -855,7 +868,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label">Area / Sector</label>
                     <input
@@ -892,7 +905,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label" style={{ color: '#047857' }}>
                       Opening Receivable (لینا ہے - Rs.)
@@ -945,7 +958,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     required
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label">Owner Name *</label>
                     <input
@@ -968,7 +981,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label">Area / Sector</label>
                     <input
@@ -994,7 +1007,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label">Opening Udhar Balance (Rs.)</label>
                     <input
@@ -1037,7 +1050,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                     required
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group">
                     <label className="form-label">Contact Person</label>
                     <input
@@ -1079,23 +1092,25 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit Partner Modal */}
-      {showEditModal && (
+      {showEditModal && typeof document !== 'undefined' && createPortal(
         <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(3px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 100,
-          padding: '20px'
+          zIndex: 99999,
+          padding: '16px'
         }}>
           <div style={{
             backgroundColor: '#fff',
@@ -1104,8 +1119,9 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
             maxWidth: '620px',
             maxHeight: '92vh',
             overflowY: 'auto',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            padding: '24px 20px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            boxSizing: 'border-box'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1132,7 +1148,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
 
             {type === 'CUSTOMERS' ? (
               <form onSubmit={handleUpdateCustomer}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Shop / Business Name *</label>
                     <input
@@ -1155,7 +1171,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Phone Number *</label>
                     <input
@@ -1316,7 +1332,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Contact Person</label>
                     <input
@@ -1338,7 +1354,7 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="modal-grid-2col">
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Address / Office Location</label>
                     <input
@@ -1371,8 +1387,8 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
                   />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                  <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-outline">
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-outline" style={{ minWidth: '90px' }}>
                     Cancel
                   </button>
                   <button type="submit" disabled={savingEdit} className="btn btn-primary" style={{ fontWeight: 800 }}>
@@ -1382,7 +1398,8 @@ export const CustomersAndSuppliersPage: React.FC<{ type: 'CUSTOMERS' | 'SUPPLIER
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

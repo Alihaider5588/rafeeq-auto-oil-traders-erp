@@ -125,7 +125,6 @@ code, pre, .font-mono {
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
-  z-index: 50;
   flex-shrink: 0;
 }
 
@@ -831,12 +830,50 @@ table.data-table tbody tr:hover {
   }
 
   /* Responsive Modals on Mobile Phones */
+  div[style*="position: fixed"] > div[style*="max-width"],
+  div[style*="position: fixed"] > div[style*="maxWidth"],
   div[style*="position: fixed"][style*="z-index: 100"] > div,
   div[style*="position: fixed"][style*="z-index: 110"] > div {
     max-width: 96vw !important;
     max-height: 94vh !important;
     padding: 18px 14px !important;
+    box-sizing: border-box !important;
   }
+}
+
+/* ==========================================================================
+   UNIVERSAL MODAL OVERLAY & RESPONSIVENESS (موبائل اور ڈیسک ٹاپ موڈل فکس)
+   ========================================================================== */
+
+/* Universal 2-column grid inside modals that collapses to 1 column on mobile */
+.modal-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 640px) {
+  .modal-grid-2col {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    margin-bottom: 10px !important;
+  }
+}
+
+/* Universal high z-index for all modal backdrops so they are never hidden under sidebars */
+div[style*="position: fixed"][style*="z-index: 100"],
+div[style*="position: fixed"][style*="z-index: 110"],
+div[style*="position: fixed"][style*="z-index: 1050"],
+div[style*="position: fixed"][style*="z-index: 9999"],
+div[style*="position: fixed"][style*="z-index: 99999"] {
+  z-index: 99999 !important;
+}
+
+/* Ensure modal dialog boxes stay responsive, centered, and never clipped */
+div[style*="position: fixed"] > div[style*="max-width"],
+div[style*="position: fixed"] > div[style*="maxWidth"] {
+  box-sizing: border-box !important;
 }
 
 /* ==========================================================================
@@ -853,7 +890,7 @@ table.data-table tbody tr:hover {
 }
 
 .aesthetic-page-transition {
-  animation: aestheticPageEnter 0.22s ease-out forwards;
+  animation: aestheticPageEnter 0.22s ease-out;
   width: 100%;
 }
 
